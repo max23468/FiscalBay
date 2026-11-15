@@ -40,7 +40,7 @@ function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="alert-title"
       className={cn(
-        "font-medium group-has-[>svg]/alert:col-start-2 [&_a:not([data-slot=button])]:underline [&_a:not([data-slot=button])]:underline-offset-3 [&_a:not([data-slot=button])]:hover:text-foreground",
+        "font-medium group-has-[>svg]/alert:col-start-2 [&_a:not([data-slot=button])]:underline [&_a:not([data-slot=button])]:underline-offset-[0.1875em] [&_a:not([data-slot=button])]:hover:text-foreground",
         className,
       )}
       {...props}
@@ -53,7 +53,7 @@ function AlertDescription({ className, ...props }: React.ComponentProps<"div">) 
     <div
       data-slot="alert-description"
       className={cn(
-        "text-sm text-balance text-muted-foreground md:text-pretty [&_a:not([data-slot=button])]:underline [&_a:not([data-slot=button])]:underline-offset-3 [&_a:not([data-slot=button])]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
+        "text-sm text-balance text-muted-foreground md:text-pretty [&_a:not([data-slot=button])]:underline [&_a:not([data-slot=button])]:underline-offset-[0.1875em] [&_a:not([data-slot=button])]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
         className,
       )}
       {...props}

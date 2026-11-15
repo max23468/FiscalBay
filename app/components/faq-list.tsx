@@ -17,7 +17,7 @@ export function FaqList({ items }: { items: readonly FaqItem[] }) {
             {item.q}
             <ChevronDown
               aria-hidden="true"
-              className="size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) group-open:rotate-180"
+              className="size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) group-open:rotate-180 motion-reduce:transition-none"
             />
           </summary>
           <p className="pr-7 pb-2 leading-relaxed text-pretty text-muted-foreground">{item.a}</p>
@@ -25,7 +25,7 @@ export function FaqList({ items }: { items: readonly FaqItem[] }) {
             <p className="pr-7 pb-3">
               <a
                 href={item.link.href}
-                className="font-medium text-primary underline-offset-4 hover:underline"
+                className="font-medium text-primary underline-offset-[0.25em] hover:underline"
               >
                 {item.link.label}
               </a>

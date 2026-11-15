@@ -48,6 +48,10 @@ const pageMeasures = [
   ["server_ebay", "double7"],
   ["inp", "double9"],
   ["cls", "double10"],
+  ["inp_input", "double11"],
+  ["inp_processing", "double12"],
+  ["inp_presentation", "double13"],
+  ["inp_script", "double14"],
 ] as const;
 
 /**

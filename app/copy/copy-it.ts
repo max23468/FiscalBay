@@ -83,6 +83,8 @@ export const it = {
     dismissed: (count: number) =>
       count === 1 ? "Notifica eliminata" : `${grouped(count)} notifiche eliminate`,
     undo: "Annulla",
+    notificationUnread: "Da leggere",
+    pending: "in corso",
     storeNotifications: {
       expiredTitle: "Collegamento scaduto",
       expiredBody: (store: string) =>
@@ -345,6 +347,7 @@ export const it = {
       declined: "Non riceverai novità e offerte.",
     },
     steps: "Primi passi",
+    stepDone: "completato",
     stepAccount: "Account creato",
     stepEmail: "Email verificata",
     stepStore: "Negozio eBay collegato",
@@ -833,6 +836,7 @@ export const it = {
         "Quando eBay non riporta il Codice Fiscale, puoi copiare questo messaggio dall’ordine e inviarlo all’acquirente dai tuoi canali.",
       templateHint: "{ordine} viene sostituito con il numero dell’ordine.",
       templateFailed: "Modello non salvato. Il testo scritto resta qui: riprova.",
+      templateLanguage: "Lingua del modello",
       templateInvalid: "Scrivi il modello in entrambe le lingue, entro 2.000 caratteri.",
       unsavedTitle: "Modifiche non salvate",
       unsaved: "Hai modifiche non salvate al modello di messaggio. Vuoi lasciare la pagina?",
@@ -1146,7 +1150,9 @@ export const it = {
     business: "Azienda",
     companyName: "Ragione sociale",
     accountTypeHint: "Piani e funzioni sono gli stessi per privati e aziende.",
-    newPassword: "Password (almeno 8 caratteri)",
+    newPassword: "Password",
+    passwordRule: (min: number) => `Almeno ${min} caratteri.`,
+    showPassword: "Mostra password",
     or: "oppure",
     google: "Continua con Google",
     ebay: "Continua con eBay",

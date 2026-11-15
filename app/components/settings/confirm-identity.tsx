@@ -122,7 +122,9 @@ export function ConfirmIdentity({
               aria-describedby={result?.ok === false ? `${id}-error` : undefined}
             />
             {result?.ok === false ? (
-              <FieldError id={`${id}-error`}>{result.notice}</FieldError>
+              <FieldError id={`${id}-error`} role="alert">
+                {result.notice}
+              </FieldError>
             ) : null}
             <Button type="submit" size="sm" className="w-fit" pending={fetcher.state !== "idle"}>
               {t.confirm}
@@ -143,7 +145,9 @@ export function ConfirmIdentity({
               <KeyRound aria-hidden="true" data-icon="inline-start" />
               {t.confirmPasskey}
             </Button>
-            {passkeyError ? <FieldError>{t.passkeyErrors[passkeyError]}</FieldError> : null}
+            {passkeyError ? (
+              <FieldError role="alert">{t.passkeyErrors[passkeyError]}</FieldError>
+            ) : null}
           </div>
         ) : null}
         {passkeyOnly ? null : (

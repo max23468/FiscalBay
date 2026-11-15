@@ -97,7 +97,8 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   // «Sign in» e «Start for free» restano a ogni larghezza; la lingua mostra soltanto l'altra.
   await expect(bar.getByRole("link", { name: "Start for free" })).toBeVisible();
   await expect(bar.getByRole("link", { name: "Sign in" })).toBeVisible();
-  await expect(bar.getByRole("link", { name: "Italiano" })).toHaveText("IT");
+  // Il nome accessibile inizia con il codice visibile.
+  await expect(bar.getByRole("link", { name: "IT Italiano", exact: true })).toHaveText("IT");
   await expect(bar.getByRole("link", { name: "English" })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   // Sotto i 360 px la lingua passa nel footer.

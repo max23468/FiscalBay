@@ -1,11 +1,12 @@
 import { LazyMotion, MotionConfig } from "motion/react";
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useFetcherResult, useNotice } from "~/components/action";
 import { useConfirmed } from "~/components/confirmation";
 import { EmptyState } from "~/components/empty-state";
 import { smoothTransition } from "~/components/motion";
+import { StatusAlert } from "~/components/status";
 import { buttonLink } from "~/components/ui/button-variants";
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
@@ -64,13 +65,19 @@ const loadMotionFeatures = () =>
 
 type Unlock = ReturnType<typeof useUnlock>;
 
-/** Sblocco tramite l'azione del server: il dato arriva solo dopo la verifica della quota. */
+/**
+ * Sblocco tramite l'azione del server: il dato arriva solo dopo la verifica della quota. La
+ * conferma è un avviso breve; un errore resta in pagina, con gli ordini interessati, fino al
+ * tentativo successivo.
+ */
 function useUnlock(unlockAction: string, t: AppCopy) {
   const notify = useNotice();
   const fetcher = useFetcher<UnlockResult>();
+  const attempted = useRef<string[]>([]);
+  const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
   useFetcherResult(fetcher, (result) => {
     if (result.error) {
-      notify(t.orders.unlockFailed);
+      setFailed(new Set(attempted.current));
       return;
     }
     notify(
@@ -80,11 +87,15 @@ function useUnlock(unlockAction: string, t: AppCopy) {
     );
   });
   return {
-    submit: (ids: string[], skipConfirmation = false) =>
+    submit: (ids: string[], skipConfirmation = false) => {
+      attempted.current = ids;
+      setFailed(new Set());
       void fetcher.submit(unlockForm(ids, skipConfirmation), {
         method: "post",
         action: unlockAction,
-      }),
+      });
+    },
+    failed,
     pending: new Set(
       fetcher.state === "idle" ? [] : String(fetcher.formData?.get("ids") ?? "").split(","),
     ),
@@ -168,6 +179,31 @@ function NoResults({
   );
 }
 
+/** Esito dello sblocco e sblocchi rimasti, sopra l'elenco. */
+function ListNotices({
+  data,
+  orders,
+  unlock,
+}: {
+  data: OrdersPageData;
+  orders: OrderView[];
+  unlock: Unlock;
+}) {
+  const { t } = useCopy();
+  const remaining = remainingUnlocks(data.account);
+  return (
+    <>
+      {/* Con il dettaglio aperto l'errore sta nel pannello, accanto al dato. */}
+      {unlock.failed.size > 0 && data.detail === null ? (
+        <StatusAlert tone="danger" title={t.orders.unlockFailed} />
+      ) : null}
+      {remaining !== null && remaining > 0 && orders.some(unlockableOrder) ? (
+        <p className="text-sm text-muted-foreground">{t.orders.unlockBalance(remaining)}</p>
+      ) : null}
+    </>
+  );
+}
+
 function OrdersList({
   data,
   orders,
@@ -220,7 +256,6 @@ function OrdersList({
   const lockedSelected = visibleSelected.filter(unlockableOrder).map((order) => order.id);
   const onlySearch =
     criteria.has(searchParam) && [...criteria.keys()].every((key) => key === searchParam);
-  const remaining = remainingUnlocks(data.account);
   return (
     <>
       <OrdersToolbar
@@ -235,9 +270,7 @@ function OrdersList({
         onToggleSelect={() => (selecting ? stopSelecting() : startSelecting())}
       />
       <SearchChip query={data.search} clearable={orders.length > 0 || !onlySearch} />
-      {remaining !== null && remaining > 0 && orders.some(unlockableOrder) ? (
-        <p className="text-sm text-muted-foreground">{t.orders.unlockBalance(remaining)}</p>
-      ) : null}
+      <ListNotices data={data} orders={orders} unlock={unlock} />
       {freshHref ? (
         <div className="flex justify-center">
           <Link to={freshHref} replace preventScrollReset {...buttonLink({ variant: "secondary" })}>

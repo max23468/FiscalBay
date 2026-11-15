@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Link } from "react-router";
 
-import { useAction, useNotice } from "~/components/action";
+import { useAction } from "~/components/action";
+import { StatusAlert } from "~/components/status";
 import { downloadExport } from "./download";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
@@ -14,18 +16,45 @@ import { settingsRow, settingsRowText } from "./security-rows";
 /** Categoria che riceve le azioni, anche nell'anteprima. */
 const privacySection = "impostazioni/privacy";
 
-/** Esportazione dei dati dell'account: il file si scarica dal suo percorso, che ricontrolla sessione e validità. */
+/**
+ * Esportazione dei dati dell'account: il file si scarica dal suo percorso, che ricontrolla
+ * sessione e validità. Un errore resta accanto all'azione fino al tentativo successivo.
+ */
 function useAccountExport() {
   const { t } = useCopy();
-  const notify = useNotice();
-  return useAction((result) => {
-    if (!result.download) return;
-    downloadExport(result.download)
-      .then((notice) => {
-        if (notice !== null) notify(notice || t.settings.privacy.accountExportFailed);
-      })
-      .catch(() => notify(t.settings.privacy.accountExportFailed));
-  });
+  const failed = t.settings.privacy.accountExportFailed;
+  const [error, setError] = useState<string | null>(null);
+  const action = useAction(
+    (result) => {
+      if (!result.ok) return setError(result.notice || failed);
+      if (!result.download) return;
+      downloadExport(result.download)
+        .then((notice) => {
+          if (notice !== null) setError(notice || failed);
+        })
+        .catch(() => setError(failed));
+    },
+    undefined,
+    { inlineErrors: true },
+  );
+  return {
+    ...action,
+    error,
+    run: (intent: string) => {
+      setError(null);
+      action.run(intent);
+    },
+  };
+}
+
+/** Errore dell'azione accanto alla riga, su tutta la larghezza. */
+function RowError({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <div className="w-full md:basis-full">
+      <StatusAlert tone="danger" title={message} />
+    </div>
+  );
 }
 
 export function PrivacySection({
@@ -109,6 +138,7 @@ export function PrivacySection({
             >
               {row.action}
             </Button>
+            <RowError message={action.error} />
           </li>
         ))}
         <DeleteAccountRow email={email} security={security} />
@@ -151,6 +181,7 @@ function DeleteAccountRow({ email, security }: { email: string; security: Securi
                 {t.settings.privacy.deleteAccountOpenExport}
               </Link>
             </div>
+            <RowError message={exporter.error} />
           </div>
         }
       />

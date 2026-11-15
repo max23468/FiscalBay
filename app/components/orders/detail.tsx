@@ -105,7 +105,12 @@ function OrderDetail({ order }: { order: OrderView }) {
   const billing = billingCopyText(order, language, t);
   return (
     <Tabs defaultValue="details" className="gap-0 px-4 pb-6">
-      <TabsList variant="line" className="sticky top-0 z-10 mb-5 bg-popover">
+      {/* L'elenco delle schede prende il nome dell'ordine, come il pannello. */}
+      <TabsList
+        variant="line"
+        aria-label={t.order.title(order.ebayOrderId)}
+        className="sticky top-0 z-10 mb-5 bg-popover"
+      >
         <TabsTrigger value="details">{t.order.tabDetails}</TabsTrigger>
         <TabsTrigger value="items">
           {t.order.tabItems} ({order.items.length})
@@ -314,6 +319,8 @@ export function OrderSheet({
     submit: (ids: string[], skipConfirmation?: boolean) => void;
     pending: ReadonlySet<string>;
     revealed: ReadonlySet<string>;
+    /** Ordini dell'ultimo sblocco non riuscito. */
+    failed: ReadonlySet<string>;
   };
   actions: SecondaryActions;
 }) {
@@ -383,6 +390,11 @@ export function OrderSheet({
                   {t.orders.exportOrder}
                 </Link>
               ) : null}
+            </div>
+          ) : null}
+          {unlock.failed.has(shown.id) ? (
+            <div className="px-4">
+              <StatusAlert tone="danger" title={t.orders.unlockFailed} />
             </div>
           ) : null}
           {/* Il dato fiscale, protagonista, resta visibile sopra le schede Dettagli e Articoli. */}

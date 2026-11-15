@@ -225,8 +225,16 @@ test.describe("area reale", () => {
             : "Anything else you’d like to tell us? (optional)",
         })
         .fill("Export per il commercialista");
+      // Un indirizzo diverso non parte: il messaggio è accanto al campo, che riceve il focus.
       await address.fill("altro@example.invalid");
-      await expect(send).toBeDisabled();
+      await send.click();
+      await expect(address).toBeFocused();
+      await expect(address).toHaveAttribute("aria-invalid", "true");
+      await expect(address).toHaveAccessibleDescription(
+        it
+          ? "L’indirizzo non corrisponde a quello dell’account."
+          : "The address does not match the account’s.",
+      );
       await address.fill(`${id}@example.invalid`);
       await send.click();
       // L'ultimo accesso è di ieri: la richiesta passa dalla conferma dell'identità.
@@ -327,6 +335,27 @@ test.describe("area reale", () => {
 for (const width of [390, 768, 1440]) {
   // Tre prove per larghezza: una sola percorreva tutte le categorie e, sotto il carico della
   // qualifica, superava il suo limite di tempo.
+  test(`impostazioni: il focus segue la categoria scelta a ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await open(page, "/anteprima/impostazioni");
+    const categories = page.getByRole("navigation", { name: "Categorie" });
+    const privacy = categories.getByRole("link", { name: "Dati e privacy" });
+    await clickHydrated(privacy);
+    await expect(page).toHaveURL(/\/anteprima\/impostazioni\/privacy$/u);
+    // Su desktop lo scorrimento è immediato con «riduci movimento»; ovunque il focus lascia il
+    // menu e passa al titolo della categoria, senza finire sul documento.
+    const heading = page.locator("#settings-privacy");
+    await expect(heading).toBeFocused();
+    await expect(heading).toBeInViewport();
+    if (width < 768) {
+      // Tornando all'elenco il focus ritrova la voce da cui si era entrati.
+      await page.getByRole("main").getByRole("link", { name: "Impostazioni", exact: true }).click();
+      await expect(page).toHaveURL(/\/anteprima\/impostazioni$/u);
+      await expect(privacy).toBeFocused();
+    }
+  });
+
   test(`impostazioni: aspetto e lingua a ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -1295,6 +1324,8 @@ test.describe("notifiche Telegram", () => {
     await expect(page).toHaveURL(/\/anteprima\/impostazioni\/piano$/u);
     await expect(page.locator("#settings-piano")).toBeInViewport();
     await expect(page.locator('a[aria-current="true"][href$="/impostazioni/piano"]')).toBeVisible();
+    // Il collegamento interno porta anche il focus sul titolo della categoria.
+    await expect(page.locator("#settings-piano")).toBeFocused();
   });
 
   for (const language of ["it", "en"] as const)

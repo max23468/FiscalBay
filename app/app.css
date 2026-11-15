@@ -2,13 +2,25 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
-/* Font di sistema con le metriche di Inter: il testo non si sposta quando arriva quello vero. */
+/*
+ * Font di sistema con le metriche di Inter: il testo non si sposta quando arriva quello vero.
+ * Arial su desktop e iOS, Roboto su Android, dove Arial manca.
+ */
 @font-face {
   font-family: "Inter Fallback";
   src: local("Arial");
   size-adjust: 107.12%;
   ascent-override: 90.44%;
   descent-override: 22.52%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Inter Fallback Roboto";
+  src: local("Roboto");
+  size-adjust: 106.3%;
+  ascent-override: 91.13%;
+  descent-override: 22.69%;
   line-gap-override: 0%;
 }
 
@@ -30,7 +42,8 @@
  * 4,5:1 sulla propria superficie, verificato da test/design-tokens.spec.ts.
  */
 :root {
-  color-scheme: light;
+  /* Il browser adatta controlli e barre al tema del sistema; `data-theme` lo impone. */
+  color-scheme: light dark;
   --brand-blue: #1a4fa6;
   --brand-navy: #0e3372;
   --brand-sky: #4f87e3;
@@ -91,10 +104,14 @@
   font-variant-numeric: tabular-nums slashed-zero;
 }
 
-/* Collegamento nel testo: sottolineato, con la linea staccata dalle lettere. */
+/*
+ * Collegamento nel testo: sottolineato, con la linea staccata dalle lettere. Distanza e spessore
+ * crescono con il testo.
+ */
 @utility link-underline {
   text-decoration-line: underline;
-  text-underline-offset: 4px;
+  text-decoration-thickness: from-font;
+  text-underline-offset: 0.25em;
 }
 
 /* Righe della tessera in sincronizzazione: si allungano in sequenza. */
@@ -131,6 +148,20 @@
   }
 }
 
+/* Con «riduci movimento» gli ingressi restano dissolvenze, senza spostamento. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes notice-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
+
 /*
  * Caricamento di una pagina: dopo 150 ms la barra avanza rallentando senza arrivare in fondo,
  * all'arrivo si completa e svanisce. Con il movimento ridotto restano gli stati, senza corsa.
@@ -159,16 +190,20 @@
       scale var(--duration-quick) var(--ease-smooth-out),
       opacity var(--duration-fast) var(--ease-smooth-out) var(--duration-quick);
   }
+  @media (prefers-reduced-motion: reduce) {
+    &[data-phase="loading"] {
+      transition: opacity 0s linear var(--duration-quick);
+    }
+    &[data-phase="done"] {
+      transition: opacity var(--duration-fast) var(--ease-smooth-out) var(--duration-quick);
+    }
+  }
 }
 
+/* Sola dissolvenza: resta anche con «riduci movimento». */
 @utility fiscal-reveal {
   & [data-slot="button"] {
     animation: value-reveal var(--duration-quick) ease-out 100ms both;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    & [data-slot="button"] {
-      animation: none;
-    }
   }
 }
 
@@ -181,6 +216,10 @@
 
 :root[data-theme="dark"] {
   @apply dark-tokens;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 @utility dark-tokens {
@@ -221,7 +260,9 @@
 }
 
 @theme inline {
-  --font-sans: "Inter Variable", "Inter Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-sans:
+    "Inter Variable", "Inter Fallback", "Inter Fallback Roboto", ui-sans-serif, system-ui,
+    sans-serif;
   --font-heading: var(--font-sans);
   --color-brand-blue: var(--brand-blue);
   --color-brand-navy: var(--brand-navy);
@@ -272,7 +313,9 @@
  * Ruoli di movimento per i popup Base UI, che espongono
  * `data-starting-style` e `data-ending-style` per le transizioni CSS.
  * Si usano `scale` e `translate` come proprietà separate, così il
- * centraggio con `translate` dei dialog non entra in conflitto.
+ * centraggio con `translate` dei dialog non entra in conflitto. Con
+ * «riduci movimento» resta la sola dissolvenza: niente scala né scorrimento.
+ * Ogni animazione di movimento lo rispetta dove è definita, senza una regola globale.
  */
 @utility motion-backdrop {
   transition: opacity var(--duration-fast) var(--ease-smooth-out);
@@ -292,7 +335,12 @@
   &[data-starting-style],
   &[data-ending-style] {
     opacity: 0;
-    scale: var(--scale-modal);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    &[data-starting-style],
+    &[data-ending-style] {
+      scale: var(--scale-modal);
+    }
   }
   &[data-ending-style] {
     transition-duration: var(--duration-quick);
@@ -306,12 +354,18 @@
     scale var(--duration-fast) var(--ease-smooth-out);
   &[data-starting-style] {
     opacity: 0;
-    scale: var(--scale-popover);
   }
   &[data-ending-style] {
     opacity: 0;
-    scale: var(--scale-popover-close);
     transition-duration: var(--duration-quick);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    &[data-starting-style] {
+      scale: var(--scale-popover);
+    }
+    &[data-ending-style] {
+      scale: var(--scale-popover-close);
+    }
   }
 }
 
@@ -352,14 +406,22 @@
   h3 {
     @apply font-heading tracking-tight text-balance;
   }
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    ::before,
-    ::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-      scroll-behavior: auto !important;
-    }
+}
+
+/*
+ * Colori forzati (Contrasto elevato di Windows): il browser toglie ombre e fondi, quindi anelli
+ * di focus e indicatori disegnati con un fondo spariscono. Il focus da tastiera torna un
+ * contorno di sistema, la scheda e la voce correnti una sottolineatura. Fuori dai layer, così
+ * prevale sulle utility che tolgono il contorno.
+ */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+  [role="tab"][aria-selected="true"],
+  :is(nav, [role="navigation"]) [aria-current]:not([aria-current="false"]) {
+    text-decoration: underline 2px;
+    text-underline-offset: 0.3em;
   }
 }

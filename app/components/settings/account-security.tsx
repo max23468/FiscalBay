@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useCopy, useLinks } from "~/components/copy-context";
 import { useDate } from "~/components/time-zone";
+import { signalPasskeyState } from "../../account/passkey";
 import type { PendingEmailChange } from "../../domain/email-change.server";
+import type { PasskeySignals } from "../../domain/passkey-user.server";
 import type { ActiveSession } from "../../domain/sessions.server";
 import type { SignInMethods } from "../../domain/sign-in-methods.server";
 import { appHref } from "../../app-links";
@@ -34,6 +36,7 @@ export function AccountSecurity({
   recent = true,
   passkeyRestriction = null,
   pendingEmail = null,
+  passkeySignals = null,
 }: {
   email: string;
   methods: SignInMethods;
@@ -43,8 +46,15 @@ export function AccountSecurity({
   recent?: boolean;
   passkeyRestriction?: "conferma-passkey" | "nuovo-accesso" | null;
   pendingEmail?: PendingEmailChange | null;
+  passkeySignals?: PasskeySignals | null;
 }) {
   const date = useDate();
+  // A ogni lettura della pagina, quindi anche dopo una rimozione, una rinomina o il cambio
+  // dell'email, il gestore delle passkey riceve l'elenco valido e i dati dell'account.
+  const signalKey = passkeySignals ? JSON.stringify(passkeySignals) : null;
+  useEffect(() => {
+    if (signalKey) signalPasskeyState(JSON.parse(signalKey) as PasskeySignals);
+  }, [signalKey]);
   const {
     t: { access: t, settings },
   } = useCopy();

@@ -8,15 +8,13 @@ import {
   useSearchParams,
 } from "react-router";
 
+import { onScrollEnd } from "~/components/scroll-end";
 import { snapshotParam } from "../../orders/order-criteria";
 import type { OrderView } from "../../view-models";
 import type { OrdersPageData } from "../../orders/page-data";
 
 /** Distanza dall'inizio della pagina entro cui l'utente è considerato in cima alla lista. */
 const topThreshold = 120;
-
-/** Pausa dopo l'ultimo scorrimento oltre la quale l'utente è considerato fermo. */
-const scrollSettle = 250;
 
 /**
  * L'indirizzo riceve l'istantanea dell'elenco quando c'è qualcosa da tenere fermo: l'utente
@@ -51,22 +49,13 @@ export function useListSnapshot(data: OrdersPageData, held: boolean) {
   const shown = `${location.pathname}${location.search}`;
   const current = () =>
     settled() && `${window.location.pathname}${window.location.search}` === shown;
-  // Lo scorrimento conta quando si ferma: un clic subito dopo avvia prima la sua navigazione,
-  // che la sostituzione altrimenti interromperebbe.
+  // Lo scorrimento conta quando si ferma, non mentre è in corso: un clic durante lo scorrimento
+  // avvia prima la sua navigazione, che la sostituzione altrimenti interromperebbe.
   const [away, setAway] = useState(false);
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const settle = () => setAway(window.scrollY >= topThreshold);
-    const scrolled = () => {
-      clearTimeout(timer);
-      timer = setTimeout(settle, scrollSettle);
-    };
     settle();
-    window.addEventListener("scroll", scrolled, { passive: true });
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("scroll", scrolled);
-    };
+    return onScrollEnd(window, settle);
   }, []);
   useEffect(() => {
     if (synced || !idle || !current() || !(held || away || freshHref !== null)) return;
@@ -79,13 +68,13 @@ export function useListSnapshot(data: OrdersPageData, held: boolean) {
       void navigate(freshHref, { replace: true, preventScrollReset: true });
   });
   // Si parte dall'indirizzo con l'istantanea: la nuova la cambia o la toglie, mai la aggiunge,
-  // e quindi rilegge sempre l'elenco.
+  // e quindi rilegge sempre l'elenco. Tornando in cima si decide a scorrimento finito, così gli
+  // ordini non entrano mentre la pagina si muove ancora.
   const ready = synced && idle && freshHref !== null;
   useEffect(() => {
     if (!ready) return;
     insertAtTop();
-    window.addEventListener("scroll", insertAtTop, { passive: true });
-    return () => window.removeEventListener("scroll", insertAtTop);
+    return onScrollEnd(window, insertAtTop);
   }, [ready, freshHref]);
 }
 

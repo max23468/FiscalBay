@@ -1260,7 +1260,18 @@ test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ 
   const value = page.getByText("BNCLCU75C12F205G", { exact: true });
   await page.getByRole("alertdialog").getByRole("button", { name: "Sblocca", exact: true }).click();
   await expect(value).toBeVisible();
-  await expect(value).toHaveCSS("animation-name", "none");
+  // Il dato compare con la sola dissolvenza, senza sfocatura né spostamento.
+  expect(
+    await value.evaluate((element) =>
+      element
+        .getAnimations({ subtree: true })
+        .flatMap((animation) => (animation.effect as KeyframeEffect).getKeyframes())
+        .flatMap((frame) => Object.keys(frame))
+        .filter(
+          (key) => !["offset", "easing", "composite", "computedOffset", "opacity"].includes(key),
+        ),
+    ),
+  ).toEqual([]);
   await expect(value).toHaveCSS("filter", "none");
 
   // In cima alla lista i nuovi ordini entrano subito, senza pulsante.
@@ -1352,25 +1363,29 @@ test.describe("caricamento degli Ordini reali", () => {
     baseURL,
   }) => {
     await useLocalAccount(context, "member", baseURL!);
-    // Il report parte con sendBeacon: lo si legge nella pagina, senza dipendere dalla rete.
+    // Il report è affidato al browser con fetchLater e aggiornato a ogni misura: lo si legge
+    // nella pagina, senza dipendere dalla rete. Conta soltanto quello ancora in attesa.
+    type Deferred = { body: string; signal?: AbortSignal };
     await page.addInitScript(() => {
-      const sent: Blob[] = [];
-      (window as Window & { pageTimings?: Blob[] }).pageTimings = sent;
-      navigator.sendBeacon = (url, body) => {
-        if (String(url).endsWith("/api/v1/page-timing")) sent.push(body as Blob);
-        return true;
-      };
+      const deferred: Deferred[] = [];
+      Object.assign(window, {
+        pageTimings: deferred,
+        fetchLater: (url: string, init: Deferred) => {
+          if (url.endsWith("/api/v1/page-timing")) deferred.push(init);
+          return { activated: false };
+        },
+      });
     });
-    /** Nasconde la pagina, come al cambio di scheda, e restituisce i report inviati. */
+    /** Nasconde la pagina, come al cambio di scheda, e restituisce i report in attesa. */
     const reports = async () => {
       await page.evaluate(() => {
         Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
         document.dispatchEvent(new Event("visibilitychange"));
       });
       return page.evaluate(() =>
-        Promise.all(
-          (window as Window & { pageTimings?: Blob[] }).pageTimings!.map((blob) => blob.text()),
-        ),
+        (window as Window & { pageTimings?: Deferred[] })
+          .pageTimings!.filter((report) => !report.signal?.aborted)
+          .map((report) => report.body),
       );
     };
     /** La barra di ricerca si abilita con l'idratazione, quando il report è già in ascolto. */
@@ -1418,7 +1433,9 @@ test.describe("impostazioni", () => {
     await expect(locked.locator(".icon-unlock")).toHaveCount(2);
     await expect(locked.locator(".lucide-crown")).toHaveCount(0);
     await expect(locked).not.toContainText("Questo ordine ne usa uno.");
-    await locked.getByRole("link", { name: "Dettaglio", exact: true }).click();
+    await locked
+      .getByRole("link", { name: "Dettaglio Ordine 05-48217-36194", exact: true })
+      .click();
     await expect(page.getByRole("dialog")).toContainText(
       "Hai 2 sblocchi disponibili in questo ciclo. Questo ordine ne usa uno.",
     );
@@ -1432,7 +1449,9 @@ test.describe("impostazioni", () => {
     await expect(failed).toContainText("Aggiornamento non riuscito");
     await expect(failed.getByRole("button", { name: "Riprova", exact: true })).toBeEnabled();
     await expect(failed).not.toContainText("Non siamo riusciti a recuperare il Codice Fiscale");
-    await missing.getByRole("link", { name: "Dettaglio", exact: true }).click();
+    await missing
+      .getByRole("link", { name: "Dettaglio Ordine 31-77421-10058", exact: true })
+      .click();
     await expect(page.getByRole("dialog")).toContainText(
       "eBay non riporta il Codice Fiscale per questo ordine.",
     );

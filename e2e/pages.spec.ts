@@ -336,18 +336,53 @@ for (const scenario of scenarios) {
           if (!focus.visible) unmarked.push(focus.name);
         }
         expect(unmarked, "Focus senza indicatore visibile").toEqual([]);
-        // Con il movimento ridotto nessuna animazione o transizione dura più di un istante.
+        // Con il movimento ridotto restano soltanto dissolvenze e cambi di colore: nessuna
+        // animazione o transizione sposta, scala o ridimensiona.
         expect(
-          await page.evaluate(() =>
-            document
+          await page.evaluate(() => {
+            const still = new Set([
+              "offset",
+              "easing",
+              "composite",
+              "computedOffset",
+              "opacity",
+              "visibility",
+              "color",
+              "backgroundColor",
+              "borderColor",
+              "borderTopColor",
+              "borderRightColor",
+              "borderBottomColor",
+              "borderLeftColor",
+              "outlineColor",
+              "boxShadow",
+              "textDecorationColor",
+              "fill",
+              "stroke",
+            ]);
+            return document
               .getAnimations()
               .filter((animation) => animation.playState === "running")
-              .map((animation) => Number(animation.effect?.getComputedTiming().duration ?? 0))
-              .filter((duration) => duration > 1),
-          ),
-          "Animazioni con il movimento ridotto",
+              .filter((animation) => Number(animation.effect?.getComputedTiming().duration) > 1)
+              .flatMap((animation) =>
+                ((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? []).flatMap(
+                  (frame) => Object.keys(frame).filter((property) => !still.has(property)),
+                ),
+              );
+          }),
+          "Movimento con il movimento ridotto",
         ).toEqual([]);
         checked("focus visibile e movimento ridotto");
+        // Le dissolvenze restano anche con il movimento ridotto: il contrasto si misura a
+        // comparsa conclusa, escluse le animazioni continue come lo scheletro.
+        await page.evaluate(() =>
+          Promise.all(
+            document
+              .getAnimations()
+              .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+              .map((animation) => animation.finished.catch(() => undefined)),
+          ),
+        );
         const accessibility = await new AxeBuilder({ page })
           .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
           .analyze();

@@ -8,7 +8,7 @@ import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { infoEmail } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";
 import { siteSecurityPath } from "../app-links";
-import { publicPage } from "../site.server";
+import { publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/site-security";
 
@@ -22,6 +22,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     copy: { ...pages.security, shot: pages.shots.sicurezza },
   };
 }
+
+export const headers = publicPageHeaders;
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const { language, origin, copy: t } = loaderData;

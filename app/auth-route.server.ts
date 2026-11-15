@@ -9,6 +9,7 @@ import { z } from "zod";
 import { createAuth, readSession } from "./auth.server";
 import { registrationComplete, registrationStatus } from "./domain/registration.server";
 import { recordEmailChange } from "./domain/email-change.server";
+import { passkeyUserHandle, withPasskeyUser } from "./domain/passkey-user.server";
 import { passkeyChangeBlock, recentSignIn } from "./domain/sessions.server";
 import { completeStoreLink } from "./domain/store-link.server";
 import {
@@ -66,6 +67,7 @@ const passkeyEnrollmentPaths = new Set([
   "/api/auth/passkey/update-passkey",
 ]);
 const passkeyRegistrationPath = "/api/auth/passkey/verify-registration";
+const passkeyRegistrationOptionsPath = "/api/auth/passkey/generate-register-options";
 const linkSocialPath = "/api/auth/link-social";
 const changeEmailPath = "/api/auth/change-email";
 const ebayCallbackPath = "/api/auth/callback/ebay";
@@ -88,6 +90,21 @@ function noStore(response: Response): Response {
   const headers = new Headers(response.headers);
   headers.set("cache-control", "no-store");
   return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+/** Opzioni di registrazione della passkey con l'utente WebAuthn di FiscalBay. */
+async function passkeyOptionsResponse(
+  response: Response,
+  user: Parameters<typeof withPasskeyUser>[1],
+): Promise<Response> {
+  const options = await response.json<Record<string, unknown>>();
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return new Response(JSON.stringify(withPasskeyUser(options, user)), {
     status: response.status,
     statusText: response.statusText,
     headers,
@@ -257,7 +274,7 @@ async function authResponse(request: Request, env: Env, admitted = false): Promi
     }
   }
   // Utente che registra una passkey, per avvisarlo quando la registrazione riesce.
-  let enrollingUserId: string | null = null;
+  let enrollingUser: { id: string; email: string; name: string } | null = null;
   if (passkeyEnrollmentPaths.has(pathname)) {
     const session = await readSession(env, request);
     if (!session) return new Response(null, { status: 401 });
@@ -270,7 +287,7 @@ async function authResponse(request: Request, env: Env, admitted = false): Promi
     // compromesse non bastano ad aggiungerne una.
     if (passkeyChangeBlock(session)) return new Response(null, { status: 403 });
     if (!(await jsonBody(request, passkeyBody)).success) return new Response(null, { status: 400 });
-    enrollingUserId = session.user.id;
+    enrollingUser = session.user;
   }
   const wait = await addressWait(request, env);
   if (wait === "unsupported") return new Response(null, { status: 415 });
@@ -290,8 +307,20 @@ async function authResponse(request: Request, env: Env, admitted = false): Promi
     await recordEmailChange(env.DB, emailChange.userId, emailChange.email, emailChange.newEmail);
   }
   if (response.status >= 500) logFailure({ request, code: "INTERNAL_ERROR", operation: "route" });
-  if (pathname === passkeyRegistrationPath && response.ok && enrollingUserId) {
-    notifySecurityEvent(env, enrollingUserId, { kind: "passkey-added" });
+  if (pathname === passkeyRegistrationPath && response.ok && enrollingUser) {
+    notifySecurityEvent(env, enrollingUser.id, { kind: "passkey-added" });
+  }
+  if (
+    pathname === passkeyRegistrationOptionsPath &&
+    response.ok &&
+    response.headers.get("content-type")?.startsWith("application/json") &&
+    enrollingUser
+  ) {
+    return passkeyOptionsResponse(response, {
+      handle: await passkeyUserHandle(env.DB, enrollingUser.id),
+      email: enrollingUser.email,
+      name: enrollingUser.name,
+    });
   }
   return response;
 }
@@ -485,4 +514,15 @@ export function redirectWithCookies(location: string, response: Response): Respo
   const headers = new Headers({ "cache-control": "no-store" });
   for (const cookie of response.headers.getSetCookie()) headers.append("set-cookie", cookie);
   return redirect(location, { status: 303, headers });
+}
+
+/**
+ * Redirect dopo l'uscita: oltre ai cookie chiusi da Auth, il browser svuota la memoria del sito
+ * (`sessionStorage`, `localStorage`, IndexedDB), così chi usa lo stesso dispositivo non ritrova
+ * lo stato della sessione precedente. I cookie restano ad Auth, che chiude soltanto i suoi.
+ */
+export function signedOutRedirect(location: string, response: Response): Response {
+  const signedOut = redirectWithCookies(location, response);
+  signedOut.headers.set("clear-site-data", '"storage"');
+  return signedOut;
 }

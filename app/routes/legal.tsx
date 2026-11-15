@@ -17,7 +17,7 @@ import { legalDocuments, type LegalBlock } from "../copy/legal-documents.server"
 import { sitePages } from "../copy/site-pages.server";
 import { privacyPath, termsPath } from "../app-links";
 import { legalVersions } from "../domain/registration.server";
-import { publicPage } from "../site.server";
+import { publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
 
 const documents = {
@@ -44,6 +44,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     sections: legalDocuments[language][document],
   };
 }
+
+export const headers = publicPageHeaders;
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const { language, origin, document, description } = loaderData;
@@ -72,12 +74,13 @@ function withEmail(text: string): ReactNode {
   );
 }
 
+/** Testo e elenchi restano entro una riga leggibile; le tabelle usano tutta la colonna. */
 function Block({ block }: { block: LegalBlock }) {
   if (typeof block === "string")
-    return <p className="leading-relaxed text-pretty">{withEmail(block)}</p>;
+    return <p className="max-w-[65ch] leading-relaxed text-pretty">{withEmail(block)}</p>;
   if ("items" in block)
     return (
-      <ul className="grid list-disc gap-2 pl-5 leading-relaxed text-pretty">
+      <ul className="grid max-w-[65ch] list-disc gap-2 pl-5 leading-relaxed text-pretty">
         {block.items.map((item) => (
           <li key={item}>{withEmail(item)}</li>
         ))}

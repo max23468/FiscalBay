@@ -829,7 +829,8 @@ for (const language of ["it", "en"] as const) {
     await signIn.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
     await expect(email).toHaveAccessibleDescription(/nome@dominio\.it|name@domain\.com/);
     await email.fill("nome@example.invalid");
-    await expect(email).not.toHaveAttribute("aria-invalid");
+    // Dopo la validazione lo stato resta esplicito anche quando il campo è corretto.
+    await expect(email).toHaveAttribute("aria-invalid", "false");
 
     await page.getByRole("tab", { name: it ? "Crea account" : "Create account" }).click();
     const signUp = page.getByRole("tabpanel", {
@@ -851,11 +852,28 @@ for (const language of ["it", "en"] as const) {
     await signUp.getByRole("textbox", { name: it ? "Cognome" : "Last name" }).fill("Rossi");
     await signUp.getByRole("textbox", { name: "Email" }).fill("maria@example.invalid");
     const password = signUp.getByLabel(/Password/);
+    // La regola della nuova password è visibile prima dell'invio e collegata al campo, prima
+    // dell'errore del campo ancora vuoto.
+    await expect(password).toHaveAccessibleDescription(
+      it ? /^Almeno 8 caratteri\./u : /^At least 8 characters\./u,
+    );
+    const reveal = signUp.getByRole("button", {
+      name: it ? "Mostra password" : "Show password",
+      exact: true,
+    });
+    await expect(reveal).toHaveAttribute("aria-pressed", "false");
     await password.fill("corta");
+    await reveal.click();
+    await expect(reveal).toHaveAttribute("aria-pressed", "true");
+    await expect(password).toHaveAttribute("type", "text");
+    await reveal.click();
+    await expect(password).toHaveAttribute("type", "password");
     await submit.click();
     await expect(password).toBeFocused();
     await expect(password).toHaveAccessibleDescription(
-      it ? "Usa almeno 8 caratteri." : "Use at least 8 characters.",
+      it
+        ? "Almeno 8 caratteri. Usa almeno 8 caratteri."
+        : "At least 8 characters. Use at least 8 characters.",
     );
     await password.fill("una-password-lunga");
     await submit.click();
@@ -885,13 +903,13 @@ for (const language of ["it", "en"] as const) {
     await expect(password).toBeFocused();
     await expect(password).toHaveAccessibleDescription(
       it
-        ? "Questa password compare in violazioni di dati note. Scegline un’altra."
-        : "This password appears in known data breaches. Choose a different one.",
+        ? "Almeno 8 caratteri. Questa password compare in violazioni di dati note. Scegline un’altra."
+        : "At least 8 characters. This password appears in known data breaches. Choose a different one.",
     );
     expect(checks).toEqual([{ username: "fiscalbay", password: "una-password-sicura" }]);
     await expect(page).toHaveURL(it ? /\/accesso$/u : /\/en\/sign-in$/u);
     await password.fill("un-altra-password-lunga");
-    await expect(password).not.toHaveAttribute("aria-invalid");
+    await expect(password).toHaveAttribute("aria-invalid", "false");
   });
 }
 
@@ -945,4 +963,24 @@ test("l'esito dell'accesso esce dall'indirizzo e non torna alla ricarica", async
   await expect.poll(() => new URL(page.url()).search).toBe("");
   await page.reload();
   await expect(page.getByText(text, { exact: true })).toHaveCount(0);
+});
+
+test("con i colori forzati focus e scheda attiva restano visibili, senza cornici a riposo", async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: "active" });
+  await page.goto("/accesso");
+  await networkIdle(page);
+  const outline = (locator: ReturnType<typeof page.locator>) =>
+    locator.evaluate((element) => getComputedStyle(element).outlineStyle);
+  const signIn = page.getByRole("tab", { name: "Accedi", exact: true });
+  const signUp = page.getByRole("tab", { name: "Crea account", exact: true });
+  // A riposo nessun contorno: il sistema disegna soltanto quello del focus.
+  expect(await outline(signUp)).toBe("none");
+  await expect(signIn).toHaveCSS("text-decoration-line", "underline");
+  await expect(signUp).toHaveCSS("text-decoration-line", "none");
+  await signIn.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(signUp).toBeFocused();
+  expect(await outline(signUp)).toBe("solid");
 });

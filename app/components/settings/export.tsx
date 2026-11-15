@@ -4,7 +4,7 @@ import { useId, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 
 import { useAction, useNotice } from "~/components/action";
-import { PremiumNote } from "~/components/status";
+import { PremiumNote, StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { FieldGroup, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
@@ -152,8 +152,12 @@ function CreateFileForm({
   const notify = useNotice();
   const revalidator = useRevalidator();
   const [pending, setPending] = useState(false);
+  // Un errore resta sotto il pulsante fino al tentativo successivo; il lavoro accodato è una
+  // conferma e passa dall'avviso breve.
+  const [error, setError] = useState<string | null>(null);
   const download = async (form: HTMLFormElement) => {
     setPending(true);
+    setError(null);
     try {
       const response = await fetch(form.action, {
         method: "POST",
@@ -165,16 +169,19 @@ function CreateFileForm({
       });
       if (!response.ok || response.status === 202) {
         const result = (await response.json().catch(() => null)) as { notice?: string } | null;
-        notify(result?.notice ?? t.settings.export.exportFailed);
+        const notice = result?.notice ?? t.settings.export.exportFailed;
         // Il lavoro accodato compare fra i file creati, in preparazione.
-        if (response.status === 202) void revalidator.revalidate();
+        if (response.status === 202) {
+          notify(notice);
+          void revalidator.revalidate();
+        } else setError(notice);
         return;
       }
       await saveFile(response);
       // Il file resta fra quelli creati, scaricabile di nuovo finché vale.
       void revalidator.revalidate();
     } catch {
-      notify(t.settings.export.exportFailed);
+      setError(t.settings.export.exportFailed);
     } finally {
       setPending(false);
     }
@@ -183,6 +190,7 @@ function CreateFileForm({
     <form
       method="post"
       action={context ? `${orderExportPath}?${context.query}` : orderExportPath}
+      className="grid justify-items-start gap-3"
       onSubmit={(event) => {
         event.preventDefault();
         void download(event.currentTarget);
@@ -194,6 +202,11 @@ function CreateFileForm({
       <Button type="submit" disabled={disabled} pending={pending}>
         {t.settings.export.exportCreate}
       </Button>
+      {error ? (
+        <div className="w-full">
+          <StatusAlert tone="danger" title={error} />
+        </div>
+      ) : null}
     </form>
   );
 }
@@ -270,8 +283,9 @@ function ExportPreview({
           role: "region",
           "aria-labelledby": id,
           tabIndex: 0,
+          // Da 768 px la sezione sta su una scheda: le ombre di scorrimento ne prendono il fondo.
           className:
-            "max-w-full rounded-lg border focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+            "max-w-full rounded-lg border focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:[--table-surface:var(--card)]",
         }}
         className="w-max min-w-full"
       >
@@ -294,7 +308,11 @@ function ExportPreview({
               {columns.map((column, index) => (
                 <TableCell
                   key={column}
-                  className={cn("max-w-72 truncate px-3 py-2", index === 0 && [sticky, "bg-card"])}
+                  // I valori lunghi vanno a capo invece di essere tagliati.
+                  className={cn(
+                    "max-w-72 px-3 py-2 whitespace-normal [overflow-wrap:anywhere]",
+                    index === 0 && [sticky, "bg-card"],
+                  )}
                 >
                   {record[column]}
                 </TableCell>
@@ -410,7 +428,7 @@ function ColumnsField({
         <ChevronDown
           aria-hidden="true"
           className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick)",
+            "size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) motion-reduce:transition-none",
             open && "rotate-180",
           )}
         />
@@ -649,24 +667,28 @@ function ExportFiles({ files }: { files: ExportFileView[] }) {
   const { links, preview } = useLinks();
   const date = useDate();
   const action = useAction();
-  const notify = useNotice();
   const revalidator = useRevalidator();
   // Il file si salva soltanto quando è arrivato intero; un file non più disponibile diventa
-  // un avviso e l'elenco si rilegge.
+  // un errore sopra l'elenco, che si rilegge. L'errore resta fino al download successivo.
+  const [error, setError] = useState<string | null>(null);
   const download = async (href: string) => {
+    setError(null);
     try {
       const notice = await downloadExport(href);
       if (notice === null) return;
-      notify(notice || copy.exportGone);
+      setError(notice || copy.exportGone);
       void revalidator.revalidate();
     } catch {
-      notify(copy.exportFailed);
+      setError(copy.exportFailed);
     }
   };
   const copy = t.settings.export;
-  if (files.length === 0) return null;
+  const alert = error ? <StatusAlert tone="danger" title={error} /> : null;
+  // Il file sparito poteva essere l'ultimo: l'errore resta anche senza elenco.
+  if (files.length === 0) return alert;
   return (
     <Group title={copy.exportFiles}>
+      {alert}
       <ul className="grid divide-y border-t">
         {files.map((file) => (
           <li key={file.id} className="flex flex-wrap items-center justify-between gap-3 py-3">

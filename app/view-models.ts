@@ -142,11 +142,24 @@ export const orderPeriods = ["7", "30", "90", "6m", "12m"] as const;
 export type OrderPeriod = (typeof orderPeriods)[number];
 export const premiumOrderPeriods: ReadonlySet<OrderPeriod> = new Set(["90", "6m", "12m"]);
 
-/** Inizio del periodo che termina all'istante indicato. */
+/**
+ * Inizio del periodo che termina all'istante indicato. Un mese di calendario senza il giorno di
+ * partenza si ferma al suo ultimo giorno: dal 31 agosto, sei mesi prima è il 28 o il 29 febbraio,
+ * mai i primi di marzo.
+ */
 export function orderPeriodStart(period: OrderPeriod, now: Date): Date {
   const start = new Date(now);
-  if (period.endsWith("m")) start.setUTCMonth(start.getUTCMonth() - Number(period.slice(0, -1)));
-  else start.setTime(now.getTime() - Number(period) * dayMilliseconds);
+  if (!period.endsWith("m")) {
+    start.setTime(now.getTime() - Number(period) * dayMilliseconds);
+    return start;
+  }
+  const day = start.getUTCDate();
+  start.setUTCDate(1);
+  start.setUTCMonth(start.getUTCMonth() - Number(period.slice(0, -1)));
+  const lastDay = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  start.setUTCDate(Math.min(day, lastDay));
   return start;
 }
 

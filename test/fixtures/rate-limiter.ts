@@ -25,12 +25,13 @@ function fakeRateLimiter(limit: RequestLimit) {
   };
 }
 
-/** I tre binding dell'ambiente, da aggiungere a un `Env` simulato. */
+/** I binding dell'ambiente, da aggiungere a un `Env` simulato. */
 export function fakeRateLimiters() {
   return {
     REQUEST_LIMIT_ATTEMPTS: fakeRateLimiter("attempts"),
     REQUEST_LIMIT_EMAILS: fakeRateLimiter("emails"),
     REQUEST_LIMIT_WORK: fakeRateLimiter("work"),
+    REQUEST_LIMIT_REPORTS: fakeRateLimiter("reports"),
   };
 }
 

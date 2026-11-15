@@ -183,45 +183,26 @@ export function OrdersToolbar({
     setParams(next, { preventScrollReset: true });
   };
   return (
-    <div className="flex flex-col gap-4 md:flex-row md:items-end">
-      <div className="flex flex-wrap items-center justify-end gap-2 md:order-last md:shrink-0">
-        {confirmUnlock === false ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={action.pending}
-            onClick={() => action.run("unlock-confirmation")}
-          >
-            {t.orders.restoreUnlockConfirmation}
-          </Button>
-        ) : null}
-        <Button
-          variant="outline"
-          className="mr-auto md:hidden"
-          aria-expanded={filtersOpen}
-          aria-controls="orders-filters"
-          onClick={() => {
-            setSettled(false);
-            setFiltersOpen((open) => !open);
-          }}
-        >
-          <SlidersHorizontal aria-hidden="true" data-icon="inline-start" />
-          {t.orders.filters}
-          {active > 0 ? <span className="font-code">({active})</span> : null}
-        </Button>
-        <Button
-          variant={selecting ? "secondary" : "outline"}
-          ref={selectRef}
-          aria-pressed={selecting}
-          disabled={empty && !selecting}
-          focusableWhenDisabled
-          onClick={onToggleSelect}
-        >
-          <ListChecks aria-hidden="true" data-icon="inline-start" />
-          {t.orders.select}
-        </Button>
-        <ExportListButton href={exportHref} selecting={selecting} />
-      </div>
+    // L'ordine del documento segue quello visivo: su mobile «Filtri» e poi il suo pannello, sotto
+    // la riga dei comandi; da 768 px i filtri a sinistra e i comandi a destra.
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-4 md:flex md:items-end md:gap-4">
+      <Button
+        variant="outline"
+        className="col-start-1 row-start-1 w-fit md:hidden"
+        aria-expanded={filtersOpen}
+        aria-controls="orders-filters"
+        onClick={() => {
+          // Senza animazione il pannello è subito al suo posto e non serve il ritaglio.
+          setSettled(
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches ? !filtersOpen : false,
+          );
+          setFiltersOpen((open) => !open);
+        }}
+      >
+        <SlidersHorizontal aria-hidden="true" data-icon="inline-start" />
+        {t.orders.filters}
+        {active > 0 ? <span className="font-code">({active})</span> : null}
+      </Button>
       {/*
         Su mobile i filtri si aprono in altezza e spingono i risultati verso il basso. Il ritaglio
         serve soltanto durante l'apertura: a pannello aperto gli anelli di focus restano interi.
@@ -234,7 +215,7 @@ export function OrdersToolbar({
         }}
         className={cn(
           // Chiuso non occupa spazio: il margine negativo assorbe la distanza dalla riga sopra.
-          "grid grid-rows-[0fr] transition-[grid-template-rows,margin-top,visibility] duration-(--duration-quick) ease-(--ease-smooth-out) max-md:invisible max-md:-mt-4 md:contents",
+          "col-span-2 row-start-2 grid grid-rows-[0fr] transition-[grid-template-rows,margin-top,visibility] duration-(--duration-quick) ease-(--ease-smooth-out) max-md:invisible max-md:-mt-4 motion-reduce:transition-none md:contents",
           "data-open:grid-rows-[1fr] data-open:duration-(--duration-fast) max-md:data-open:visible max-md:data-open:mt-0",
         )}
       >
@@ -307,6 +288,30 @@ export function OrdersToolbar({
             onChange={change}
           />
         </div>
+      </div>
+      <div className="col-start-2 row-start-1 flex flex-wrap items-center justify-end gap-2 md:shrink-0">
+        {confirmUnlock === false ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={action.pending}
+            onClick={() => action.run("unlock-confirmation")}
+          >
+            {t.orders.restoreUnlockConfirmation}
+          </Button>
+        ) : null}
+        <Button
+          variant={selecting ? "secondary" : "outline"}
+          ref={selectRef}
+          aria-pressed={selecting}
+          disabled={empty && !selecting}
+          focusableWhenDisabled
+          onClick={onToggleSelect}
+        >
+          <ListChecks aria-hidden="true" data-icon="inline-start" />
+          {t.orders.select}
+        </Button>
+        <ExportListButton href={exportHref} selecting={selecting} />
       </div>
     </div>
   );

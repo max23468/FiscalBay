@@ -186,7 +186,9 @@ export function useTurnstile(action: TurnstileAction | null) {
           ref={container}
           className={interactive ? "contents" : "absolute size-0 overflow-hidden"}
         />
-        {failed ? <FieldError>{t.access.signInNotices["verifica-non-riuscita"]}</FieldError> : null}
+        {failed ? (
+          <FieldError role="alert">{t.access.signInNotices["verifica-non-riuscita"]}</FieldError>
+        ) : null}
       </>
     ) : null,
   };

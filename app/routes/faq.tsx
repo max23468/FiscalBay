@@ -6,7 +6,7 @@ import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { sitePages } from "../copy/site-pages.server";
 import { faqPath, supportPath } from "../app-links";
 import { localizedPath } from "../i18n";
-import { faqItems, publicPage } from "../site.server";
+import { faqItems, publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/faq";
 
@@ -20,6 +20,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     copy: { ...copy, items: faqItems(copy.items, language) },
   };
 }
+
+export const headers = publicPageHeaders;
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const { language, origin, copy: t } = loaderData;
@@ -53,13 +55,13 @@ export default function Faq({ loaderData }: Route.ComponentProps) {
     <SiteLayout path={faqPath} signedIn={signedIn}>
       <PageIntro title={t.title} />
       <div className={cn(siteColumn, "py-12 sm:py-16")}>
-        <div className="grid max-w-3xl gap-8">
+        <div className="grid max-w-[65ch] gap-8">
           <FaqList items={t.items} />
           <p className="text-pretty">
             {t.more}{" "}
             <a
               href={localizedPath(language, supportPath)}
-              className="font-medium text-primary underline-offset-4 hover:underline"
+              className="font-medium text-primary underline-offset-[0.25em] hover:underline"
             >
               {t.support}
             </a>

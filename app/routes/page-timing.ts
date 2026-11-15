@@ -18,6 +18,11 @@ const pageTimingSchema = z.strictObject({
   fcp: duration.optional(),
   lcp: duration.optional(),
   inp: duration.optional(),
+  // Parti dell'interazione dell'INP; i browser che non le misurano non le inviano.
+  inpInput: duration.optional(),
+  inpProcessing: duration.optional(),
+  inpPresentation: duration.optional(),
+  inpScript: duration.optional(),
   cls: z.number().int().min(0).max(maxLayoutShift).optional(),
   ready: duration.optional(),
   server: z.partialRecord(z.enum(serverPhases), duration),

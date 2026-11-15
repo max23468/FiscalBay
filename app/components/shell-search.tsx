@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, NavigationType, useBlocker, useLocation, useNavigate } from "react-router";
 
 import { useHydrated } from "~/components/hydrated";
 import { Button } from "~/components/ui/button";
@@ -216,7 +216,10 @@ export function GlobalSearch({
     <search
       className={cn("relative", className)}
       onKeyDown={(event) => {
-        if (event.key === "Escape") setOpen(false);
+        if (event.key !== "Escape" || !showPanel) return;
+        // Esc chiude prima i suggerimenti: il pannello della ricerca su mobile resta aperto.
+        event.stopPropagation();
+        setOpen(false);
       }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
@@ -279,11 +282,28 @@ export function GlobalSearch({
   );
 }
 
+/**
+ * Mentre la ricerca su mobile è aperta, Indietro la chiude e la pagina resta, come per il
+ * pannello di un ordine. La cronologia non cambia: lo spostamento viene annullato prima che la
+ * pagina si rilegga. Un collegamento seguito dalla ricerca passa senza blocchi.
+ */
+function CloseOnBack({ onBack }: { onBack: () => void }) {
+  const blocker = useBlocker(({ historyAction }) => historyAction === NavigationType.Pop);
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    blocker.reset();
+    onBack();
+  }, [blocker, onBack]);
+  return null;
+}
+
 export function MobileSearch({ search }: { search: ShellSearch }) {
   const { t } = useCopy();
   const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
   return (
     <>
+      {open ? <CloseOnBack onBack={close} /> : null}
       <Button
         variant="ghost"
         size="icon"

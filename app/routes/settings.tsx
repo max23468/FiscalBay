@@ -22,6 +22,7 @@ import {
   type AuthSession,
 } from "../domain/sessions.server";
 import { listSignInMethods } from "../domain/sign-in-methods.server";
+import { passkeySignals } from "../domain/passkey-user.server";
 import { telegramSettings } from "../domain/telegram.server";
 import { stripeSecretKey } from "../integrations/stripe.server";
 import { botUrl, telegramConfigured } from "../integrations/telegram.server";
@@ -105,6 +106,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     admissionState,
     exportConfigurations,
     exportFiles,
+    signals,
   ] = await measure("d1", "settings", () =>
     Promise.all([
       orderAllowance(env.DB, userId, now),
@@ -124,6 +126,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       admission(env.DB, userId),
       listExportConfigurations(env.DB, userId),
       listExportFiles(env.DB, userId, now),
+      passkeySignals(env.DB, session.user),
     ]),
   );
   const [exportData, subscription] = await Promise.all([
@@ -164,6 +167,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       // Avviso da mostrare se la registrazione di una passkey viene rifiutata.
       passkeyBlock: passkeyChangeBlock(auth, now) ?? "nuovo-accesso",
       pendingEmail,
+      passkeySignals: signals,
       notice: accessNotice(new URL(request.url).searchParams, language),
     },
     preferences: {

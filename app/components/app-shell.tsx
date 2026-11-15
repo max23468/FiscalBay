@@ -123,17 +123,20 @@ export function AppShell({
           </div>
         </div>
       </header>
-      {/* Una nuova sezione entra con una breve dissolvenza; il primo caricamento no. */}
+      {/*
+        Una nuova sezione entra con una breve dissolvenza e riceve il focus, così tastiera e
+        lettori di schermo ripartono dal suo contenuto; il primo caricamento no.
+      */}
       <main
         key={section.key}
+        ref={section.focus}
         id={mainContentId}
         tabIndex={-1}
         className={cn(
           siteColumn,
           "pt-6 pb-12 outline-none",
           navigable && "max-md:pb-28",
-          section.fade &&
-            "animate-[value-reveal_var(--duration-quick)_var(--ease-smooth-out)] motion-reduce:animate-none",
+          section.fade && "animate-[value-reveal_var(--duration-quick)_var(--ease-smooth-out)]",
         )}
       >
         {children}
@@ -157,7 +160,7 @@ export function AppShell({
         {notice ? (
           <p
             key={notice.id}
-            className="max-w-md animate-[notice-in_var(--duration-fast)_var(--ease-smooth-out)] rounded-lg bg-foreground px-4 py-2.5 text-sm text-background shadow-md motion-reduce:animate-none"
+            className="max-w-md animate-[notice-in_var(--duration-fast)_var(--ease-smooth-out)] rounded-lg bg-foreground px-4 py-2.5 text-sm text-background shadow-md"
           >
             {notice.message}
           </p>
@@ -194,7 +197,7 @@ function TopNav({ destinations, label }: { destinations: NavDestination[]; label
         {topNav.box ? (
           <li
             aria-hidden="true"
-            className="pointer-events-none absolute bottom-0 left-0 h-0.5 rounded-full bg-primary transition-[translate,width] duration-(--duration-fast) ease-(--ease-smooth-out)"
+            className="pointer-events-none absolute bottom-0 left-0 h-0.5 rounded-full bg-primary transition-[translate,width] duration-(--duration-fast) ease-(--ease-smooth-out) motion-reduce:transition-none"
             style={{
               translate: `calc(${topNav.box.x}px + 0.75rem) 0`,
               width: `calc(${topNav.box.width}px - 1.5rem)`,
@@ -225,7 +228,9 @@ function BottomNav({ destinations, label }: { destinations: NavDestination[]; la
               end={end}
               onPointerEnter={() => prefetchRouteModules(href)}
               onFocus={() => prefetchRouteModules(href)}
-              className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-xs font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset aria-[current=page]:text-primary group-has-[a.pending]/nav:aria-[current=page]:text-muted-foreground [&.pending]:text-primary!"
+              // La voce corrente si distingue anche per il peso del testo, non soltanto per il
+              // colore.
+              className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-xs font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset aria-[current=page]:font-semibold aria-[current=page]:text-primary group-has-[a.pending]/nav:aria-[current=page]:font-medium group-has-[a.pending]/nav:aria-[current=page]:text-muted-foreground [&.pending]:font-semibold! [&.pending]:text-primary!"
             >
               <Icon aria-hidden="true" className="size-5" />
               <span className="text-center leading-tight">{label}</span>
@@ -236,7 +241,7 @@ function BottomNav({ destinations, label }: { destinations: NavDestination[]; la
         {bottomNav.box ? (
           <li
             aria-hidden="true"
-            className="pointer-events-none absolute top-0 left-0 -z-10 h-8 w-14 rounded-full bg-primary/10 transition-[translate] duration-(--duration-fast) ease-(--ease-smooth-out)"
+            className="pointer-events-none absolute top-0 left-0 -z-10 h-8 w-14 rounded-full bg-primary/10 transition-[translate] duration-(--duration-fast) ease-(--ease-smooth-out) motion-reduce:transition-none"
             style={{
               translate: `calc(${bottomNav.box.x + bottomNav.box.width / 2}px - 1.75rem) calc(${bottomNav.box.y + bottomNav.box.height / 2}px - 1rem)`,
             }}
@@ -249,13 +254,22 @@ function BottomNav({ destinations, label }: { destinations: NavDestination[]; la
 
 /**
  * Chiave del contenuto per sezione: cambiare sezione lo rimonta con una dissolvenza, mentre
- * filtri, dettagli e sotto-pagine della stessa sezione aggiornano il contenuto sul posto.
+ * filtri, dettagli e sotto-pagine della stessa sezione aggiornano il contenuto sul posto. Il
+ * contenuto rimontato prende il focus senza scorrere; al primo caricamento resta dov'è.
  */
 function useSectionEntry() {
   const key = areaSection(useLocation().pathname);
   const [entry, setEntry] = useState({ key, fade: false });
   if (entry.key !== key) setEntry({ key, fade: true });
-  return entry;
+  const focus = useCallback(
+    (main: HTMLElement | null) => {
+      // Un elemento con il focus già dentro la nuova sezione, per esempio un pannello, resta.
+      if (main && entry.fade && !main.contains(document.activeElement))
+        main.focus({ preventScroll: true });
+    },
+    [entry],
+  );
+  return { ...entry, focus };
 }
 
 /**
@@ -332,9 +346,10 @@ function AccountMenu({
         <DropdownMenuGroup>
           <DropdownMenuLabel className="flex items-center gap-3 px-1.5 py-1.5">
             <InitialsTile name={account.name} fallback={account.email} className="rounded-full" />
-            <span className="grid min-w-0 gap-0.5">
-              <span className="truncate text-sm text-foreground">{account.name}</span>
-              <span className="truncate font-normal">{account.email}</span>
+            {/* Nome ed email lunghi vanno a capo: tagliati non si leggerebbero per intero. */}
+            <span className="grid min-w-0 gap-0.5 [overflow-wrap:anywhere]">
+              <span className="text-sm text-foreground">{account.name}</span>
+              <span className="font-normal">{account.email}</span>
             </span>
           </DropdownMenuLabel>
         </DropdownMenuGroup>

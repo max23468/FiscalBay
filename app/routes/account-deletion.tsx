@@ -2,6 +2,9 @@ import { AccountDeletionPage } from "~/components/account-deletion";
 import type { Route } from "./+types/account-deletion";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
+import { publicPageHeaders } from "../site.server";
+
+export const headers = publicPageHeaders;
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)].accountDeletion;

@@ -6,7 +6,7 @@ import {
   meta as siteRouteMeta,
 } from "../app/routes/site";
 import { loader as loadFeatures } from "../app/routes/features";
-import { loader as loadPricing } from "../app/routes/pricing";
+import { headers as pricingHeaders, loader as loadPricing } from "../app/routes/pricing";
 import { loader as loadSecurity } from "../app/routes/site-security";
 import { loader as loadFaq, meta as faqMeta } from "../app/routes/faq";
 import { loader as loadSupport } from "../app/routes/support";
@@ -30,7 +30,7 @@ import { loader as loadRoot } from "../app/root";
 import { resetDatabase, insertEntitlement, insertWorkspace } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";
-import { callRoute, pagePath } from "./fixtures/route-fixtures";
+import { callRoute, pagePath, routeData } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => {
@@ -72,7 +72,7 @@ describe("provenienza dei visitatori", () => {
     expect(JSON.stringify(tagged)).not.toContain("via=");
     expect(sitemap("https://fiscalbay.it")).not.toContain("via=");
     expect(new Headers(siteHeaders()).has("set-cookie")).toBe(false);
-    const pricing = await callRoute(loadPricing, "/prezzi?via=reddit");
+    const pricing = await routeData(loadPricing, "/prezzi?via=reddit");
     expect(pricing).not.toBeInstanceOf(Response);
   });
 });
@@ -115,7 +115,7 @@ describe("radice pubblica e area riservata", () => {
     const line =
       "Promozione Free: 10 ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il 1 nov 2026, poi 5.";
     expect(await root("/")).toMatchObject({ copy: { quota: line } });
-    expect((await callRoute(loadPricing, "/prezzi")).copy.promotion).toBe(line);
+    expect((await routeData(loadPricing, "/prezzi")).copy.promotion).toBe(line);
     expect(sitePages.it.home.freePromotion(10, formatDate(promotion.endsAt, "it", "date"), 5)).toBe(
       line,
     );
@@ -135,7 +135,7 @@ describe("radice pubblica e area riservata", () => {
     expect(await root("/")).toMatchObject({
       copy: { quota: line },
     });
-    expect((await callRoute(loadPricing, "/prezzi")).copy.promotion).toBe(line);
+    expect((await routeData(loadPricing, "/prezzi")).copy.promotion).toBe(line);
     expect(sitePages.en.home.freePromotion(10, null, 5)).toBe(
       "Free promotion for a limited time: 10 orders to unlock every 7 days instead of 5.",
     );
@@ -169,7 +169,7 @@ describe("radice pubblica e area riservata", () => {
       premiumBody: expect.stringMatching(/\. New Pro purchases and trials are paused for now\.$/u),
     });
     expect(copy.premiumBody).not.toContain("14-day");
-    expect((await callRoute(loadPricing, "/en/pricing")).copy.purchaseNote).toBe(
+    expect((await routeData(loadPricing, "/en/pricing")).copy.purchaseNote).toBe(
       sitePages.en.pricing.closed,
     );
   });
@@ -482,7 +482,7 @@ describe("pagine del sito pubblico", () => {
   const visit = (cookie?: string) =>
     Promise.all([
       callRoute(loadFeatures, "/funzionalita", { cookie }),
-      callRoute(loadPricing, "/en/pricing", { cookie }),
+      routeData(loadPricing, "/en/pricing", { cookie }),
       callRoute(loadSecurity, "/sicurezza", { cookie }),
       callRoute(loadFaq, "/en/faq", { cookie }),
       callRoute(loadSupport, "/supporto", { cookie }),
@@ -502,7 +502,7 @@ describe("pagine del sito pubblico", () => {
 
   it("in Prezzi chi ha già Pro a vita vede il piano attivo al posto delle offerte", async () => {
     const { userId, cookie } = await verifiedSession("sito-lifetime@example.invalid");
-    const visitor = await callRoute(loadPricing, "/prezzi", { cookie });
+    const visitor = await routeData(loadPricing, "/prezzi", { cookie });
     expect(visitor).toMatchObject({ signedIn: true, owned: false });
     await env.DB.batch([
       ...insertWorkspace({ id: "w-a", userId, name: "Spazio" }),
@@ -517,10 +517,19 @@ describe("pagine del sito pubblico", () => {
         grantReason: "Omaggio di prova",
       }),
     ]);
-    const owner = await callRoute(loadPricing, "/en/pricing", { cookie });
+    const owner = await routeData(loadPricing, "/en/pricing", { cookie });
     expect(owner).toMatchObject({ owned: true });
     expect(owner.copy.owned).toBe(sitePages.en.pricing.owned);
-    expect(await callRoute(loadPricing, "/prezzi")).toMatchObject({ owned: false });
+    expect(await routeData(loadPricing, "/prezzi")).toMatchObject({ owned: false });
+    // Con la sessione la pagina porta lo stato del piano: il browser non ne conserva copie,
+    // mentre quella di tutti resta nella cache Indietro/Avanti.
+    const cacheOf = async (cookie?: string) => {
+      const result = await callRoute(loadPricing, "/prezzi", { cookie });
+      const loaderHeaders = new Headers((result as { init?: ResponseInit }).init?.headers);
+      return new Headers(pricingHeaders({ loaderHeaders } as never)).get("cache-control");
+    };
+    expect(await cacheOf(cookie)).toBe("no-store");
+    expect(await cacheOf()).toBe("private, no-cache");
   });
 
   it("con Auth o database non disponibili le pagine pubbliche restano, Home e Prezzi con il listino di riserva", async () => {
@@ -554,7 +563,7 @@ describe("pagine del sito pubblico", () => {
             ],
           },
         });
-        const pricing = await callRoute(loadPricing, "/en/pricing", { cookie: visitor });
+        const pricing = await routeData(loadPricing, "/en/pricing", { cookie: visitor });
         expect(pricing).toMatchObject({
           signedIn: false,
           purchasesOpen: false,
@@ -600,7 +609,7 @@ describe("pagine del sito pubblico", () => {
       const pages = await Promise.all([
         callRoute(loadSite, prefix(language) || "/"),
         callRoute(loadFeatures, `${prefix(language)}/funzionalita`),
-        callRoute(loadPricing, `${prefix(language)}/prezzi`),
+        routeData(loadPricing, `${prefix(language)}/prezzi`),
         callRoute(loadSecurity, `${prefix(language)}/sicurezza`),
         callRoute(loadFaq, `${prefix(language)}/faq`),
         callRoute(loadSupport, `${prefix(language)}/supporto`),
@@ -658,7 +667,7 @@ describe("pagine del sito pubblico", () => {
   });
 
   it("mostra i posti lifetime reali, gli acquisti sospesi e la promozione in corso", async () => {
-    expect(await callRoute(loadPricing, "/prezzi")).toMatchObject({
+    expect(await routeData(loadPricing, "/prezzi")).toMatchObject({
       purchasesOpen: true,
       copy: {
         promotion: null,
@@ -683,7 +692,7 @@ describe("pagine del sito pubblico", () => {
          VALUES ('lancio', '2026-01-01T00:00:00.000Z', '2099-01-01T00:00:00.000Z', 10, ?1)`,
       ).bind(at),
     ]);
-    const pricing = await callRoute(loadPricing, "/prezzi");
+    const pricing = await routeData(loadPricing, "/prezzi");
     expect(pricing).toMatchObject({ purchasesOpen: false });
     // Il Free mostra la quota della promozione; il prezzo netto ha accanto il totale con IVA.
     expect(pricing.copy).toMatchObject({
@@ -716,7 +725,7 @@ describe("pagine del sito pubblico", () => {
         ).bind(index + 1, `w-${index}`, at),
       ]).flat(),
     );
-    const { copy } = await callRoute(loadPricing, "/en/pricing");
+    const { copy } = await routeData(loadPricing, "/en/pricing");
     expect(copy.offers.at(-1)).toMatchObject({
       offer: "lifetime",
       price: "€149",

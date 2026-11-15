@@ -32,6 +32,9 @@ const secured = (overrides = {}) => ({
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  "cross-origin-opener-policy": "same-origin-allow-popups",
+  "cross-origin-resource-policy": "same-origin",
   ...overrides,
 });
 
@@ -58,6 +61,7 @@ const configured = () => {
       always_use_https: "on",
       min_tls_version: "1.2",
       security_header: { strict_transport_security: { enabled: false } },
+      speed_brain: "off",
     },
     botManagement: {
       fight_mode: false,
@@ -85,11 +89,13 @@ const configured = () => {
       page: {
         status: 200,
         headers: secured({
-          "content-security-policy": "default-src 'self'; frame-ancestors 'none'",
+          "content-security-policy":
+            "default-src 'self'; script-src 'nonce-x' 'strict-dynamic'; frame-ancestors 'none'",
+          "content-security-policy-report-only": "require-trusted-types-for 'script'",
           "cache-control": "no-store",
         }),
       },
-      asset: { status: 200, headers: secured() },
+      asset: { status: 200, headers: secured({ "cross-origin-resource-policy": "cross-origin" }) },
       hashedAsset: {
         status: 200,
         headers: secured({ "cache-control": "public, max-age=31536000, immutable" }),
@@ -162,6 +168,34 @@ describe("protezioni della zona", () => {
     );
     assert.equal(rule.action_parameters.headers["x-frame-options"].value, "DENY");
     assert.ok(!("content-security-policy" in rule.action_parameters.headers));
+    assert.equal(
+      rule.action_parameters.headers["permissions-policy"].value,
+      "camera=(), microphone=(), geolocation=(), payment=()",
+    );
+    assert.equal(
+      rule.action_parameters.headers["cross-origin-opener-policy"].value,
+      "same-origin-allow-popups",
+    );
+    assert.equal(
+      rule.action_parameters.headers["cross-origin-resource-policy"].value,
+      "same-origin",
+    );
+  });
+
+  it("lascia leggere da altri siti soltanto immagini delle condivisioni, icone e logo delle email", () => {
+    const [headers, shared] = desiredRules(target).http_response_headers_transform;
+    // La regola delle eccezioni segue quella degli header, quindi il suo valore prevale.
+    assert.equal(headers.ref, "fiscalbay-test-headers");
+    assert.equal(shared.ref, "fiscalbay-test-shared-resources");
+    assert.deepEqual(shared.action_parameters.headers, {
+      "cross-origin-resource-policy": { operation: "set", value: "cross-origin" },
+    });
+    assert.equal(
+      shared.expression,
+      'http.host in {"test.fiscalbay.it"} and (starts_with(http.request.uri.path, "/og/") or ' +
+        'starts_with(http.request.uri.path, "/icon-") or http.request.uri.path in ' +
+        '{"/favicon.ico" "/favicon.svg" "/apple-touch-icon.png"})',
+    );
   });
 
   it("esenta dai controlli da browser soltanto i percorsi esatti dei webhook", () => {
@@ -330,6 +364,7 @@ describe("protezioni della zona", () => {
       "HSTS di zona senza sottodomini né preload": (state) =>
         (state.settings.security_header.strict_transport_security.include_subdomains = true),
       "Bot Fight Mode spento": (state) => (state.botManagement.fight_mode = true),
+      "Speed Brain spento": (state) => (state.settings.speed_brain = "on"),
       "crawler AI ammessi": (state) => (state.botManagement.ai_bots_protection = "block"),
       "rilevamento delle credenziali trapelate": (state) =>
         (state.leakedCredentials.enabled = false),
@@ -347,8 +382,13 @@ describe("protezioni della zona", () => {
       "MX iCloud conservati": (state) => state.dns.splice(4, 1),
       "pagina con header e CSP": (state) =>
         delete state.responses.page.headers["content-security-policy"],
-      "asset con header": (state) =>
-        (state.responses.asset.headers["strict-transport-security"] = "max-age=300"),
+      "icona con header, leggibile da altri siti": (state) =>
+        (state.responses.asset.headers["cross-origin-resource-policy"] = "same-origin"),
+      "regola fiscalbay-test-shared-resources": (state) =>
+        (state.rulesets.http_response_headers_transform.rules =
+          state.rulesets.http_response_headers_transform.rules.filter(
+            (candidate) => candidate.ref !== "fiscalbay-test-shared-resources",
+          )),
       "pagina assente con header": (state) =>
         delete state.responses.missing.headers["x-frame-options"],
       "sonda bloccata dalla zona": (state) => (state.responses.probe.status = 404),

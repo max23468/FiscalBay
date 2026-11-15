@@ -72,7 +72,19 @@ export type PageRow = {
   reports: number;
   /** Quantili 75 e 95 per misura; null quando nessun report porta la misura. */
   measures: Record<
-    "ttfb" | "fcp" | "lcp" | "inp" | "cls" | "ready" | "server_auth" | "server_d1" | "server_ebay",
+    | "ttfb"
+    | "fcp"
+    | "lcp"
+    | "inp"
+    | "inp_input"
+    | "inp_processing"
+    | "inp_presentation"
+    | "inp_script"
+    | "cls"
+    | "ready"
+    | "server_auth"
+    | "server_d1"
+    | "server_ebay",
     { p75: number | null; p95: number | null }
   >;
 };
@@ -170,6 +182,10 @@ const pageSchema = z.looseObject({ page: text, reports: numeric }).transform((ro
       fcp: measure("fcp"),
       lcp: measure("lcp"),
       inp: measure("inp"),
+      inp_input: measure("inp_input"),
+      inp_processing: measure("inp_processing"),
+      inp_presentation: measure("inp_presentation"),
+      inp_script: measure("inp_script"),
       cls: measure("cls"),
       ready: measure("ready"),
       server_auth: measure("server_auth"),

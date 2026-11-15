@@ -33,6 +33,8 @@ import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 
 import { completeRegistration } from "../app/domain/registration.server";
 
+import { passkeySignals } from "../app/domain/passkey-user.server";
+
 import { action as securityRouteAction } from "../app/routes/settings";
 
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
@@ -446,6 +448,10 @@ describe("Better Auth su Workers e D1", () => {
       .first<{ id: string }>();
     expect(user).not.toBeNull();
     const id = user!.id;
+    // Prima di una passkey registrata da FiscalBay non c'è un user handle da segnalare.
+    expect(
+      await passkeySignals(env.DB, { id, email: "passkey@example.invalid", name: "" }),
+    ).toBeNull();
     const options = () =>
       handleAuthRequest(
         new Request(`${origin}/api/auth/passkey/generate-register-options`, {
@@ -486,7 +492,39 @@ describe("Better Auth su Workers e D1", () => {
     await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE "id" = ?').bind(id).run();
     const response = await options();
     expect(response.status).toBe(200);
-    expect((await response.json<{ rp: { id: string } }>()).rp.id).toBe("localhost");
+    expect(response.headers.get("set-cookie")).toBeTruthy();
+    type Options = {
+      rp: { id: string };
+      user: { id: string; name: string; displayName: string };
+      authenticatorSelection: { residentKey: string; userVerification: string };
+    };
+    const first = await response.json<Options>();
+    expect(first.rp.id).toBe("localhost");
+    // Credenziale rilevabile, email come nome utente e nome dell'account visualizzato; il nome
+    // della passkey resta il suo soprannome.
+    expect(first.authenticatorSelection).toMatchObject({
+      residentKey: "required",
+      userVerification: "preferred",
+    });
+    expect(first.user).toMatchObject({
+      name: "passkey@example.invalid",
+      displayName: "Utente Passkey",
+    });
+    expect(first.user.id).toMatch(/^[\w-]{43}$/u);
+    // Lo stesso user handle a ogni registrazione, salvato per l'utente.
+    const named = await handleAuthRequest(
+      new Request(`${origin}/api/auth/passkey/generate-register-options?name=Telefono`, {
+        headers: { cookie },
+      }),
+      env,
+    );
+    const second = await named.json<Options>();
+    expect(second.user).toEqual(first.user);
+    expect(
+      await env.DB.prepare("SELECT handle FROM passkey_user_handles WHERE user_id = ?")
+        .bind(id)
+        .first("handle"),
+    ).toBe(first.user.id);
 
     await env.DB.prepare('DELETE FROM "account" WHERE "userId" = ?').bind(id).run();
     for (const passkeyId of ["first", "second"]) {
@@ -516,6 +554,19 @@ describe("Better Auth su Workers e D1", () => {
       .bind(id)
       .all<{ id: string }>();
     expect(remaining.results.map((row) => row.id)).toEqual(["second"]);
+    // Le Impostazioni segnalano al browser le sole passkey rimaste, con il user handle salvato.
+    expect(
+      await passkeySignals(env.DB, {
+        id,
+        email: "passkey@example.invalid",
+        name: "Utente Passkey",
+      }),
+    ).toEqual({
+      userId: first.user.id,
+      credentialIds: ["second"],
+      name: "passkey@example.invalid",
+      displayName: "Utente Passkey",
+    });
     await env.DB.prepare(
       `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
        VALUES ('linked-ebay-access', 'synthetic-business-subject', 'ebay', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,

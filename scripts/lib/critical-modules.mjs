@@ -19,13 +19,13 @@ const criticalShared = new Set([
 ]);
 
 /**
- * Moduli server di Auth, filtro delle richieste, sessioni, chiavi derivate, isolamento, ordini, export e file XLSX, negozi
+ * Moduli server di Auth, filtro delle richieste, sessioni, identificativo delle passkey, chiavi derivate, isolamento, ordini, export e file XLSX, negozi
  * e loro segni, integrazioni, diritti e destinatari Telegram.
  */
 export function criticalModule(file) {
   return (
     criticalShared.has(file) ||
-    /^app\/(?:auth(?:-route)?|request-limits|sealed|domain\/(?:billing|refunds|orders|order-import|order-observation|order-acquisition|order-sync|order-export|quota|grants|cycles|sessions|sign-in-methods|registration|stores|store-marks|export|xlsx|telegram)|integrations\/(?:webhooks|stripe|telegram|ebay\/(?:environment|notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+    /^app\/(?:auth(?:-route)?|request-limits|sealed|domain\/(?:billing|refunds|orders|order-import|order-observation|order-acquisition|order-sync|order-export|quota|grants|cycles|sessions|sign-in-methods|registration|passkey-user|stores|store-marks|export|xlsx|telegram)|integrations\/(?:webhooks|stripe|telegram|ebay\/(?:environment|notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
       file,
     )
   );

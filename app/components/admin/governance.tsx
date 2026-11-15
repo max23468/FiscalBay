@@ -2,14 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router";
 
 import { StatusBadge } from "~/components/status";
-import { Field, FieldLabel } from "~/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
+import { Field, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
+import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Textarea } from "~/components/ui/textarea";
 import type { AuditOutcome } from "../../copy/admin-copy";
 import type { AbuseSignal } from "../../domain/abuse-review.server";
@@ -31,7 +25,7 @@ function AuditTarget({ entry }: { entry: AuditRow }) {
       {entry.workspace ? (
         <Link
           to={href(`spazi/${encodeURIComponent(entry.workspace.id)}`)}
-          className="text-primary underline-offset-4 hover:underline"
+          className="text-primary underline-offset-[0.25em] hover:underline"
         >
           {entry.workspace.email ?? entry.workspace.id}
         </Link>
@@ -133,7 +127,7 @@ export function AbuseView({ signals }: { signals: AbuseSignal[] }) {
                 <li key={workspace.id} className="flex flex-wrap items-center gap-2">
                   <Link
                     to={href(`spazi/${encodeURIComponent(workspace.id)}`)}
-                    className="text-primary underline-offset-4 hover:underline"
+                    className="text-primary underline-offset-[0.25em] hover:underline"
                   >
                     {workspace.email ?? workspace.id}
                   </Link>
@@ -201,21 +195,27 @@ function NoticeFields({ notice }: { notice?: ServiceNotice }) {
   }));
   return (
     <div className="grid gap-3">
-      <Field className="w-fit">
-        <FieldLabel htmlFor={`${prefix}-tono`}>{n.toneLabel}</FieldLabel>
-        <Select items={tones} name="tono" defaultValue={notice?.tone ?? "info"}>
-          <SelectTrigger id={`${prefix}-tono`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {tones.map((tone) => (
-              <SelectItem key={tone.value} value={tone.value}>
+      {/* Due sole opzioni: restano entrambe visibili. */}
+      <FieldSet className="w-fit">
+        <FieldLegend id={`${prefix}-tono`} variant="label">
+          {n.toneLabel}
+        </FieldLegend>
+        <RadioGroup
+          aria-labelledby={`${prefix}-tono`}
+          name="tono"
+          defaultValue={notice?.tone ?? "info"}
+          className="flex flex-wrap gap-x-6"
+        >
+          {tones.map((tone) => (
+            <Field key={tone.value} orientation="horizontal" className="w-auto">
+              <RadioGroupItem value={tone.value} id={`${prefix}-tono-${tone.value}`} />
+              <FieldLabel htmlFor={`${prefix}-tono-${tone.value}`} className="font-normal">
                 {tone.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
+              </FieldLabel>
+            </Field>
+          ))}
+        </RadioGroup>
+      </FieldSet>
       <div className="grid gap-3 md:grid-cols-2">
         <TextField
           label={n.titleIt}

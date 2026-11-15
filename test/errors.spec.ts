@@ -11,6 +11,9 @@ import { loader as loadAccess } from "../app/routes/sign-in";
 
 import {
   addLayoutShift,
+  firstHiddenTime,
+  inpInteraction,
+  interactionAttribution,
   interactionToNextPaint,
   layoutShiftValue,
   loadedHere,
@@ -18,6 +21,8 @@ import {
 } from "../app/page-timing";
 import { issueTimingTicket } from "../app/domain/page-timing.server";
 import { loader as pageTimingRead, action as pageTiming } from "../app/routes/page-timing";
+import { loader as cspReportRead, action as cspReport } from "../app/routes/csp-report";
+import { fakeRateLimiters } from "./fixtures/rate-limiter";
 import { invocationPoint, writePoints } from "../app/metrics.server";
 import {
   describeRequest,
@@ -288,6 +293,58 @@ describe("misure delle fasi e del browser", () => {
     expect(timingValue(120_001)).toBeUndefined();
     expect(timingValue(-1)).toBeUndefined();
     expect(timingValue(Number.NaN)).toBeUndefined();
+    // FCP e LCP contano soltanto prima che la pagina sia stata nascosta.
+    expect(
+      firstHiddenTime(
+        [
+          { name: "visible", startTime: 0 },
+          { name: "hidden", startTime: 420 },
+          { name: "visible", startTime: 900 },
+          { name: "hidden", startTime: 1500 },
+        ],
+        Infinity,
+      ),
+    ).toBe(420);
+    expect(firstHiddenTime([{ name: "visible", startTime: 0 }], 0)).toBe(Infinity);
+    // Senza le voci `visibility-state` vale il ripiego registrato dal modulo.
+    expect(firstHiddenTime(null, 0)).toBe(0);
+  });
+
+  it("divide l'INP in attesa, gestori, disegno e script dei frame lunghi", () => {
+    const interaction = {
+      startTime: 1000,
+      duration: 240,
+      processingStart: 1030,
+      processingEnd: 1150,
+    };
+    const frames = [
+      // Script prima, dentro e a cavallo della fine dell'interazione.
+      { startTime: 900, duration: 80, scripts: [{ startTime: 900, duration: 80 }] },
+      {
+        startTime: 1000,
+        duration: 260,
+        scripts: [
+          { startTime: 1030, duration: 120 },
+          { startTime: 1220, duration: 40 },
+        ],
+      },
+    ];
+    expect(interactionAttribution(interaction, frames)).toEqual({
+      inpInput: 30,
+      inpProcessing: 120,
+      inpPresentation: 90,
+      inpScript: 140,
+    });
+    // Senza Long Animation Frames lo script resta assente; la durata arrotondata non va sotto zero.
+    expect(
+      interactionAttribution({ ...interaction, duration: 144, processingEnd: 1150 }, null),
+    ).toEqual({ inpInput: 30, inpProcessing: 120, inpPresentation: 0, inpScript: undefined });
+    expect(
+      inpInteraction([
+        { duration: 90, id: "a" },
+        { duration: 200, id: "b" },
+      ])?.id,
+    ).toBe("b");
   });
 
   it("calcola INP e CLS come i Core Web Vitals", () => {
@@ -330,9 +387,15 @@ describe("misure delle fasi e del browser", () => {
         JSON.stringify({ page: "orders", ttfb: 10, server: {}, ticket, ...extra }),
       );
     expect((await timing(await body({ inp: 180, cls: 25 }))).status).toBe(204);
-    expect(written.mock.lastCall?.[0]?.doubles).toEqual([10, -1, -1, -1, -1, -1, -1, -1, 180, 25]);
+    expect(written.mock.lastCall?.[0]?.doubles).toEqual([
+      10, -1, -1, -1, -1, -1, -1, -1, 180, 25, -1, -1, -1, -1,
+    ]);
+    // Le parti dell'INP seguono le colonne già scritte.
+    const parts = { inpInput: 20, inpProcessing: 100, inpPresentation: 60, inpScript: 90 };
+    expect((await timing(await body({ inp: 180, ...parts }))).status).toBe(204);
+    expect(written.mock.lastCall?.[0]?.doubles?.slice(8)).toEqual([180, -1, 20, 100, 60, 90]);
     written.mockClear();
-    for (const invalid of [{ cls: 0.1 }, { cls: 100_001 }, { inp: -1 }])
+    for (const invalid of [{ cls: 0.1 }, { cls: 100_001 }, { inp: -1 }, { inpScript: -1 }])
       expect((await timing(await body(invalid))).status).toBe(400);
     expect(written).not.toHaveBeenCalled();
   });
@@ -356,7 +419,7 @@ describe("misure delle fasi e del browser", () => {
     expect(written).toHaveBeenCalledExactlyOnceWith({
       indexes: ["page:browser"],
       blobs: ["page", "browser", "orders", "", "ok", env.VERSION_METADATA.id],
-      doubles: [120, 300, -1, 650, 12, 8, -1, -1, -1, -1],
+      doubles: [120, 300, -1, 650, 12, 8, -1, -1, -1, -1, -1, -1, -1, -1],
     });
     written.mockClear();
     // Una pagina pronta oltre il limite manda il report senza `ready`: la misura resta assente.
@@ -367,7 +430,9 @@ describe("misure delle fasi e del browser", () => {
     };
     expect((await timing(JSON.stringify(late))).status).toBe(204);
     expect(written).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ doubles: [120, 300, -1, -1, 12, 8, -1, -1, -1, -1] }),
+      expect.objectContaining({
+        doubles: [120, 300, -1, -1, 12, 8, -1, -1, -1, -1, -1, -1, -1, -1],
+      }),
     );
     written.mockClear();
     for (const body of [
@@ -420,6 +485,55 @@ describe("misure delle fasi e del browser", () => {
     expect(log).not.toHaveBeenCalled();
     log.mockRestore();
     written.mockRestore();
+  });
+
+  it("registra le segnalazioni CSP dell'origine, con corpo e frequenza limitati", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const report = (body: string, headers: Record<string, string> = {}) =>
+      routeResponse(cspReport, "/api/v1/csp-report", {
+        body,
+        origin: null,
+        headers: { "content-type": "application/reports+json", ...headers },
+      });
+    const violation = {
+      type: "csp-violation",
+      body: {
+        documentURL: "http://localhost:5173/app/ordini/ord-1",
+        effectiveDirective: "script-src-elem",
+        blockedURL: "inline",
+        disposition: "enforce",
+      },
+    };
+    expect((await cspReportRead()).status).toBe(405);
+    expect((await report(JSON.stringify([violation]))).status).toBe(204);
+    expect(info.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      {
+        event: "csp_violation",
+        directive: "script-src-elem",
+        disposition: "enforce",
+        blocked: "inline",
+        page: "/app/ordini",
+      },
+    ]);
+    expect((await report("non è JSON")).status).toBe(400);
+    expect((await report(JSON.stringify([violation, "x".repeat(17_000)]))).status).toBe(413);
+    expect(info).toHaveBeenCalledTimes(1);
+    // Sul dominio HTTPS il binding filtra per IP prima di leggere il corpo.
+    const previous = {
+      APP_ORIGIN: env.APP_ORIGIN,
+      REQUEST_LIMIT_REPORTS: env.REQUEST_LIMIT_REPORTS,
+    };
+    const limiter = fakeRateLimiters().REQUEST_LIMIT_REPORTS;
+    Object.assign(env, { APP_ORIGIN: "https://test.fiscalbay.it", REQUEST_LIMIT_REPORTS: limiter });
+    try {
+      const statuses = [];
+      for (let index = 0; index < 11; index++)
+        statuses.push((await report("[]", { "cf-connecting-ip": "192.0.2.7" })).status);
+      expect(statuses).toEqual([...Array(10).fill(204), 429]);
+      expect(limiter.keys[0]).toBe("csp-report|192.0.2.7");
+    } finally {
+      Object.assign(env, previous);
+    }
   });
 });
 

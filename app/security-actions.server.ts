@@ -13,7 +13,7 @@ import {
   securityReturnPath,
 } from "./app-links";
 import { actionFailure } from "./area-actions.server";
-import { forwardToAuth, redirectWithCookies } from "./auth-route.server";
+import { forwardToAuth, redirectWithCookies, signedOutRedirect } from "./auth-route.server";
 import { deletionReauthenticated } from "./domain/account-deletion.server";
 import { pendingEmailChange } from "./domain/email-change.server";
 import { saveDeletionFeedback } from "./domain/exit-feedback.server";
@@ -103,7 +103,7 @@ export async function securityAction(
 
   if (intent === "riautentica") {
     const target = securityReturnPath(language, field("returnTo")) ?? security;
-    return redirectWithCookies(
+    return signedOutRedirect(
       `${localizedPath(language, accessPath)}?${new URLSearchParams({ returnTo: target })}`,
       await forwardToAuth(env, request, "/sign-out"),
     );
@@ -156,7 +156,7 @@ export async function securityAction(
     const id = field("id");
     if (!id || id.length > 128) return notice("errore");
     if (id === session.session.id) {
-      return redirectWithCookies(
+      return signedOutRedirect(
         localizedPath(language),
         await forwardToAuth(env, request, "/sign-out"),
       );

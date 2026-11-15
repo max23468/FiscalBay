@@ -161,7 +161,7 @@ const stepIcons = [
 /** Id della sezione dei tre passaggi, meta di «Come funziona». */
 const stepsId = "come-funziona";
 
-const textLink = "font-medium text-primary underline-offset-4 hover:underline";
+const textLink = "font-medium text-primary underline-offset-[0.25em] hover:underline";
 
 export default function Site({ loaderData }: Route.ComponentProps) {
   const { language, signedIn, copy: t } = loaderData;

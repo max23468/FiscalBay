@@ -116,10 +116,16 @@ it.each([
   },
 );
 
-it("il Worker risponde no-store a ogni pagina pubblica e in Production noindex ai soli legali", async () => {
+it("il Worker fa riconvalidare le pagine pubbliche, no-store la home, e in Production noindex ai soli legali", async () => {
   // Il router esegue il loader reale della pagina con gli header che la route dichiara, come
   // React Router: una route che chiedesse una cache pubblica la vedrebbe conservata.
-  const pages: Record<string, { loader: (args: never) => unknown; headers?: () => HeadersInit }> = {
+  const pages: Record<
+    string,
+    {
+      loader: (args: never) => unknown;
+      headers?: (args: never) => HeadersInit;
+    }
+  > = {
     "/": site,
     "/funzionalita": features,
     "/prezzi": pricing,
@@ -132,8 +138,15 @@ it("il Worker risponde no-store a ogni pagina pubblica e in Production noindex a
   router.handle.mockImplementation(async (request: Request) => {
     const path = canonicalPath(new URL(request.url).pathname);
     const page = pages[path]!;
-    const data = await page.loader({ request, params: {}, context: {} } as never);
-    return Response.json(data, { headers: page.headers?.() ?? {} });
+    const result = await page.loader({ request, params: {}, context: {} } as never);
+    // Un loader con `data()` porta i propri header, che l'export `headers` riceve.
+    const wrapped = (result as { type?: string }).type === "DataWithResponseInit";
+    const { data, init } = (wrapped ? result : { data: result }) as {
+      data: unknown;
+      init?: ResponseInit;
+    };
+    const loaderHeaders = new Headers(init?.headers);
+    return Response.json(data, { headers: page.headers?.({ loaderHeaders } as never) ?? {} });
   });
   try {
     for (const prefix of ["", "/en"])
@@ -144,7 +157,9 @@ it("il Worker risponde no-store a ogni pagina pubblica e in Production noindex a
           APP_ORIGIN: "https://fiscalbay.it",
         } as Env);
         expect(response.status, url).toBe(200);
-        expect(response.headers.get("cache-control"), url).toBe("no-store");
+        expect(response.headers.get("cache-control"), url).toBe(
+          path === "/" ? "no-store" : "private, no-cache",
+        );
         expect(response.headers.get("x-robots-tag"), url).toBe(
           path === "/termini" || path === "/privacy" ? "noindex, nofollow" : null,
         );
@@ -188,11 +203,14 @@ it("porta i vecchi indirizzi inglesi a quelli nuovi con un solo redirect permane
   expect(settingsSectionParam("nuova")).toBe("nuova");
 });
 
-it("serve Home e Prezzi a chi non ha cookie dalla copia di un minuto, sempre no-store al browser", async () => {
+it("serve Home e Prezzi a chi non ha cookie dalla copia di un minuto, con la regola della route al browser", async () => {
   let renders = 0;
-  router.handle.mockImplementation(async () => {
+  router.handle.mockImplementation(async (request: Request) => {
     renders += 1;
-    return new Response(`pagina ${renders}`, { headers: { "cache-control": "no-store" } });
+    const home = canonicalPath(new URL(request.url).pathname) === "/";
+    return new Response(`pagina ${renders}`, {
+      headers: { "cache-control": home ? "no-store" : "private, no-cache" },
+    });
   });
   const visit = (path: string, headers: Record<string, string> = {}) =>
     workerFetch(new Request(`https://fiscalbay.it${path}`, { headers }), {
@@ -210,14 +228,20 @@ it("serve Home e Prezzi a chi non ha cookie dalla copia di un minuto, sempre no-
     expect(await first.text()).toBe("pagina 1");
     const again = await fixed("/en/pricing");
     expect(await again.text()).toBe("pagina 1");
-    expect(again.headers.get("cache-control")).toBe("no-store");
+    // La copia condivisa non passa al browser la propria durata né l'header che la conserva.
+    expect(again.headers.get("cache-control")).toBe("private, no-cache");
+    expect(again.headers.has("x-fiscalbay-browser-cache")).toBe(false);
+    await fixed("/");
+    const home = await fixed("/");
+    expect(await home.text()).toBe("pagina 2");
+    expect(home.headers.get("cache-control")).toBe("no-store");
     // Una sessione, un parametro o un'altra pagina leggono sempre di nuovo.
-    expect(await (await fixed("/en/pricing", { cookie: "a=1" })).text()).toBe("pagina 2");
-    expect(await (await fixed("/en/pricing?visita=1")).text()).toBe("pagina 3");
-    expect(await (await fixed("/funzionalita")).text()).toBe("pagina 4");
+    expect(await (await fixed("/en/pricing", { cookie: "a=1" })).text()).toBe("pagina 3");
+    expect(await (await fixed("/en/pricing?visita=1")).text()).toBe("pagina 4");
     expect(await (await fixed("/funzionalita")).text()).toBe("pagina 5");
+    expect(await (await fixed("/funzionalita")).text()).toBe("pagina 6");
     // Una nuova versione del Worker non riusa la copia della precedente.
-    expect(await (await visit("/en/pricing")).text()).toBe("pagina 6");
+    expect(await (await visit("/en/pricing")).text()).toBe("pagina 7");
   } finally {
     router.handle.mockReset();
   }

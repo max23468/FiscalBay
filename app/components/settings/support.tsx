@@ -56,7 +56,7 @@ export function SupportSection({
                 {item.q}
                 <ChevronDown
                   aria-hidden="true"
-                  className="size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) group-open:rotate-180"
+                  className="size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) group-open:rotate-180 motion-reduce:transition-none"
                 />
               </summary>
               <p className="pr-7 pb-2 leading-relaxed text-muted-foreground">{item.a}</p>

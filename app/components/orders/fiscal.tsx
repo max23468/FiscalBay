@@ -146,7 +146,8 @@ function FiscalSlot({ tone, children }: { tone: "neutral" | "info" | "danger"; c
   return (
     <span
       className={cn(
-        "inline-flex min-h-10 w-56 max-w-full min-w-fit items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1 text-sm whitespace-nowrap",
+        // L'etichetta va a capo invece di allargare la scheda.
+        "inline-flex min-h-10 w-56 max-w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1 text-sm text-pretty",
         tone === "danger" ? "text-danger" : "text-muted-foreground",
       )}
     >

@@ -357,11 +357,11 @@ export const moduleAreas = [
     ["auth", "settings"],
   ],
   [
-    /^app\/(?:components\/(?:access|admin)\/|account\/|components\/turnstile\.tsx$|copy\/admin-copy\.ts$|(?:admin-console|auth-route|security-actions|password|turnstile|metrics)\.server\.ts$|turnstile\.ts$|metrics-queries\.ts$|domain\/(?:admin-[a-z]+|owner-[a-z]+|admission(?:-state)?|auth-attempts|abuse-review|technical-metrics|product-metrics|maintenance)\.server\.ts$)/u,
+    /^app\/(?:components\/(?:access|admin)\/|account\/|components\/turnstile\.tsx$|copy\/admin-copy\.ts$|(?:admin-console|auth-route|security-actions|password|turnstile|metrics)\.server\.ts$|turnstile\.ts$|metrics-queries\.ts$|domain\/(?:admin-[a-z]+|owner-[a-z]+|admission(?:-state)?|auth-attempts|abuse-review|technical-metrics|product-metrics|maintenance|passkey-user)\.server\.ts$)/u,
     ["auth"],
   ],
   [
-    /^app\/(?:copy\/(?:site-pages|legal-documents|guides)\.server\.ts|components\/(?:site-layout|site-footer|faq-list|product-shot|standalone-page)\.tsx|components\/site-column\.ts|site\.server\.ts|page-cache\.server\.ts|site-meta\.ts|contact\.ts)$/u,
+    /^app\/(?:copy\/(?:site-pages|legal-documents|guides)\.server\.ts|components\/(?:site-layout|site-footer|faq-list|product-shot|standalone-page)\.tsx|components\/site-column\.ts|site\.server\.ts|page-cache\.server\.ts|site-meta\.ts|speculation-rules\.ts|contact\.ts)$/u,
     ["public"],
   ],
   [/^app\/components\/language-switch\.tsx$/u, ["auth", "public"]],
@@ -370,7 +370,7 @@ export const moduleAreas = [
     ["auth", "public"],
   ],
   [
-    /^app\/(?:domain\/(?:scheduled-work|sql|page-timing|webhook-receipts)\.server\.ts|domain\/work-timing\.ts|integrations\/http\.server\.ts|log-records\.ts|observability\.server\.ts|page-timing(?:\.server)?\.ts|sequence\.ts|service-activity\.server\.ts|settle\.server\.ts)$/u,
+    /^app\/(?:domain\/(?:scheduled-work|sql|page-timing|webhook-receipts)\.server\.ts|domain\/work-timing\.ts|integrations\/http\.server\.ts|log-records\.ts|observability\.server\.ts|csp-report\.server\.ts|page-timing(?:\.server)?\.ts|sequence\.ts|service-activity\.server\.ts|settle\.server\.ts)$/u,
     [],
   ],
 ];

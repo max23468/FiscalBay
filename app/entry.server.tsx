@@ -2,7 +2,7 @@ import type { EntryContext, RouterContextProvider } from "react-router";
 import { isRouteErrorResponse, ServerRouter } from "react-router";
 import { isbot } from "isbot";
 import { renderToReadableStream } from "react-dom/server";
-import { contentSecurityPolicy, scriptNonce } from "./content-security.server";
+import { documentSecurityHeaders, scriptNonce } from "./content-security.server";
 import { logFailure } from "./errors";
 
 export const streamTimeout = 5_000;
@@ -48,7 +48,8 @@ export default async function handleRequest(
   }
 
   responseHeaders.set("Content-Type", "text/html");
-  responseHeaders.set("Content-Security-Policy", contentSecurityPolicy(nonce));
+  for (const [name, value] of Object.entries(documentSecurityHeaders(nonce)))
+    responseHeaders.set(name, value);
   return new Response(body, {
     headers: responseHeaders,
     status: responseStatusCode,

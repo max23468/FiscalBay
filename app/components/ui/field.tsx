@@ -120,7 +120,7 @@ function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
       className={cn(
         "text-left text-sm leading-normal font-normal text-muted-foreground group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5",
         "last:mt-0 nth-last-2:-mt-1",
-        "[&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary",
+        "[&>a]:underline [&>a]:underline-offset-[0.25em] [&>a:hover]:text-primary",
         className,
       )}
       {...props}
@@ -194,9 +194,10 @@ function FieldError({
     return null;
   }
 
+  // Nessun annuncio automatico: l'errore di un campo si legge con il focus sul campo, che lo
+  // cita in aria-describedby. Un esito asincrono, lontano dal focus, passa role="alert".
   return (
     <div
-      role="alert"
       data-slot="field-error"
       className={cn("text-sm font-normal text-destructive", className)}
       {...props}

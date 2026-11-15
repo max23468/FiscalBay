@@ -15,6 +15,7 @@ import {
   withoutListPosition,
 } from "../app/orders/order-list";
 import { orderView } from "../app/domain/order-view.server";
+import { orderPeriodStart } from "../app/view-models";
 import { now } from "./fixtures/database-fixtures";
 import { addressRows } from "../app/format";
 import {
@@ -669,6 +670,14 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(criteria("periodo=6m", "premium").since).toBe("2026-03-13T20:00:00.000Z");
     expect(criteria("periodo=12m", "premium").since).toBe("2025-09-13T20:00:00.000Z");
     expect(criteria("periodo=12", "premium").since).toBeUndefined();
+    // A fine mese il giorno mancante diventa l'ultimo del mese, anche negli anni bisestili.
+    const monthEnd = (period: "6m" | "12m", iso: string) =>
+      orderPeriodStart(period, new Date(iso)).toISOString();
+    expect(monthEnd("6m", "2026-08-31T10:00:00.000Z")).toBe("2026-02-28T10:00:00.000Z");
+    expect(monthEnd("6m", "2028-08-31T10:00:00.000Z")).toBe("2028-02-29T10:00:00.000Z");
+    expect(monthEnd("12m", "2028-02-29T10:00:00.000Z")).toBe("2027-02-28T10:00:00.000Z");
+    expect(monthEnd("6m", "2026-12-31T23:30:00.000Z")).toBe("2026-06-30T23:30:00.000Z");
+    expect(monthEnd("6m", "2026-03-15T08:00:00.000Z")).toBe("2025-09-15T08:00:00.000Z");
     expect(criteria("periodo=1&pagamento=delivered&spedizione=x&fiscale=x")).toMatchObject({
       since: undefined,
       payment: undefined,

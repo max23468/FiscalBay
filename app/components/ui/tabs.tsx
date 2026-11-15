@@ -31,7 +31,8 @@ const tabsListVariants = cva(
 
 /**
  * L'indicatore della scheda attiva si sposta con le misure esposte da Base UI:
- * pillola nella variante standard, barra blu nella variante a linea.
+ * pillola nella variante standard, barra blu nella variante a linea. Con «riduci movimento»
+ * l'indicatore salta alla scheda scelta.
  */
 function TabsList({
   className,
@@ -50,7 +51,7 @@ function TabsList({
       <TabsPrimitive.Indicator
         data-slot="tabs-indicator"
         className={cn(
-          "absolute top-0 left-0 -z-10 translate-x-(--active-tab-left) transition-[translate,width,height] duration-(--duration-fast) ease-(--ease-smooth-out)",
+          "absolute top-0 left-0 -z-10 translate-x-(--active-tab-left) transition-[translate,width,height] duration-(--duration-fast) ease-(--ease-smooth-out) motion-reduce:transition-none",
           variant === "line"
             ? "h-0.5 w-(--active-tab-width) translate-y-[calc(var(--active-tab-top)+var(--active-tab-height)-1px)] bg-primary"
             : "h-(--active-tab-height) w-(--active-tab-width) translate-y-(--active-tab-top) rounded-md bg-card shadow-xs shadow-brand-navy/10 dark:bg-border",

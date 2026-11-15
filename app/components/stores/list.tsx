@@ -29,7 +29,7 @@ export function StoreTable({ stores, premium, now }: ListProps) {
   const { t, language } = useCopy();
   const storesHref = appHref(links, "negozi");
   return (
-    <div className="hidden overflow-hidden rounded-xl border bg-card lg:block">
+    <div className="hidden overflow-hidden rounded-xl border bg-card [--table-surface:var(--card)] lg:block">
       <Table aria-label={t.stores.list}>
         <TableHeader>
           <TableRow>
@@ -60,7 +60,7 @@ export function StoreTable({ stores, premium, now }: ListProps) {
                   >
                     <StoreTile store={store} />
                     <span className="grid min-w-0 gap-0.5">
-                      <span className="font-medium text-pretty wrap-anywhere hover:underline hover:underline-offset-4">
+                      <span className="font-medium text-pretty wrap-anywhere hover:underline hover:underline-offset-[0.25em]">
                         {store.name}
                       </span>
                       <span className="text-xs text-muted-foreground">

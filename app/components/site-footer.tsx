@@ -10,8 +10,8 @@ import { localizedPath } from "../i18n";
 /**
  * Footer unico delle pagine pubbliche, accesso, Termini e Privacy compresi (D202), con
  * l'indirizzo di assistenza. L'area autenticata non ne ha uno. `className` adatta la larghezza
- * alla colonna che lo contiene. Con `path`, la pagina senza prefisso di lingua, sotto i 360 px
- * porta anche la scelta della lingua, che la barra lì non ha.
+ * alla colonna che lo contiene. Con `path`, la pagina senza prefisso di lingua, sotto i 22,5rem
+ * (360 px con il testo predefinito) porta anche la scelta della lingua, che la barra lì non ha.
  */
 export function SiteFooter({ className, path }: { className?: string; path?: string }) {
   const { language } = useCopy();
@@ -47,7 +47,7 @@ export function SiteFooter({ className, path }: { className?: string; path?: str
           </a>
         </nav>
         {path === undefined ? null : (
-          <div className="min-[360px]:hidden">
+          <div className="min-[22.5rem]:hidden">
             <LanguageSwitch
               label={t.access.language}
               current={language}

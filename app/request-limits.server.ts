@@ -4,6 +4,7 @@ const limiters = {
   attempts: "REQUEST_LIMIT_ATTEMPTS",
   emails: "REQUEST_LIMIT_EMAILS",
   work: "REQUEST_LIMIT_WORK",
+  reports: "REQUEST_LIMIT_REPORTS",
 } as const satisfies Record<RequestLimit, keyof Env>;
 
 /** Un indirizzo IPv6 conta per la sua rete /64, che un singolo client controlla per intero. */

@@ -6,7 +6,7 @@ import { languageNames, languages, type Language } from "../i18n";
 /**
  * Scelta della lingua nel sito e nelle pagine di accesso: ogni lingua
  * con il proprio nome. Il cambio ricarica la pagina. `compact`, dove lo spazio è
- * poco, mostra soltanto il codice dell'altra lingua, con il nome come nome accessibile: un
+ * poco, mostra soltanto il codice dell'altra lingua, seguito dal nome in quello accessibile: un
  * collegamento alto quanto un bottone `sm`, con l'area di tocco estesa come nei bottoni.
  */
 export function LanguageSwitch({
@@ -33,7 +33,8 @@ export function LanguageSwitch({
           preventScrollReset
           lang={code}
           aria-current={current === code ? "page" : undefined}
-          aria-label={compact ? languageNames[code] : undefined}
+          // Il nome accessibile inizia con il codice visibile, così il comando vocale lo trova.
+          aria-label={compact ? `${code.toUpperCase()} ${languageNames[code]}` : undefined}
           className={cn(
             "inline-flex items-center rounded-md text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-secondary aria-[current=page]:font-medium aria-[current=page]:text-foreground",
             compact

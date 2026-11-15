@@ -30,6 +30,8 @@ function messageFor(control: Control, copy: ValidationCopy): string {
 export function useFieldErrors(copy: ValidationCopy) {
   const id = useId();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Dopo il primo invio ogni campo è stato validato: lo stato vale «true» o «false».
+  const [validated, setValidated] = useState(false);
   const ready = useHydrated();
   const errorId = (name: string) => `${id}-${name}-error`;
 
@@ -59,6 +61,7 @@ export function useFieldErrors(copy: ValidationCopy) {
           : control;
       }
       setErrors(found);
+      setValidated(true);
       if (!first) return true;
       event.preventDefault();
       first.focus();
@@ -67,13 +70,17 @@ export function useFieldErrors(copy: ValidationCopy) {
     /** Errore deciso dopo i vincoli HTML, per esempio da un controllo remoto: focus sul campo. */
     reject(control: Control, message: string) {
       setErrors((current) => ({ ...current, [control.name]: message }));
+      setValidated(true);
       control.focus();
     },
-    /** Attributi del controllo: stato non valido e messaggio collegato. */
+    /**
+     * Attributi del controllo: stato di validità, esplicito dopo la prima validazione, e
+     * messaggio collegato. Il focus sul campo annuncia l'errore tramite la descrizione.
+     */
     control(name: string, describedBy?: string) {
       const invalid = name in errors;
       return {
-        "aria-invalid": invalid || undefined,
+        "aria-invalid": invalid ? true : validated ? false : undefined,
         "aria-describedby":
           [describedBy, invalid ? errorId(name) : undefined].filter(Boolean).join(" ") || undefined,
       };

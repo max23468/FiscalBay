@@ -661,6 +661,8 @@ describe("registrazione e verifica del contatto", () => {
       const exit = (await outcome(signIn, { fields: { intent: "esci" }, cookie })) as Response;
       expect([exit.status, exit.headers.get("location")]).toEqual([303, "/"]);
       expect(exit.headers.get("set-cookie")).toContain("Max-Age=0");
+      // Il browser svuota anche la memoria del sito, lasciando i cookie ad Auth.
+      expect(exit.headers.get("clear-site-data")).toBe('"storage"');
       expect(new Set(log.mock.calls.map(([line]) => JSON.parse(String(line)).code))).toEqual(
         new Set(["UPSTREAM_UNAVAILABLE"]),
       );

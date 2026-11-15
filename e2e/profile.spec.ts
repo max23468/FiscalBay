@@ -59,7 +59,7 @@ test.describe("area reale", () => {
         );
         await save.click();
         await expect(
-          section.getByRole("button", { name: it ? "Salvataggio…" : "Saving…", exact: true }),
+          section.getByRole("button", { name: it ? /^Salvataggio…/u : /^Saving…/u }),
         ).toBeDisabled();
         await expect(first).toBeDisabled();
         await orders.click();

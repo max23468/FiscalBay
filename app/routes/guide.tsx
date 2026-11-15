@@ -19,7 +19,7 @@ import { guides, type ComparisonCell, type Guide as GuideCopy } from "../copy/gu
 import { sitePages } from "../copy/site-pages.server";
 import { formatDate } from "../format";
 import { canonicalPath, localizedPath } from "../i18n";
-import { publicPage } from "../site.server";
+import { publicPage, publicPageHeaders } from "../site.server";
 import { ogImage, siteMeta } from "../site-meta";
 import type { Route } from "./+types/guide";
 
@@ -62,6 +62,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     },
   };
 }
+
+export const headers = publicPageHeaders;
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   if (!loaderData) return [];
@@ -294,7 +296,10 @@ export default function Guide({ loaderData }: Route.ComponentProps) {
             <section key={section.title} className="grid gap-3">
               <h2 className="text-xl font-semibold text-balance">{section.title}</h2>
               {section.body.map((paragraph) => (
-                <p key={paragraph} className="leading-relaxed text-pretty text-muted-foreground">
+                <p
+                  key={paragraph}
+                  className="max-w-[65ch] leading-relaxed text-pretty text-muted-foreground"
+                >
                   {paragraph}
                 </p>
               ))}
@@ -341,7 +346,7 @@ export default function Guide({ loaderData }: Route.ComponentProps) {
               <figcaption className="text-sm">
                 <a
                   href={t.featureHref}
-                  className="font-medium text-primary underline-offset-4 hover:underline"
+                  className="font-medium text-primary underline-offset-[0.25em] hover:underline"
                 >
                   {t.solution.caption}
                 </a>
@@ -350,7 +355,7 @@ export default function Guide({ loaderData }: Route.ComponentProps) {
             {t.related ? (
               <a
                 href={t.related.href}
-                className="flex w-fit items-center gap-1.5 font-medium text-primary underline-offset-4 hover:underline"
+                className="flex w-fit items-center gap-1.5 font-medium text-primary underline-offset-[0.25em] hover:underline"
               >
                 {t.related.label}
                 <ArrowRight aria-hidden className="size-4 shrink-0" />
@@ -383,7 +388,7 @@ export default function Guide({ loaderData }: Route.ComponentProps) {
                       href={source.href}
                       target="_blank"
                       rel="noopener"
-                      className="inline-flex items-start gap-1.5 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                      className="inline-flex items-start gap-1.5 text-muted-foreground underline-offset-[0.25em] hover:text-foreground hover:underline"
                     >
                       {source.label}
                       <ExternalLink aria-hidden className="mt-0.5 size-3.5 shrink-0" />
@@ -397,7 +402,7 @@ export default function Guide({ loaderData }: Route.ComponentProps) {
         <nav aria-label={t.guidesTitle} className="lg:sticky lg:top-8 lg:self-start">
           <a
             href={t.guidesHref}
-            className="font-semibold underline-offset-4 hover:text-primary hover:underline"
+            className="font-semibold underline-offset-[0.25em] hover:text-primary hover:underline"
           >
             {t.back}
           </a>

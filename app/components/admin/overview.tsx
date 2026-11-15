@@ -67,7 +67,7 @@ function AnomalyAction({ anomaly }: { anomaly: Anomaly }) {
     return (
       <Link
         to={href("quote")}
-        className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+        className="text-sm font-medium text-primary underline-offset-[0.25em] hover:underline"
       >
         {label}
       </Link>
@@ -76,7 +76,7 @@ function AnomalyAction({ anomaly }: { anomaly: Anomaly }) {
     return (
       <Link
         to={href("interruttori")}
-        className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+        className="text-sm font-medium text-primary underline-offset-[0.25em] hover:underline"
       >
         {label}
       </Link>
@@ -106,7 +106,7 @@ function AnomalyList({ anomalies }: { anomalies: Anomaly[] }) {
                   <li key={subject.id}>
                     <Link
                       to={href(subject.href)}
-                      className="text-primary underline-offset-4 hover:underline"
+                      className="text-primary underline-offset-[0.25em] hover:underline"
                     >
                       {subjectName(subject.label, anomaly.kind, t)}
                     </Link>
@@ -209,7 +209,7 @@ export function Overview({ data }: { data: OverviewData }) {
         <AuditList entries={data.recent} />
         <Link
           to={href("registro")}
-          className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+          className="w-fit text-sm font-medium text-primary underline-offset-[0.25em] hover:underline"
         >
           {s.openAudit}
         </Link>

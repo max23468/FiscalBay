@@ -20,6 +20,7 @@ import {
   authLimitWait,
   forwardToAuth,
   redirectWithCookies,
+  signedOutRedirect,
   signInChallengeWait,
   signInFailureKey,
   signInFailures,
@@ -235,7 +236,7 @@ export async function accessAction(request: Request) {
 
   // Dopo l'uscita la radice torna a essere il sito pubblico, senza la scelta di visita.
   if (intent === "esci") {
-    const response = redirectWithCookies(localizedPath(language), await forward("/sign-out"));
+    const response = signedOutRedirect(localizedPath(language), await forward("/sign-out"));
     response.headers.append("set-cookie", `${visitCookie}=; Path=/; Max-Age=0`);
     return response;
   }
