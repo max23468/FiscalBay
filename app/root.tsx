@@ -69,6 +69,9 @@ export function loader({ request }: Route.LoaderArgs) {
     webAnalyticsToken: env.WEB_ANALYTICS_TOKEN ?? null,
     // Provenienza del visitatore per i link del sito e la registrazione (D304), mai salvata qui.
     arrival: arrival ? formatSource(arrival) : null,
+    // I browser precaricano soltanto in HTTPS: su HTTP WebKit rifiuta le regole e può perdere
+    // il clic sul collegamento che stava precaricando, quindi le regole non partono.
+    speculation: new URL(request.url).protocol === "https:",
   };
 }
 

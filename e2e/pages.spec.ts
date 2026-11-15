@@ -195,13 +195,6 @@ for (const scenario of scenarios) {
             message.text().includes("require-trusted-types-for")
           )
             return;
-          // WebKit precarica soltanto in HTTPS: sul candidato locale in HTTP rifiuta le regole di
-          // speculazione e lo scrive in console, senza effetto sulla navigazione.
-          if (
-            new URL(baseURL!).protocol === "http:" &&
-            message.text() === "Prefetch request denied: URL must be secure (HTTPS)"
-          )
-            return;
           if (message.text().startsWith("Failed to load resource"))
             resourceErrors.push({ text: message.text(), url });
           else errors.push(message.text());
