@@ -6,6 +6,21 @@ import { testAccount } from "./test-account";
 test.describe("area reale", () => {
   localOnly();
 
+  test("l'IP sintetico della fixture non raggiunge i servizi esterni", async ({
+    page,
+    context,
+  }) => {
+    let headers: Record<string, string> | undefined;
+    const external = "https://servizio.example.invalid/";
+    await context.route(external, async (route) => {
+      headers = await route.request().allHeaders();
+      return route.fulfill({ contentType: "text/html", body: "<p>Servizio esterno sintetico</p>" });
+    });
+    await page.goto(external);
+    expect(headers).toBeDefined();
+    expect(headers).not.toHaveProperty("cf-connecting-ip");
+  });
+
   // Accessi e passkey stanno nella categoria Account delle Impostazioni.
   test.describe("impostazioni", () => {
     for (const language of ["it", "en"] as const) {
@@ -15,15 +30,8 @@ test.describe("area reale", () => {
         page,
         context,
         baseURL,
-      }, testInfo) => {
-        // Sessione sintetica dell'account: un accesso diretto con password dopo gli errori voluti
-        // di questa e altre prove dallo stesso IP chiederebbe Turnstile e risponderebbe 429.
-        await useLocalAccount(
-          context,
-          "member",
-          baseURL!,
-          `return-account-${language}-${testInfo.project.name}`,
-        );
+        localIdentity: identity,
+      }) => {
         const target = `${pagePath(prefix, "/app/impostazioni/account")}#security-email`;
         const response = await page.request.post(pagePath(prefix, "/app/impostazioni/account"), {
           headers: { origin: baseURL! },
@@ -49,7 +57,7 @@ test.describe("area reale", () => {
         await expect(
           form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }),
         ).not.toHaveAttribute("aria-describedby");
-        await form.getByRole("textbox", { name: "Email", exact: true }).fill(testAccount.email);
+        await form.getByRole("textbox", { name: "Email", exact: true }).fill(identity.email);
         await form.getByRole("textbox", { name: "Password", exact: true }).fill("password-errata");
         await form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
         // L'invio parte dopo il controllo della password: l'esito arriva con l'avviso d'errore.
@@ -67,8 +75,7 @@ test.describe("area reale", () => {
         await expect(page).toHaveURL(
           new RegExp(`${pagePath(prefix, "/app/impostazioni/account")}#security-email$`),
         );
-        const token = `stale-security-${language}-${testInfo.project.name}`;
-        await useLocalAccount(context, "member", baseURL!, token);
+        await useLocalAccount(context, "member", baseURL!, identity.staleToken);
         const signInAgain = page.getByRole("button", {
           name: it ? "Esci e accedi di nuovo" : "Sign out and sign in again",
           exact: true,

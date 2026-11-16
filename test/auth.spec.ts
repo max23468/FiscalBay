@@ -50,6 +50,87 @@ import { ebayStoreGrantScopes, ebayStoreScopes } from "../app/integrations/ebay/
 
 import { routeData, routeResponse, pagePath } from "./fixtures/route-fixtures";
 
+it("mantiene i metodi di accesso e i flag di sicurezza previsti dal contratto Auth", () => {
+  const options = createAuthOptions(env);
+  const plugins = options.plugins ?? [];
+  expect(plugins.map((plugin) => plugin.id)).toEqual([
+    "email-otp",
+    "have-i-been-pwned",
+    "last-login-method",
+    "passkey",
+    "generic-oauth",
+  ]);
+  // Il router applica già le soglie: un secondo contatore di Better Auth le cambierebbe.
+  expect(options.rateLimit).toEqual({ enabled: false });
+  expect(options.session?.cookieCache?.enabled).toBe(false);
+  expect(options.session?.additionalFields?.passkeyVerified?.input).toBe(false);
+  expect(plugins.find((plugin) => plugin.id === "email-otp")?.options).toMatchObject({
+    disableSignUp: true,
+  });
+  expect(plugins.find((plugin) => plugin.id === "generic-oauth")?.options).toMatchObject({
+    config: [
+      { providerId: "ebay", name: "eBay", authentication: "basic", allowIdpInitiated: false },
+    ],
+  });
+});
+
+it("l'approvazione limita la registrazione e lascia leggibili le sessioni anche senza corpo", async () => {
+  const auth = createAuth({
+    ...env,
+    REGISTRATION_MODE: "approval",
+    REGISTRATION_ALLOWED_EMAILS: "[]",
+  });
+  await expect(auth.api.getSession({ headers: new Headers() })).resolves.toBeNull();
+  // La validazione del corpo resta a Better Auth anche per le chiamate server dirette.
+  await expect(auth.api.signUpEmail({ body: undefined as never })).rejects.toMatchObject({
+    statusCode: 400,
+  });
+});
+
+it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
+  const options = createAuthOptions(env);
+  expect(options.appName).toBe("FiscalBay");
+  const migration = await getMigrations(options);
+  expect(migration.toBeCreated).toEqual([]);
+  expect(migration.toBeAdded).toEqual([]);
+  expect(migration.toBeAddedIndexes).toEqual([]);
+  expect(migration.schemaProblems).toEqual([]);
+  expect(migration.unsafeChanges).toEqual([]);
+  // Il confronto di Better Auth non rileva un campo aggiuntivo diventato facoltativo quando
+  // la colonna esiste già: anche i flag di sicurezza devono rispettare i vincoli persistenti.
+  for (const [table, name, field] of [
+    ["user", "admin", options.user?.additionalFields?.admin],
+    ["session", "passkeyVerified", options.session?.additionalFields?.passkeyVerified],
+  ] as const) {
+    const column = await env.DB.prepare(
+      'SELECT "notnull" AS required FROM pragma_table_info(?) WHERE name = ?',
+    )
+      .bind(table, name)
+      .first<{ required: number }>();
+    expect(column, `${table}.${name}`).toEqual({ required: 1 });
+    expect(field?.required, `${table}.${name}`).toBe(Boolean(column!.required));
+  }
+});
+
+it("una sessione creata senza richiesta resta priva di verifica passkey", async () => {
+  const auth = createAuth(env);
+  const context = await auth.$context;
+  const id = `sessione-interna-${crypto.randomUUID()}`;
+  await env.DB.prepare(
+    `INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+     VALUES (?1, 'Sessione interna', ?2, 1, ?3, ?3)`,
+  )
+    .bind(id, `${id}@example.invalid`, new Date().toISOString())
+    .run();
+  const session = await context.internalAdapter.createSession(id);
+  expect(session).toMatchObject({ userId: id, passkeyVerified: false });
+  expect(
+    await env.DB.prepare('SELECT "passkeyVerified" FROM "session" WHERE id = ?')
+      .bind(session!.id)
+      .first(),
+  ).toEqual({ passkeyVerified: 0 });
+});
+
 it("i tentativi di accesso rispettano soglia, secondi di attesa e riapertura della finestra", async () => {
   const at = Date.parse("2026-09-01T12:00:00.000Z");
   const key = `limit-${crypto.randomUUID()}`;
@@ -183,17 +264,6 @@ it("riporta come trapelate le sole password segnalate dall'edge, senza leggere i
   }
   expect((await check("4", "https://example.invalid")).status).toBe(403);
   expect((await check("4", null)).status).toBe(403);
-});
-
-it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
-  const options = createAuthOptions(env);
-  expect(options.appName).toBe("FiscalBay");
-  const migration = await getMigrations(options);
-  expect(migration.toBeCreated).toEqual([]);
-  expect(migration.toBeAdded).toEqual([]);
-  expect(migration.toBeAddedIndexes).toEqual([]);
-  expect(migration.schemaProblems).toEqual([]);
-  expect(migration.unsafeChanges).toEqual([]);
 });
 
 it.each([undefined, "[]", "", "non-json", "{}", '["non-email"]', '["ok@example.invalid", 1]'])(
@@ -494,12 +564,13 @@ describe("Better Auth su Workers e D1", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toBeTruthy();
     type Options = {
-      rp: { id: string };
+      rp: { id: string; name: string };
       user: { id: string; name: string; displayName: string };
       authenticatorSelection: { residentKey: string; userVerification: string };
     };
     const first = await response.json<Options>();
     expect(first.rp.id).toBe("localhost");
+    expect(first.rp.name).toBe("FiscalBay");
     // Credenziale rilevabile, email come nome utente e nome dell'account visualizzato; il nome
     // della passkey resta il suo soprannome.
     expect(first.authenticatorSelection).toMatchObject({
@@ -958,9 +1029,15 @@ describe("Better Auth su Workers e D1", () => {
         }),
       );
       const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
-      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const url = input instanceof Request ? input.url : String(input);
-        if (url.endsWith("/identity/v1/oauth2/token")) return Response.json(tokens);
+        if (url.endsWith("/identity/v1/oauth2/token")) {
+          const headers = input instanceof Request ? input.headers : new Headers(init?.headers);
+          expect(headers.get("authorization")).toBe(
+            `Basic ${btoa(`${environment.EBAY_CLIENT_ID}:${environment.EBAY_CLIENT_SECRET}`)}`,
+          );
+          return Response.json(tokens);
+        }
         return Response.json({
           userId,
           username: "venditore-consenso",
@@ -988,6 +1065,15 @@ describe("Better Auth su Workers e D1", () => {
     it("conserva la lingua inglese del consenso", async () => {
       await ebayCallback(mailEnv(emailSender()), { storeGrantLanguage: "en" });
       expect(await grant()).toEqual({ language: "en" });
+    });
+
+    it("un accesso eBay esistente separa i token del consenso dal metodo di accesso", async () => {
+      const environment = mailEnv(emailSender());
+      await ebayCallback(environment, undefined);
+      expect((await loginTokens())?.refreshToken).toEqual(expect.any(String));
+      await ebayCallback(environment, { storeGrantLanguage: "en" });
+      expect(await grant()).toEqual({ language: "en" });
+      expect(await loginTokens()).toEqual({ refreshToken: null });
     });
 
     it.each([
@@ -1207,10 +1293,24 @@ describe("Better Auth su Workers e D1", () => {
       const email = `collegamento-${scenario}@example.invalid`;
       const ebayId = `identita-ebay-${scenario}`;
       if (scenario === "occupato") {
+        // Il caso deve funzionare anche da solo, come nella selezione per mutante di Stryker.
+        await env.DB.prepare(
+          `INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+           VALUES ('titolare-ebay-occupato', 'Titolare eBay', 'occupato@example.invalid', 1, ?1, ?1)`,
+        )
+          .bind(new Date().toISOString())
+          .run();
         await env.DB.prepare(
           'INSERT INTO "account" (id, "accountId", "providerId", "userId", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?)',
         )
-          .bind("account-occupato", ebayId, "ebay", "utente-esistente", Date.now(), Date.now())
+          .bind(
+            "account-occupato",
+            ebayId,
+            "ebay",
+            "titolare-ebay-occupato",
+            Date.now(),
+            Date.now(),
+          )
           .run();
       }
       const signup = await post("sign-up/email", {
@@ -1293,7 +1393,7 @@ describe("Better Auth su Workers e D1", () => {
           }>();
         if (scenario !== "verificata") {
           if (scenario === "occupato") {
-            expect(account?.userId).toBe("utente-esistente");
+            expect(account?.userId).toBe("titolare-ebay-occupato");
             expect(result.headers.get("location")).toContain(
               "account_already_linked_to_different_user",
             );

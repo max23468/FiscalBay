@@ -3,6 +3,13 @@ import { test as base, type BrowserContext, type Page, type Request } from "@pla
 
 import { webAnalyticsCollector, webAnalyticsScript } from "../app/web-analytics";
 import { abortedDataRequest } from "./page-cases";
+import {
+  createLocalIdentity,
+  localOrigin,
+  localRequestHeaders,
+  useLocalAccount,
+  writeLocalDatabase,
+} from "./local-account";
 
 export { expect } from "@playwright/test";
 
@@ -139,9 +146,34 @@ export async function networkIdle(page: Page) {
  * Errori raccolti dalla pagina della prova: `pageErrors` le sole eccezioni non gestite,
  * `browserErrors` anche i messaggi `console.error`. I listener partono solo se la prova li usa.
  */
-export const test = base.extend<{ pageErrors: string[]; browserErrors: string[] }>({
+export const test = base.extend<{
+  pageErrors: string[];
+  browserErrors: string[];
+  localIdentity: Awaited<ReturnType<typeof createLocalIdentity>>;
+}>({
+  localIdentity: async ({ context, baseURL }, use) => {
+    const identity = await createLocalIdentity();
+    try {
+      await useLocalAccount(context, "member", baseURL!, identity.token);
+      await use(identity);
+    } finally {
+      await writeLocalDatabase(`DELETE FROM workspaces WHERE id = '${identity.token}';
+        DELETE FROM "user" WHERE id = '${identity.token}';`);
+    }
+  },
   // Le rotte simulate di una prova non sopravvivono alla chiusura del contesto.
   context: async ({ context }, use) => {
+    // I tentativi voluti non consumano le soglie delle altre prove o dei retry. L'intestazione
+    // riguarda soltanto il Worker locale, anche quando la pagina carica servizi esterni.
+    if (!process.env.E2E_BASE_URL) {
+      await context.route(
+        (url) => url.origin === localOrigin,
+        async (route) =>
+          route.fallback({
+            headers: localRequestHeaders(context, await route.request().allHeaders()),
+          }),
+      );
+    }
     watchNetwork(context);
     // Il collaudo dei domini reali non conta come visita nelle statistiche del sito.
     await context.route(`${webAnalyticsScript}*`, (route) =>

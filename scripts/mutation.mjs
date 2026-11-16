@@ -173,7 +173,17 @@ export function consumerTests(target, files) {
   };
   const tests = suite.filter(reaches);
   const direct = (file) => graph.get(file)?.has(target);
-  return tests.length ? [...tests.filter(direct), ...tests.filter((file) => !direct(file))] : suite;
+  const name = path.basename(target).replace(/(?:\.server)?\.tsx?$/u, "");
+  const dedicated = (file) => path.basename(file).replace(/\.(?:unit|spec)\.ts$/u, "") === name;
+  // I test del modulo precedono anche gli altri importatori diretti: per Auth, per esempio,
+  // la cancellazione dell'account è un consumatore, non la prima prova delle sue opzioni.
+  return tests.length
+    ? [
+        ...tests.filter(dedicated),
+        ...tests.filter((file) => !dedicated(file) && direct(file)),
+        ...tests.filter((file) => !dedicated(file) && !direct(file)),
+      ]
+    : suite;
 }
 
 /** Mutanti provati in un job: oltre, il modulo si divide in parti di circa quindici minuti. */
