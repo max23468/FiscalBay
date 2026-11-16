@@ -53,10 +53,10 @@ describe("ripristino dell'account di collaudo", () => {
     const statements = sessionStatements();
     // Impronta dell'elenco completo: una riscrittura che non cambia le fixture la lascia uguale;
     // dopo una modifica voluta delle fixture si aggiorna qui.
-    assert.equal(statements.length, 150);
+    assert.equal(statements.length, 142);
     assert.equal(
       createHash("sha256").update(statements.join("\n")).digest("hex"),
-      "3fafc8a589ccc57d72d10081ca1ac71c6dd629fb4670c8cc9a4dee685b2c25bf",
+      "b714457f86a9446d00d57b4f603754632dc286c871c2dcf676a7c90b417ddd4c",
     );
     const db = migrated();
     const sql = [...(await resetStatements("x".repeat(32))), ...statements].join("\n");

@@ -3,6 +3,7 @@ import { createHash, createHmac } from "node:crypto";
 import { request, type APIResponse, type BrowserContext } from "@playwright/test";
 import { applyLocalMigrations, database } from "../scripts/local-d1.mjs";
 import type { PageRole } from "./page-cases";
+import { testAccount } from "./test-account.ts";
 
 export const localSecret = "fiscalbay-e2e-secret-at-least-32-bytes";
 export const localPassword = "fiscalbay-local-synthetic-password-only";
@@ -16,6 +17,20 @@ export const localPort =
   process.env.E2E_PORT || (process.env.CI ? "5186" : worktreePort(process.cwd()));
 // WebAuthn richiede un dominio come RP ID: un indirizzo IP non è valido.
 export const localOrigin = `http://localhost:${localPort}`;
+
+const localNetworks = new WeakMap<BrowserContext, string>();
+
+/** IP della sola richiesta al Worker locale: non raggiunge script o servizi esterni. */
+export function localRequestHeaders(context: BrowserContext, headers: Record<string, string>) {
+  if (process.env.E2E_BASE_URL) return headers;
+  let ip = localNetworks.get(context);
+  if (!ip) {
+    const network = crypto.randomUUID().replaceAll("-", "");
+    ip = `2001:db8:${network.slice(0, 4)}:${network.slice(4, 8)}::1`;
+    localNetworks.set(context, ip);
+  }
+  return { ...headers, "cf-connecting-ip": ip };
+}
 
 /** Unicamente locale: nessun flag remote e nessuna sessione privilegiata sul dominio test. */
 export async function seedLocalAccount() {
@@ -50,6 +65,38 @@ export async function writeLocalDatabase(sql: string) {
   } finally {
     await api.dispose();
   }
+}
+
+/** Identità propria della prova di accesso: anche un retry riparte con sessioni e contatori nuovi. */
+export async function createLocalIdentity() {
+  const id = `access-${crypto.randomUUID()}`;
+  const email = `${id}@example.invalid`;
+  const staleToken = `${id}-stale`;
+  await writeLocalDatabase(`
+    INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+      SELECT '${id}', name, '${email}', 1, "createdAt", "updatedAt"
+      FROM "user" WHERE id = '${testAccount.userId}';
+    INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+      SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+      FROM user_profiles WHERE user_id = '${testAccount.userId}';
+    INSERT INTO terms_acceptances
+      SELECT '${id}', terms_version, privacy_version, language, accepted_at
+      FROM terms_acceptances WHERE user_id = '${testAccount.userId}';
+    INSERT INTO workspaces (id, name, created_at)
+      SELECT '${id}', name, created_at FROM workspaces WHERE id = '${testAccount.workspaceId}';
+    INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+    INSERT INTO "account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
+      SELECT '${id}', '${id}', 'credential', '${id}', password, "createdAt", "updatedAt"
+      FROM "account" WHERE "userId" = '${testAccount.userId}' AND "providerId" = 'credential';
+    INSERT INTO "session" (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+      SELECT '${id}', '${id}', '${id}', "expiresAt", "createdAt", "updatedAt"
+      FROM "session" WHERE id = 'pages-member';
+    INSERT INTO "session" (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+      SELECT '${staleToken}', '${staleToken}', '${id}', "expiresAt",
+        '${new Date(Date.now() - 86_400_000).toISOString()}', "updatedAt"
+      FROM "session" WHERE id = 'pages-member';
+  `);
+  return { token: id, staleToken, email };
 }
 
 /** Valore del cookie di sessione di Better Auth: il token firmato con il segreto locale. */
@@ -114,7 +161,10 @@ export async function useLocalAccount(
         }
       };
       let response = await route.fetch({
-        headers: { ...request.headers(), cookie: await cookie(request.url()) },
+        headers: localRequestHeaders(context, {
+          ...request.headers(),
+          cookie: await cookie(request.url()),
+        }),
         maxRedirects: 0,
       });
       remember(response);

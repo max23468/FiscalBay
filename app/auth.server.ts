@@ -197,6 +197,7 @@ function databaseHooks(env: Env): BetterAuthOptions["databaseHooks"] {
         // Nuovo utente da Google o eBay: la provenienza arriva nello state firmato (D304). La
         // registrazione con password la salva l'azione dell'accesso, che ne ha l'indirizzo.
         after: async (user) => {
+          // Stryker disable next-line ArrowFunction: null e undefined indicano entrambi l'assenza dello state.
           const state = await getOAuthState().catch(() => null);
           if (!state) return;
           const value = (state as { signupSource?: unknown }).signupSource;
@@ -311,11 +312,8 @@ function userOptions(env: Env): BetterAuthOptions["user"] {
       // ancora valida e verificata. Così un account creato in anticipo con l'email di un altro
       // non può conservare un metodo proprio quando il vero titolare recupera l'indirizzo.
       const session = await getAuthoritativeSessionFromCtx(context);
-      if (
-        !session?.user.emailVerified ||
-        state.link.userId !== session.user.id ||
-        user.id !== session.user.id
-      ) {
+      // Better Auth passa qui user.id = state.link.userId: basta il confronto con la sessione.
+      if (!session?.user.emailVerified || state.link.userId !== session.user.id) {
         return { error: "unable_to_link_account" };
       }
     },
@@ -448,7 +446,6 @@ function authPlugins(env: Env, appOrigin: URL): BetterAuthPlugin[] {
     passkey({
       origin: appOrigin.origin,
       rpID: appOrigin.hostname,
-      rpName: "FiscalBay",
       // L'accesso con passkey non chiede l'email: serve una credenziale rilevabile, altrimenti
       // una chiave di sicurezza ne registrerebbe una che non permette di entrare. La verifica
       // dell'utente resta preferita, come nell'accesso.
@@ -521,7 +518,6 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
     baseURL: appOrigin.origin,
     database: env.DB,
     secret: env.BETTER_AUTH_SECRET,
-    trustedOrigins: [appOrigin.origin],
     advanced: {
       database: {
         joins: true,
@@ -554,9 +550,11 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
     session: {
       ...sessionPolicy,
       // Ogni richiesta rilegge la sessione da D1: logout e revoche valgono subito.
+      // Stryker disable next-line ObjectLiteral: anche un oggetto vuoto lascia disattivata la cache, valore predefinito di Better Auth.
       cookieCache: { enabled: false },
       additionalFields: {
-        passkeyVerified: { type: "boolean", required: true, defaultValue: false, input: false },
+        // La creazione della sessione scrive sempre l'esito della verifica della passkey.
+        passkeyVerified: { type: "boolean", required: true, input: false },
       },
     },
     databaseHooks: databaseHooks(env),

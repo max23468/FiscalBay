@@ -12,7 +12,6 @@ import {
   consumeStoreSync,
   dispatchStoreSyncs,
   requestStoreSync,
-  syncOrder,
 } from "../app/domain/order-sync.server";
 
 import {
@@ -89,45 +88,6 @@ describe("lettura periodica e richieste manuali", () => {
     )
       .bind(await sealToken(env, "s-a", "access", "token-s-a"))
       .run();
-  });
-
-  it("ordina per piano, richiesta, arretrato e turno, escludendo chi non è dovuto", () => {
-    const at = minutes(60);
-    const candidate = (
-      id: string,
-      plan: "free" | "premium",
-      polledMinute: number | null,
-      extra: { requested?: boolean; backlog?: boolean } = {},
-    ) => ({
-      id,
-      plan,
-      polledAt: polledMinute === null ? null : minutes(polledMinute).toISOString(),
-      requestedAt: extra.requested ? minutes(55).toISOString() : null,
-      backlog: extra.backlog ?? false,
-    });
-    const order = syncOrder(
-      [
-        candidate("free-arretrato", "free", 50, { backlog: true }),
-        candidate("free-recente", "free", 40),
-        candidate("free-dovuto", "free", 31),
-        candidate("premium-arretrato", "premium", 55, { backlog: true }),
-        candidate("free-mai", "free", null),
-        candidate("premium-dovuto", "premium", 51),
-        candidate("premium-recente", "premium", 52),
-        candidate("free-richiesto", "free", 58, { requested: true }),
-        candidate("free-vecchio", "free", 10),
-      ],
-      at,
-    ).map(({ id }) => id);
-    expect(order).toEqual([
-      "premium-dovuto",
-      "free-richiesto",
-      "free-mai",
-      "free-vecchio",
-      "free-dovuto",
-      "premium-arretrato",
-      "free-arretrato",
-    ]);
   });
 
   it("dopo la lettura sottoscrive gli ordini una volta per consenso e riprova dopo un giorno", async () => {
@@ -960,6 +920,29 @@ describe("lettura periodica e richieste manuali", () => {
       expect(await dispatchStoreSyncs(cron, minutes(42))).toEqual(["s-a"]);
     });
 
+    it("serve i dovuti prima dell'arretrato degli spazi non seguiti, poi le richieste manuali", async () => {
+      await insertCredentials({ storeId: "s-b", accessExpiresAt: now, grantedAt }).run();
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM "session" WHERE "userId" = ?').bind("u-a"),
+        env.DB.prepare(
+          `INSERT INTO sync_state (store_id, polled_at, updated_at)
+           VALUES ('s-a', ?1, ?1), ('s-b', ?2, ?2)`,
+        ).bind(minutes(0).toISOString(), minutes(10).toISOString()),
+        env.DB.prepare(
+          "INSERT INTO sync_runs (store_id, started_at, ok, new_orders) VALUES ('s-a', ?, 1, 0)",
+        ).bind(minutes(0).toISOString()),
+      ]);
+      // Il negozio non seguito è stato letto prima, ma è ancora entro le sue due ore.
+      expect(await dispatchStoreSyncs(cron, minutes(60))).toEqual(["s-b", "s-a"]);
+      await env.DB.batch([
+        env.DB.prepare("UPDATE sync_state SET dispatched_at = NULL"),
+        env.DB.prepare("UPDATE sync_state SET requested_at = ? WHERE store_id = 's-a'").bind(
+          minutes(59).toISOString(),
+        ),
+      ]);
+      expect(await dispatchStoreSyncs(cron, minutes(60))).toEqual(["s-a", "s-b"]);
+    });
+
     it("uno spazio senza sessioni aperte né Telegram legge ogni due ore e torna alla cadenza al ritorno", async () => {
       await env.DB.prepare(`DELETE FROM "session"`).run();
       expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual(["s-a"]);
@@ -1091,6 +1074,27 @@ describe("lettura periodica e richieste manuali", () => {
       const claimed = await dispatchStoreSyncs(cron, minutes(60));
       expect(claimed).toHaveLength(300);
       expect(claimed[0]).toBe("s-b");
+    });
+
+    it("la priorità Pro si applica prima del limite anche con più di trecento negozi dovuti", async () => {
+      await otherStores(300);
+      await env.DB.batch([
+        insertCredentials({ storeId: "s-b", accessExpiresAt: now, grantedAt }),
+        insertEntitlement({
+          workspaceId: "w-b",
+          source: "premium",
+          startsAt: minutes(0).toISOString(),
+          endsAt: minutes(120).toISOString(),
+        }),
+        env.DB.prepare(
+          `INSERT INTO sync_state (store_id, polled_at, updated_at)
+           SELECT id, CASE WHEN id = 's-b' THEN ?2 ELSE ?1 END, ?1 FROM ebay_stores`,
+        ).bind(minutes(0).toISOString(), minutes(49).toISOString()),
+      ]);
+      const claimed = await dispatchStoreSyncs(cron, minutes(60));
+      expect(claimed).toHaveLength(300);
+      expect(claimed[0]).toBe("s-b");
+      expect(sendBatch).toHaveBeenCalledOnce();
     });
 
     it("un gruppo serve i negozi in sequenza e chiude ogni turno anche dopo un errore", async () => {

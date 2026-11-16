@@ -76,60 +76,10 @@ const syncGroupSize = 10;
 const dispatchStaleMilliseconds = 60 * 60_000;
 const tokenMarginMilliseconds = 5 * 60_000;
 
-export type SyncCandidate = {
-  plan: SyncPlan;
-  polledAt: string | null;
-  requestedAt: string | null;
-  /** Storico, passata dei recenti o dettagli ancora da leggere dopo una lettura riuscita. */
-  backlog: boolean;
-  /** Spazio senza sessioni aperte né Telegram collegato. */
-  dormant?: boolean;
-};
-
 /** Istante entro cui deve cadere l'ultima lettura perché il negozio sia dovuto con la cadenza data. */
 function dueBefore(now: Date, minutes: number): number {
   return now.getTime() - minutes * 60_000 + toleranceMilliseconds;
 }
-
-/**
- * Ordine della lettura periodica sotto carico: prima i negozi dovuti per cadenza o per una
- * richiesta manuale (Premium, poi Free), poi quelli con lavoro arretrato (Premium, poi Free).
- * Un negozio la cui ultima lettura è fallita non anticipa l'arretrato: riprova con la cadenza.
- * A parità, prima la richiesta manuale e poi il negozio letto meno di recente: anche chi
- * fallisce passa il turno, così nessun negozio resta indietro per sempre.
- */
-export function syncOrder<T extends SyncCandidate>(candidates: T[], now: Date): T[] {
-  const rank = (candidate: T) => {
-    const plan = candidate.plan === "premium" ? 0 : 1;
-    const due =
-      candidate.requestedAt !== null ||
-      candidate.polledAt === null ||
-      Date.parse(candidate.polledAt) <=
-        dueBefore(now, candidate.dormant ? dormantSyncMinutes : syncMinutes[candidate.plan]);
-    if (due) return plan;
-    return candidate.backlog ? 2 + plan : null;
-  };
-  return candidates
-    .flatMap((candidate) => {
-      const position = rank(candidate);
-      return position === null ? [] : [{ candidate, position }];
-    })
-    .sort(
-      (a, b) =>
-        a.position - b.position ||
-        Number(a.candidate.requestedAt === null) - Number(b.candidate.requestedAt === null) ||
-        (a.candidate.polledAt ?? "").localeCompare(b.candidate.polledAt ?? ""),
-    )
-    .map(({ candidate }) => candidate);
-}
-
-type CandidateRow = ActiveStore & {
-  polled_at: string | null;
-  requested_at: string | null;
-  backlog: number;
-  premium: number;
-  dormant: number;
-};
 
 /**
  * Smistamento periodico: sceglie in ordine di priorità i negozi attivi con un token valido e
@@ -143,10 +93,10 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
   const at = now.toISOString();
   const stale = new Date(now.getTime() - dispatchStaleMilliseconds).toISOString();
   const [{ results: rows }, { results: limits }] = await env.DB.batch<
-    CandidateRow | { api_origin: string }
+    ActiveStore | { api_origin: string }
   >([
-    // La cadenza di ogni negozio si applica prima del limite, e i dovuti precedono l'arretrato:
-    // i negozi letti da più tempo ma non ancora dovuti non tolgono il turno agli altri.
+    // Selezione e priorità stanno nella stessa query, prima del limite: dovuti, poi arretrato;
+    // in ciascun gruppo Premium, richieste manuali e negozi letti meno di recente.
     env.DB.prepare(
       `SELECT *, (polled_at IS NULL OR requested_at IS NOT NULL OR polled_at <=
                 CASE WHEN dormant THEN ?6 WHEN premium THEN ?7 ELSE ?8 END) AS due
@@ -172,7 +122,8 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
           AND (ss.polled_at IS NULL OR ss.requested_at IS NOT NULL OR ss.polled_at <= ?3)
           AND (ss.dispatched_at IS NULL OR ss.dispatched_at <= ?5))
         WHERE due OR backlog
-        ORDER BY due DESC, polled_at IS NOT NULL, polled_at, store_id
+        ORDER BY due DESC, premium DESC, requested_at IS NULL,
+                 polled_at IS NOT NULL, polled_at, store_id
         LIMIT ?4`,
     ).bind(
       at,
@@ -195,20 +146,9 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
   const limited = new Set<string | undefined>(
     (limits as { api_origin: string }[]).map((row) => row.api_origin),
   );
-  const selected = syncOrder(
-    (rows as CandidateRow[]).map((row) => ({
-      storeId: row.store_id,
-      grantedAt: row.granted_at,
-      apiOrigin: apiOriginOf(env, row.ebay_environment),
-      // Una copertura in corso, anche la prova, legge con la cadenza Premium.
-      plan: (row.premium === 1 ? "premium" : "free") as SyncPlan,
-      polledAt: row.polled_at,
-      requestedAt: row.requested_at,
-      backlog: row.backlog === 1,
-      dormant: row.dormant === 1,
-    })),
-    now,
-  ).filter((store) => !limited.has(store.apiOrigin));
+  const selected = (rows as ActiveStore[]).filter(
+    (store) => !limited.has(apiOriginOf(env, store.ebay_environment)),
+  );
   if (selected.length === 0) return [];
 
   const claims = await env.DB.batch<{ store_id: string }>(
@@ -220,7 +160,7 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
                                              updated_at = excluded.updated_at
          WHERE sync_state.dispatched_at IS NULL OR sync_state.dispatched_at <= ?4
          RETURNING store_id`,
-      ).bind(store.storeId, store.grantedAt, at, stale),
+      ).bind(store.store_id, store.granted_at, at, stale),
     ),
   );
   // Nell'ordine di priorità: la coda consegna prima i negozi accodati prima.

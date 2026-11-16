@@ -498,6 +498,19 @@ describe("esito dei mutation test", () => {
       ]),
       ["test/other.spec.ts", "test/a.spec.ts", "test/grants.spec.ts"],
     );
+    // La suite propria arriva prima degli importatori diretti con nome precedente in alfabeto.
+    assert.deepEqual(
+      consumerTests("app/auth.server.ts", [
+        { path: "app/auth.server.ts", text: "" },
+        {
+          path: "test/account-deletion.spec.ts",
+          text: 'import { auth } from "../app/auth.server";',
+        },
+        { path: "test/auth.spec.ts", text: 'import { auth } from "../app/auth.server";' },
+        { path: "test/consumer.spec.ts", text: 'import { auth } from "../app/auth.server";' },
+      ]),
+      ["test/auth.spec.ts", "test/account-deletion.spec.ts", "test/consumer.spec.ts"],
+    );
     // Senza consumatori riconoscibili resta l'intera suite.
     assert.deepEqual(consumerTests("app/domain/stores.server.ts", files), [
       "test/grants.spec.ts",
