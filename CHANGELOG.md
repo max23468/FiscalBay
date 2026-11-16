@@ -2,7 +2,46 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio, con il giorno scritto dalla promozione. Le parti «Novità» e «What's new» di una versione sono la pagina Novità dell'app.
 
-## [2.0.10]
+## [2.0.10] - 2026-11-16
+
+### Novità
+
+#### Miglioramenti
+
+- **Passkey più semplici.** La pagina di accesso propone le passkey salvate direttamente nel campo email, il gestore delle password mostra l'email dell'account e una passkey rimossa smette di comparire tra quelle proposte.
+- **Password più chiare.** Un pulsante mostra la password mentre la scrivi e la regola degli 8 caratteri è visibile prima dell'invio.
+- **Errori che restano.** Se lo sblocco, l'esportazione o una richiesta sui dati non riesce, il messaggio resta accanto al comando invece di sparire dopo pochi secondi.
+- **Tastiera e lettori di schermo.** Il focus segue la sezione scelta nelle Impostazioni e nell'app, il focus da tastiera resta visibile anche con il contrasto elevato di Windows e i pulsanti di conferma spiegano cosa manca invece di restare spenti.
+- **Movimento ridotto.** Con «Riduci movimento» attivo, pannelli e scorrimenti compaiono senza spostamenti, conservando le dissolvenze.
+
+#### Correzioni
+
+- **Bozze e ricerca mobile.** Aprire un ordine dalla ricerca chiede conferma prima di lasciare modifiche non salvate; Indietro chiude prima la ricerca. La tabulazione dei filtri segue la loro disposizione anche su mobile e i nuovi ordini aspettano la fine dello scorrimento.
+- **Periodi di 6 e 12 mesi.** A fine mese i periodi «Ultimi 6 mesi» e «Ultimi 12 mesi» partono dall'ultimo giorno del mese giusto e non escludono più gli ordini dei primi giorni.
+
+### What's new
+
+#### Improvements
+
+- **Simpler passkeys.** The sign-in page offers your saved passkeys right in the email field, your password manager shows your account email and a removed passkey stops being offered.
+- **Clearer passwords.** A button shows the password while you type it and the 8-character rule is visible before you submit.
+- **Errors that stay.** If unlocking, exporting or a data request fails, the message stays next to the action instead of disappearing after a few seconds.
+- **Keyboard and screen readers.** Focus follows the section you choose in Settings and in the app, the keyboard focus stays visible with Windows high contrast and confirmation buttons explain what is missing instead of staying disabled.
+- **Reduced motion.** With «Reduce motion» on, panels and scrolling appear without movement, keeping the fades.
+
+#### Fixes
+
+- **Drafts and mobile search.** Opening an order from search asks for confirmation before leaving unsaved changes; Back closes search first. Filter tab order follows the layout on mobile too, and new orders wait for scrolling to stop.
+- **6 and 12 month periods.** At the end of a month, «Last 6 months» and «Last 12 months» start on the last day of the right month and no longer leave out the orders of the first days.
+
+### Altre modifiche
+
+- **Dettaglio dell'ordine alla prima apertura.** Il pannello del dettaglio si carica quando si apre il primo ordine, con la stessa animazione di chiusura e lo stesso ritorno del focus, così la pagina Ordini resta entro il limite del JavaScript iniziale.
+- **Pagine pubbliche più rapide.** Tornando indietro tra le pagine pubbliche il browser le ripristina all'istante, e passando su un link del sito precarica la pagina successiva; area dell'account, accesso e console restano escluse.
+- **Lettura più comoda.** Pagine legali, Guide, FAQ e Supporto hanno righe più brevi, e intestazione e piè di pagina restano nello schermo anche con un testo più grande.
+- **Protezioni del browser.** Gli script eseguono soltanto se firmati dalla pagina o caricati da script firmati, Trusted Types e le violazioni della CSP sono osservati attraverso un endpoint dedicato, e le intestazioni limitano fotocamera, microfono, posizione e l'uso delle risorse da altri siti. Uscendo dall'account il browser svuota i dati salvati dal sito.
+- **Misure delle pagine.** Le misure di caricamento si aggiornano per tutta la visita, escludono le schede aperte in background e scompongono l'INP nelle sue parti nella console.
+- **HTTPS anche alla prima visita.** L'intestazione HSTS copre anche i sottodomini e chiede l'inserimento di fiscalbay.it nella lista dei browser che aprono il sito soltanto in HTTPS già alla prima visita.
 
 ## [2.0.9] - 2026-11-11
 
