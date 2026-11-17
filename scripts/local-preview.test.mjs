@@ -8,7 +8,7 @@ import { describe, it } from "node:test";
 describe("copia locale dell'artefatto", () => {
   it("conserva l'origine Production e riscrive solo quella test, senza cambiare l'originale", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "local-preview-"));
-    const relative = ".cloudflare/output/v0/workers/default/worker.config.json";
+    const relative = ".cloudflare/output/v1/workers/default/worker.config.json";
     const source = path.join(directory, relative);
     const script = path.resolve("scripts/local-preview.mjs");
     mkdirSync(path.dirname(source), { recursive: true });

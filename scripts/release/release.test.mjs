@@ -64,7 +64,12 @@ describe("ciclo reale con provider simulati", () => {
       writeFileSync(path.join(directory, file), content);
     };
     try {
-      for (const file of ["release/release.mjs", "release/records.mjs", "lib/provider.mjs"]) {
+      for (const file of [
+        "release/release.mjs",
+        "release/records.mjs",
+        "lib/provider.mjs",
+        "lib/build-output.mjs",
+      ]) {
         mkdirSync(path.dirname(path.join(directory, "scripts", file)), { recursive: true });
         cpSync(path.join("scripts", file), path.join(directory, "scripts", file));
       }
@@ -88,11 +93,11 @@ describe("ciclo reale con provider simulati", () => {
       const sha = git("rev-parse", "HEAD");
       git("remote", "add", "origin", directory);
       write(
-        ".cloudflare/output/v0/config.json",
+        ".cloudflare/output/v1/config.json",
         JSON.stringify({ buildContext: { mode: "live" } }),
       );
       write(
-        ".cloudflare/output/v0/workers/default/worker.config.json",
+        ".cloudflare/output/v1/workers/default/worker.config.json",
         JSON.stringify({
           name: "fiscalbay",
           env: { APP_ORIGIN: { value: "https://fiscalbay.it" }, DB: { id: "database" } },
