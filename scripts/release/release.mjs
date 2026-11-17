@@ -56,9 +56,9 @@ export const serviceSecrets = [
 export function digestDirectory(directory) {
   const files = [];
   const visit = (relative) => {
-    for (const item of readdirSync(path.join(directory, relative), { withFileTypes: true }).sort(
-      (a, b) => a.name.localeCompare(b.name),
-    )) {
+    for (const item of readdirSync(path.join(directory, relative), {
+      withFileTypes: true,
+    }).toSorted((a, b) => a.name.localeCompare(b.name))) {
       const name = path.join(relative, item.name);
       if (item.isSymbolicLink()) throw new Error("Link simbolico nell'artefatto.");
       if (item.isDirectory()) visit(name);
@@ -208,7 +208,7 @@ export function changeFiles(ref) {
     : existsSync("changes")
       ? readdirSync("changes").map((name) => `changes/${name}`)
       : [];
-  return files.filter((file) => changeFile.test(file)).sort();
+  return files.filter((file) => changeFile.test(file)).toSorted();
 }
 
 /** Changelog con i frammenti, nel checkout o in un commit: quello che build e note leggono. */
@@ -406,7 +406,7 @@ export const latestReleased = (releasedTags) =>
     .map(parseVersion)
     .filter((version) => version && version.core[0] >= 2)
     .map(coreOf)
-    .sort((left, right) => compareCores(parseVersion(left), parseVersion(right)))
+    .toSorted((left, right) => compareCores(parseVersion(left), parseVersion(right)))
     .at(-1);
 
 /**
@@ -664,7 +664,7 @@ function manifests(environment) {
     throw new Error("Build o configurazione dell'ambiente errata.");
   const migrations = readdirSync("migrations")
     .filter((name) => name.endsWith(".sql"))
-    .sort()
+    .toSorted()
     .map((name) => ({ name, digest: hash(readFileSync(`migrations/${name}`)) }));
   return {
     sha: git("rev-parse", "HEAD"),
@@ -712,7 +712,7 @@ export function receiptArtifact(artifacts, prefix, runId, attempt) {
       const suffix = artifact.name.startsWith(start) ? artifact.name.slice(start.length) : "";
       return !artifact.expired && /^\d+$/u.test(suffix) && Number(suffix) < attempt;
     })
-    .sort((a, b) => Number(b.name.slice(start.length)) - Number(a.name.slice(start.length)))[0];
+    .toSorted((a, b) => Number(b.name.slice(start.length)) - Number(a.name.slice(start.length)))[0];
 }
 
 export function readReceipt(directory, manifest) {
@@ -959,7 +959,7 @@ function restoreState(environment, expectedSha) {
       (artifact) =>
         !artifact.expired && /^(?:production-state-|release-receipt-)/u.test(artifact.name),
     )
-    .sort((a, b) => b.id - a.id);
+    .toSorted((a, b) => b.id - a.id);
   for (const artifact of artifacts) {
     const state = downloadRecord(repository, { ...artifact, workflow_run: { id: run } });
     if (state.environment === environment && state.sha === expectedSha) {

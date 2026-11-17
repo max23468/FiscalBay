@@ -291,7 +291,7 @@ export async function pullRequestParts(
   );
   const ordered = runs
     .filter((run) => run.head_repository?.id === repositoryId && String(run.id) !== String(exclude))
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    .toSorted((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const verdicts = new Map();
   // Commit antenato della testa e nessun cambio che invalidi la prova del modulo da allora.
   const stands = (run) => {
@@ -355,7 +355,7 @@ export async function pullRequestParts(
     if (decided.size === layout.total) break;
   }
   if (!layout) return null;
-  const proved = [...decided.values()].filter(Boolean).sort((a, b) => a.part - b.part);
+  const proved = [...decided.values()].filter(Boolean).toSorted((a, b) => a.part - b.part);
   const missing = Array.from({ length: layout.total }, (_, index) => index + 1).filter(
     (part) => !decided.get(part),
   );
@@ -371,7 +371,7 @@ export async function pullRequestProof(args, api = ghApi, readPlan = defaultPlan
   const parts = await pullRequestParts(args, api, readPlan);
   if (!parts || parts.missing.length) return null;
   // Gli ID delle run crescono nel tempo: il più alto è la run più recente.
-  const runs = [...new Set(parts.proved.map(({ run }) => run))].sort((a, b) => b - a);
+  const runs = [...new Set(parts.proved.map(({ run }) => run))].toSorted((a, b) => b - a);
   return { run: runs[0], commit: parts.proved.find(({ run }) => run === runs[0]).commit, runs };
 }
 

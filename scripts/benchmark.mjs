@@ -12,8 +12,8 @@ import { fileURLToPath } from "node:url";
 const repetitions = 3;
 
 export function benchmarkSummary(samples) {
-  const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
-  const names = Object.keys(samples).sort();
+  const median = (values) => [...values].toSorted((a, b) => a - b)[Math.floor(values.length / 2)];
+  const names = Object.keys(samples).toSorted();
   if (
     !names.length
     || names.some(

@@ -30,7 +30,7 @@ export function ordersNotices({
   const synced = stores.flatMap((store) => (store.lastSyncAt ? [store.lastSyncAt] : []));
   const outage =
     !ebayCalls && stores.some((store) => store.connection === "active")
-      ? { lastSyncAt: synced.sort().at(-1) ?? null, maintenance: true }
+      ? { lastSyncAt: synced.toSorted().at(-1) ?? null, maintenance: true }
       : ebayOutage(stores);
   const cycle = allowance?.cycle ?? null;
   return [
@@ -48,7 +48,7 @@ export function ordersNotices({
       .flatMap((store) =>
         store.reminder ? [{ id: store.id, name: store.name, ...store.reminder }] : [],
       )
-      .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1))
+      .toSorted((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1))
       .map((store): OrdersNotice =>
         store.kind === "expired"
           ? { kind: "store-issue", storeId: store.id, storeName: store.name }

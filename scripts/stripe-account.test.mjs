@@ -58,7 +58,7 @@ function account(change = (state) => state) {
         id: "we_live",
         url: `${origin}/webhooks/stripe`,
         status: "enabled",
-        enabled_events: [...stripeWebhookEvents].reverse(),
+        enabled_events: [...stripeWebhookEvents].toReversed(),
       },
       { id: "we_other", url: "https://example.invalid/hook", status: "enabled" },
     ],

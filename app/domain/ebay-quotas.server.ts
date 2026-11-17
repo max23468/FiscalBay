@@ -106,7 +106,7 @@ function quotaRow(
   rates: ApiRate[],
   alertShare: number,
 ): QuotaRow | null {
-  const rate = [...rates].sort((a, b) => b.windowSeconds - a.windowSeconds)[0];
+  const rate = [...rates].toSorted((a, b) => b.windowSeconds - a.windowSeconds)[0];
   if (!rate) return null;
   const share = rate.limit > 0 ? rate.consumed / rate.limit : 0;
   const daily = rate.windowSeconds >= daySeconds;
@@ -221,7 +221,7 @@ export async function readEbayQuotas(
           environment,
           read: "ok",
           // Le chiamate di FiscalBay nell'ordine di importanza, poi le altre per consumo.
-          rows: rows.sort((a, b) => {
+          rows: rows.toSorted((a, b) => {
             const [first, second] = [callRank(a.api, a.resource), callRank(b.api, b.resource)];
             if (first >= 0 || second >= 0)
               return (first < 0 ? Infinity : first) - (second < 0 ? Infinity : second);

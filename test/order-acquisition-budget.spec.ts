@@ -223,7 +223,7 @@ it.each([
     await quota("GetItem", 50, items);
     const both = ebay({ orders: [foreign(18)] });
     expect(await acquire(both)).toBe("complete");
-    expect(await refs()).toMatchObject({ detail_retry_at: [orders, items].sort().at(-1) });
+    expect(await refs()).toMatchObject({ detail_retry_at: [orders, items].toSorted().at(-1) });
   },
 );
 

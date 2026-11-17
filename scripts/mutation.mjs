@@ -157,7 +157,7 @@ export function consumerTests(target, files) {
         ? /^test\/.+\.unit\.ts$/u.test(file)
         : /^test\/.+\.spec\.ts$/u.test(file),
     )
-    .sort();
+    .toSorted();
   const graph = importGraph(files, /^(?:app|workers|test)\/.+\.tsx?$/u);
   const reaches = (entry) => {
     const visited = new Set();
@@ -527,7 +527,7 @@ export async function mutationJobs(
   return {
     include: jobs
       .flat()
-      .sort((first, second) => second.weight - first.weight)
+      .toSorted((first, second) => second.weight - first.weight)
       .map(({ job }) => job),
   };
 }
@@ -544,7 +544,7 @@ export function mutationMatrix(argument, files) {
   for (const file of requested)
     if (!criticalModule(file) || !files.includes(file))
       throw new Error(`Modulo critico inesistente: ${file}`);
-  return { target: requested.length ? requested : files.filter(criticalModule).sort() };
+  return { target: requested.length ? requested : files.filter(criticalModule).toSorted() };
 }
 
 const sources = () => trackedSources(/^(?:app|workers|test)\/.+\.tsx?$/u, { untracked: true });
@@ -623,7 +623,7 @@ export async function incrementalBase(
         (String(entry.id) !== String(current) || Number(attempt) > 1)
         && entry.head_repository?.id === repositoryId,
     )
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    .toSorted((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   for (const run of ordered) {
     if (read >= incrementalRuns) break;
     if (run.head_sha !== head && !["ahead", "identical"].includes(await status(run.head_sha)))
@@ -697,7 +697,7 @@ export function prTargets(changed, files) {
     for (const test of tests)
       for (const file of graph.get(test) ?? []) if (criticalModule(file)) targets.add(file);
   }
-  return [...targets].sort();
+  return [...targets].toSorted();
 }
 
 /**
@@ -880,7 +880,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     for (const target of new Set(samples.map((entry) => entry.target))) {
       const parts = samples
         .filter((entry) => entry.target === target)
-        .sort((a, b) => a.start - b.start);
+        .toSorted((a, b) => a.start - b.start);
       if (completeTimings(parts)) history[target] = parts;
     }
     writeFileSync(timingFile, JSON.stringify(history));

@@ -13,7 +13,7 @@ function migrated() {
   db.exec("PRAGMA foreign_keys = ON;");
   for (const file of readdirSync("migrations")
     .filter((name) => name.endsWith(".sql"))
-    .sort())
+    .toSorted())
     db.exec(readFileSync(`migrations/${file}`, "utf8"));
   return db;
 }

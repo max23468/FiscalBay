@@ -309,7 +309,7 @@ async function rightsOf(run) {
   return Object.fromEntries(
     names.map((name, index) => [
       name,
-      results[index].map((row) => JSON.stringify(Object.values(row))).sort(),
+      results[index].map((row) => JSON.stringify(Object.values(row))).toSorted(),
     ]),
   );
 }

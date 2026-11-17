@@ -507,7 +507,7 @@ export function plan(files, sources = [], complete = false, changes = {}) {
   const browserGrep = targeted
     ? [
         ...(areas.size || core ? ["@smoke"] : []),
-        ...(areas.size ? areaGrep([...areas].sort()) : []),
+        ...(areas.size ? areaGrep([...areas].toSorted()) : []),
         ...specs,
       ].join("|")
     : ".";
@@ -535,7 +535,7 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     e2e,
     build: gate === "build" || gate === "full",
     deploy,
-    areas: [...areas].sort(),
+    areas: [...areas].toSorted(),
     browserGrep,
     specs,
     core,
@@ -669,7 +669,7 @@ export function browserNarrowing(previous, head, base, sources) {
   const mine = areasOf(changed.filter((file) => own.has(file)));
   const shared = areasOf(changed.filter((file) => !own.has(file)));
   if (!pr || !mine || !shared) return null;
-  const areas = [...new Set([...mine, ...shared.filter((area) => pr.includes(area))])].sort();
+  const areas = [...new Set([...mine, ...shared.filter((area) => pr.includes(area))])].toSorted();
   return { grep: ["@smoke", ...(areas.length ? areaGrep(areas) : []), ...since.specs].join("|") };
 }
 

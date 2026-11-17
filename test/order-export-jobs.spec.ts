@@ -360,7 +360,7 @@ it("la ripresa oraria riaccoda un lavoro interrotto e due consumer creano un sol
   // aspetta lo scadere del blocco del primo.
   const deliveries = [queueMessage({ exportJob: id }), queueMessage({ exportJob: id }, 5)];
   await Promise.all(deliveries.map((delivery) => consumeExportJob(delivery, env)));
-  expect(deliveries.map((delivery) => delivery.ack.mock.calls.length).sort()).toEqual([0, 1]);
+  expect(deliveries.map((delivery) => delivery.ack.mock.calls.length).toSorted()).toEqual([0, 1]);
   expect(deliveries.flatMap((delivery) => delivery.retry.mock.calls)).toEqual([
     [{ delaySeconds: 900 }],
   ]);
@@ -399,8 +399,8 @@ it("il compito orario riaccoda un lavoro senza messaggio e chiude quello che non
     expect(
       [...sendBatch.mock.calls[0]![0]]
         .map(({ body }) => (body as { exportJob: string }).exportJob)
-        .sort(),
-    ).toEqual([lost, running].sort());
+        .toSorted(),
+    ).toEqual([lost, running].toSorted());
     // Dopo 24 ore il lavoro libero non riesce; quello di un consumer in corso resta a lui.
     sendBatch.mockClear();
     await env.DB.prepare("UPDATE export_jobs SET locked_until = ? WHERE id = ?")
@@ -424,8 +424,8 @@ it("il compito orario riaccoda un lavoro senza messaggio e chiude quello che non
     expect.objectContaining({ id: `export:${lost}`, tone: "warning", at: hours(24) }),
   ]);
   // Richiesti nello stesso istante: l'ordine fra i due segue l'identificativo.
-  expect((await sectionFiles()).map(({ id, state }) => `${id} ${state}`).sort()).toEqual(
-    [`${running} queued`, `${lost} failed`].sort(),
+  expect((await sectionFiles()).map(({ id, state }) => `${id} ${state}`).toSorted()).toEqual(
+    [`${running} queued`, `${lost} failed`].toSorted(),
   );
 });
 
@@ -479,15 +479,15 @@ it("la campanella annuncia il file finché resta scaricabile e il lavoro non riu
   const announced = async () =>
     (await bell())
       .map(({ id, tone, at }) => [id, tone, at])
-      .sort((a, b) => a[0]!.localeCompare(b[0]!));
+      .toSorted((a, b) => a[0]!.localeCompare(b[0]!));
   vi.setSystemTime(Date.parse(hours(26)) - 1);
   expect(await announced()).toEqual(
     [
       [`export:${failed}`, "warning", hours(2)],
       [`export:${ready}`, "success", hours(2)],
-    ].sort((a, b) => a[0]!.localeCompare(b[0]!)),
+    ].toSorted((a, b) => a[0]!.localeCompare(b[0]!)),
   );
-  expect((await sectionFiles()).map(({ state }) => state).sort()).toEqual(["failed", "ready"]);
+  expect((await sectionFiles()).map(({ state }) => state).toSorted()).toEqual(["failed", "ready"]);
   await purgeExportFiles(env, new Date());
   expect(await env.DB.prepare("SELECT count(*) AS n FROM export_jobs").first("n")).toBe(2);
   vi.setSystemTime(Date.parse(hours(26)));

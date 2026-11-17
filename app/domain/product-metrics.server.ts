@@ -85,7 +85,7 @@ const payingSubscriptionSql = (alias: string, at: string) =>
 /** Mediana al decimo: oltre, la precisione dei giorni giuliani non è una misura. */
 function median(values: number[]) {
   if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
+  const sorted = [...values].toSorted((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   const value = sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
   return Math.round(value * 10) / 10;

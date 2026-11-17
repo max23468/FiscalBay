@@ -39,7 +39,7 @@ const fragments = import.meta.glob<string>("../changes/*.md", {
 const changelog = withChanges(
   versionedChangelog,
   Object.keys(fragments)
-    .sort()
+    .toSorted()
     .map((file) => fragments[file]),
 );
 

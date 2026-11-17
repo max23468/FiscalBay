@@ -689,7 +689,7 @@ async function performancePanel(env: Env, fetcher: typeof fetch): Promise<Panel>
         title: p.invocations,
         rows: capped(
           [...metrics.invocations]
-            .sort((a, b) => b.count - a.count)
+            .toSorted((a, b) => b.count - a.count)
             .map((row) => [
               `${name(row.invocation, row.detail)} · ${row.outcome}`,
               copy.performance.value(Math.round(row.count), row.p95Ms),
@@ -701,7 +701,7 @@ async function performancePanel(env: Env, fetcher: typeof fetch): Promise<Panel>
         title: `${p.phases} · ${copy.performance.slowest}`,
         rows: capped(
           [...metrics.phases]
-            .sort((a, b) => b.p95Ms - a.p95Ms)
+            .toSorted((a, b) => b.p95Ms - a.p95Ms)
             .map((row) => [
               `${p.phaseName[row.phase as keyof typeof p.phaseName] ?? row.phase} · ${row.operation}`,
               copy.performance.value(Math.round(row.calls), row.p95Ms),

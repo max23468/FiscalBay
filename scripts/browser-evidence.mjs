@@ -22,7 +22,7 @@ export function flakyTests(parts) {
           .map(({ project, page }) => `${project}: ${page}`),
       ),
     ),
-  ].sort();
+  ].toSorted();
 }
 
 /**
@@ -99,7 +99,7 @@ export function assertCandidateReports(parts, sha, expected) {
     for (let shard = 1; shard <= shards; shard++) {
       const part = parts
         .filter((part) => part.kind === kind && part.shard === shard)
-        .sort((a, b) => b.attempt - a.attempt)[0];
+        .toSorted((a, b) => b.attempt - a.attempt)[0];
       const report = part?.report;
       if (
         !report

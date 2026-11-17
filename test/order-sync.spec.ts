@@ -1127,7 +1127,7 @@ describe("lettura periodica e richieste manuali", () => {
         ["s-001", "s-002", "s-a"].map((id) => ({ id, dispatched_at: null, polled_at: null })),
       );
       expect(await dispatchStoreSyncs(cron, minutes(2))).toEqual([]);
-      expect((await dispatchStoreSyncs(cron, minutes(16))).sort()).toEqual([
+      expect((await dispatchStoreSyncs(cron, minutes(16))).toSorted()).toEqual([
         "s-001",
         "s-002",
         "s-a",
@@ -1436,7 +1436,7 @@ describe("lettura periodica e richieste manuali", () => {
         dispatchTasks(cron, minutes(0)),
         dispatchTasks(cron, minutes(0)),
       ]);
-      expect(turns.flat().sort()).toEqual([
+      expect(turns.flat().toSorted()).toEqual([
         "account_deletion",
         "billing",
         "ebay_quotas",

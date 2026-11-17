@@ -62,7 +62,7 @@ function concernedStore(stores: StoreStatus[]): StoreStatus | null {
     linked.find((store) => store.connection === "reconnect_required" || readsFailing(store))
     ?? linked
       .filter((store) => store.lastSyncAt)
-      .sort((a, b) => b.lastSyncAt!.localeCompare(a.lastSyncAt!))[0]
+      .toSorted((a, b) => b.lastSyncAt!.localeCompare(a.lastSyncAt!))[0]
     ?? linked[0]
     ?? stores[0]
     ?? null

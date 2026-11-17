@@ -98,7 +98,7 @@ export function pageCoverage(sources, auxiliary = []) {
           for (const dependency of dependencies(file))
             if (!news.some(({ path: newsPath }) => newsPath === dependency)) files.add(dependency);
       }
-      const ordered = [...files].sort();
+      const ordered = [...files].toSorted();
       const digest = createHash("sha256")
         .update(JSON.stringify(ordered.map((file) => [file, byPath.get(file) ?? null])))
         .digest("hex");

@@ -311,7 +311,7 @@ export async function visibleOrderTallies(
 ): Promise<OrderTally[]> {
   // Gli inizi soddisfatti da un ordine sono sempre i primi in ordine crescente: basta contarli.
   // Stryker disable next-line ArrayDeclaration,StringLiteral: senza inizi il rango cercato è quello di "" e un altro elenco dà rango 0, che conta comunque ogni ordine.
-  const sorted = [...new Set(starts.length ? starts : [""])].sort();
+  const sorted = [...new Set(starts.length ? starts : [""])].toSorted();
   const result = await db
     .prepare(
       `SELECT fiscal, satisfied, count(*) AS total FROM (
@@ -399,7 +399,7 @@ export async function visibleOrdersTerm(
     .first<{ retention: string | null; unlock: string | null }>();
   // Stryker disable next-line MethodExpression,ConditionalExpression: uno sblocco esiste soltanto con un ordine, quindi un termine assente è sempre l'ultimo e l'ordinamento lascia per primo quello presente.
   const terms = [row!.retention, row!.unlock].filter((term): term is string => term !== null);
-  return terms.sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
+  return terms.toSorted((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
 }
 
 /**

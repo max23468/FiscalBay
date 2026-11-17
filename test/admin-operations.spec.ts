@@ -41,7 +41,7 @@ describe("anomalie e lavori", () => {
       (a) => a.kind === "store_reads",
     );
     expect(reads).toMatchObject({ severity: "p2", count: 2 });
-    expect(reads!.subjects.map((subject) => subject.id).sort()).toEqual(["s-ko1", "s-ko2"]);
+    expect(reads!.subjects.map((subject) => subject.id).toSorted()).toEqual(["s-ko1", "s-ko2"]);
     // Quando nessun negozio attivo dell'ambiente legge, il problema è eBay.
     await env.DB.prepare(
       `INSERT INTO sync_runs (store_id, started_at, ok, new_orders)
@@ -204,7 +204,7 @@ describe("panoramica e registro", () => {
                ('a2', 'admin', 'save-notice', 'notice:n-1', 'done', ?1)`).bind(now),
     ]);
     const [pause, notice] = await listAudit(env.DB, {});
-    expect([pause, notice].map((entry) => entry!.id).sort()).toEqual(["a1", "a2"]);
+    expect([pause, notice].map((entry) => entry!.id).toSorted()).toEqual(["a1", "a2"]);
     const entries = await listAudit(env.DB, {});
     expect(entries.find((entry) => entry.id === "a1")).toMatchObject({
       workspace: { id: "w-a", email: "registro@example.invalid" },

@@ -105,7 +105,7 @@ export function parseCosts(output) {
 /** Quantile per rango più vicino, su valori già misurati. */
 export function quantile(values, q) {
   if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
+  const sorted = [...values].toSorted((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1))];
 }
 

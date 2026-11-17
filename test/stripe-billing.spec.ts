@@ -799,7 +799,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(kinds.filter((kind) => kind === "in-attesa")).toHaveLength(5);
     // Delle riletture giornaliere restano i posti del turno, prima le più vecchie.
     expect(results.filter(({ id }) => id.startsWith("giornaliero")).map(({ id }) => id)).toEqual(
-      Array.from({ length: 17 }, (_, index) => `giornaliero-${index + 7}`).sort(),
+      Array.from({ length: 17 }, (_, index) => `giornaliero-${index + 7}`).toSorted(),
     );
   });
 

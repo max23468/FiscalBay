@@ -247,7 +247,8 @@ async function readSignals(db: D1Database, now: Date, at: string) {
 }
 
 /** Primo istante fra le righe. */
-const earliest = (values: (string | number | null | undefined)[]) => values.map(String).sort()[0]!;
+const earliest = (values: (string | number | null | undefined)[]) =>
+  values.map(String).toSorted()[0]!;
 
 /** Somma dei conteggi delle righe. */
 const totalCount = (rows: { count?: string | number | null }[]) =>
@@ -439,7 +440,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       severity: stalled.some((task) => task.task === "billing" || task.task === "token_refresh")
         ? "p1"
         : "p2",
-      since: stalled.map((task) => task.queuedAt ?? task.slot ?? at).sort()[0]!,
+      since: stalled.map((task) => task.queuedAt ?? task.slot ?? at).toSorted()[0]!,
       count: stalled.length,
       subjects: stalled.map((task) => ({ id: task.task, label: task.task, href: "lavori" })),
     });
@@ -450,7 +451,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       key: "receipts_stalled",
       kind: "receipts_stalled",
       severity: delayed.some((receipts) => receipts.provider === "stripe") ? "p1" : "p2",
-      since: delayed.map((receipts) => receipts.oldest ?? at).sort()[0]!,
+      since: delayed.map((receipts) => receipts.oldest ?? at).toSorted()[0]!,
       count: delayed.reduce((total, receipts) => total + receipts.stalled, 0),
       subjects: delayed.map((receipts) => ({
         id: receipts.provider,
@@ -512,7 +513,9 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       key: "account_deletion",
       kind: "account_deletion",
       severity: deletions.some((deletion) => deletion.renewals_blocked_at) ? "p1" : "p2",
-      since: [...deletions, ...ebayDeletions].map((deletion) => deletion.requested_at).sort()[0]!,
+      since: [...deletions, ...ebayDeletions]
+        .map((deletion) => deletion.requested_at)
+        .toSorted()[0]!,
       count: deletions.length + ebayDeletions.length,
       subjects: [
         ...deletions.map((deletion) => ({
@@ -544,7 +547,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
 
   anomalies.push(...credentialAnomalies(credentials));
 
-  return anomalies.sort(
+  return anomalies.toSorted(
     (a, b) =>
       severityOrder[a.severity] - severityOrder[b.severity] || a.since.localeCompare(b.since),
   );

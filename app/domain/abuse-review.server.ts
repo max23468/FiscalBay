@@ -42,7 +42,7 @@ export function normalizedName(value: string) {
 
 /** Chiave stabile della segnalazione: tipo, impronta del valore e spazi coinvolti. */
 async function signalKey(kind: AbuseSignalKind, value: string, workspaces: string[]) {
-  return `${kind}:${(await sha256Hex(`${kind}\n${value}\n${[...workspaces].sort().join(",")}`)).slice(0, 48)}`;
+  return `${kind}:${(await sha256Hex(`${kind}\n${value}\n${[...workspaces].toSorted().join(",")}`)).slice(0, 48)}`;
 }
 
 /**
@@ -141,7 +141,7 @@ export async function listAbuseSignals(db: D1Database, now = new Date()): Promis
         value: group.value,
         current: live,
         workspaces: [...group.ids]
-          .sort()
+          .toSorted()
           .map((id) => ({
             id,
             email: byId.get(id)?.email ?? null,
@@ -152,7 +152,7 @@ export async function listAbuseSignals(db: D1Database, now = new Date()): Promis
           : null,
       };
     })
-    .sort(
+    .toSorted(
       (a, b) =>
         Number(!a.current) - Number(!b.current)
         || Number(a.review !== null) - Number(b.review !== null)

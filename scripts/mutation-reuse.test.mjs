@@ -572,7 +572,7 @@ describe("parti della mutation della PR riusate fra run", () => {
       file("test/g.spec.ts", "@@ -1 +1 @@\n+export {};", 0, "renamed"),
       file("test/fixtures/h.ts", "@@ -1 +1 @@\n+export {};"),
     ]);
-    assert.deepEqual([...added].sort(), ["test/a.spec.ts", "test/b.unit.ts"]);
+    assert.deepEqual([...added].toSorted(), ["test/a.spec.ts", "test/b.unit.ts"]);
   });
 
   it("una prova cambiata soltanto con prove aggiunte lascia valida la prova del modulo", async () => {

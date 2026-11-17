@@ -68,7 +68,7 @@ export async function listNotifications(
       at: failing
         .filter((store) => store.ebayEnvironment === environment)
         .map((store) => store.recent[1]!.at)
-        .sort()[0]!,
+        .toSorted()[0]!,
       read: false,
     })),
     ...failing
@@ -87,7 +87,7 @@ export async function listNotifications(
   // La pausa per inattività del Free ferma tutti i negozi dello spazio: una sola notifica.
   const inactiveSince = stores
     .flatMap((store) => (store.inactiveSince ? [store.inactiveSince] : []))
-    .sort()[0];
+    .toSorted()[0];
   const inactivity: NotificationView[] = inactiveSince
     ? [
         {
@@ -150,5 +150,5 @@ export async function listNotifications(
   return items
     .filter((item) => !dismissed.has(item.id))
     .map((item) => ({ ...item, read: read.has(item.id) }))
-    .sort((a, b) => b.at.localeCompare(a.at));
+    .toSorted((a, b) => b.at.localeCompare(a.at));
 }

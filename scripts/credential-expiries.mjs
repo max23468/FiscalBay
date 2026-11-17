@@ -62,7 +62,7 @@ export function declaredSecrets(mode) {
       .map(([name]) => name),
     ...optionalSecrets,
     ...(live ? [] : sandboxSecrets),
-  ].sort();
+  ].toSorted();
 }
 
 const validDate = (value) =>

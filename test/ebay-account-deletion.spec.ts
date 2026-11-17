@@ -420,10 +420,12 @@ it("con la pulizia sospesa elenco, ricerca, dettaglio, suggerimenti ed export ne
     for await (const page of exportOrderPages(env.DB, user, "production", when, { criteria: {} }))
       exported.push(...page.map((order) => order.id));
     return {
-      list: (await listVisibleOrders(env.DB, user, 50, "production", when)).map((o) => o.id).sort(),
+      list: (await listVisibleOrders(env.DB, user, 50, "production", when))
+        .map((o) => o.id)
+        .toSorted(),
       search: (await searchVisibleOrders(env.DB, user, "production", when, ["mario"])).items
         .map((o) => o.id)
-        .sort(),
+        .toSorted(),
       detail: [
         (await visibleOrderState(env.DB, user, "production", "o-buyer", when)) !== null,
         (await visibleOrderState(env.DB, user, "production", "o-namesake", when)) !== null,
@@ -432,7 +434,7 @@ it("con la pulizia sospesa elenco, ricerca, dettaglio, suggerimenti ed export ne
         (await orderSuggestions(env.DB, user, ["o-buyer"], "production", when))
           .get("o-buyer")
           ?.suggestions.map((suggestion) => suggestion.sourceOrder) ?? [],
-      exported: exported.sort(),
+      exported: exported.toSorted(),
     };
   };
   const all = ["o-buyer", "o-buyer-first", "o-buyer-old", "o-namesake"];

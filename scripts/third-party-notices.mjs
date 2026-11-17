@@ -36,7 +36,7 @@ export function readPackage(root) {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
   const texts = readdirSync(root)
     .filter((name) => licenseFile.test(name))
-    .sort()
+    .toSorted()
     .map((name) => readFileSync(path.join(root, name), "utf8").trim());
   return {
     name: manifest.name,
@@ -88,7 +88,7 @@ export function unpermittedLicenses(packages) {
  */
 export function formatNotices(packages) {
   const sections = [...packages]
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .toSorted((a, b) => a.name.localeCompare(b.name))
     .map(({ name, version, license, texts }) =>
       [
         `${name} ${version}`,

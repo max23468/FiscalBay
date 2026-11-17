@@ -81,7 +81,7 @@ describe("negozio attivo del Free e downgrade", () => {
   const visible = async (userId: string, at: number) =>
     (await listVisibleOrders(env.DB, userId, 50, "production", new Date(at)))
       .map((order) => order.id)
-      .sort();
+      .toSorted();
   const changes = async () =>
     (
       await env.DB.prepare(

@@ -582,7 +582,7 @@ describe("criteri dell'elenco dell'anteprima", () => {
   const listed = (query: string, plan: "free" | "premium") =>
     previewListing(orders, [], new URLSearchParams(query), null, scenario.now, plan)
       .filtered.map(({ id }) => id)
-      .sort();
+      .toSorted();
   /** Gli stessi criteri dell'area reale, applicati in memoria come fa la query D1. */
   const expected = (query: string, plan: "free" | "premium") => {
     const criteria = orderCriteria(new URLSearchParams(query), new Date(scenario.now), plan);
@@ -594,7 +594,7 @@ describe("criteri dell'elenco dell'anteprima", () => {
           && (!criteria.payment || order.payment.status === criteria.payment),
       )
       .map(({ id }) => id)
-      .sort();
+      .toSorted();
   };
 
   it("legge l'indirizzo con orderCriteria, come l'area reale", () => {

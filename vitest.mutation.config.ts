@@ -24,7 +24,9 @@ class SelectionOrder extends BaseSequencer {
   override sort(specs: TestSpecification[]) {
     const position = ({ moduleId }: TestSpecification) =>
       files.indexOf(relative(process.cwd(), moduleId));
-    return Promise.resolve([...specs].sort((first, second) => position(first) - position(second)));
+    return Promise.resolve(
+      [...specs].toSorted((first, second) => position(first) - position(second)),
+    );
   }
 }
 

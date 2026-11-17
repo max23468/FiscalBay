@@ -93,7 +93,7 @@ export function ebayOutage(stores: StoreStatus[]): { lastSyncAt: string | null }
   const active = stores.filter((store) => store.connection === "active");
   if (active.length === 0 || !active.every(readsFailing)) return null;
   const synced = active.flatMap((store) => (store.lastSyncAt ? [store.lastSyncAt] : []));
-  return { lastSyncAt: synced.sort().at(-1) ?? null };
+  return { lastSyncAt: synced.toSorted().at(-1) ?? null };
 }
 
 /** Indisponibilità di eBay per ambiente: Production e Sandbox rispondono ciascuno per sé. */
@@ -216,7 +216,7 @@ export async function listStoreScopes(
 
 /** Ragioni di pausa di un negozio dall'elenco concatenato della sua riga, in ordine alfabetico. */
 const pauseReasonsOf = (pauses: string | null) =>
-  (pauses?.split(",").sort() ?? []) as PauseReason[];
+  (pauses?.split(",").toSorted() ?? []) as PauseReason[];
 
 /** Negozi di uno spazio per la console amministrativa, con lo stesso stato mostrato al venditore. */
 export function listWorkspaceStores(db: D1Database, workspaceId: string, now = new Date()) {

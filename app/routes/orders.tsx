@@ -182,7 +182,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
   const latest =
     linked
       .filter((store) => store.lastSyncAt !== null)
-      .sort((a, b) => a.lastSyncAt!.localeCompare(b.lastSyncAt!))
+      .toSorted((a, b) => a.lastSyncAt!.localeCompare(b.lastSyncAt!))
       .at(-1) ?? linked[0];
   const lastSync = latest?.lastSyncAt ?? undefined;
   const [orders, total, incoming, facets, detailOrders, marketing] = await Promise.all([

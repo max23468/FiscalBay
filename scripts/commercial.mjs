@@ -65,7 +65,7 @@ export function configurationChecks({ promotions, quotas, admission, seats, now 
     const base =
       quotas
         .filter(({ effective_at }) => Date.parse(effective_at) <= until)
-        .sort((a, b) => Date.parse(a.effective_at) - Date.parse(b.effective_at) || a.id - b.id)
+        .toSorted((a, b) => Date.parse(a.effective_at) - Date.parse(b.effective_at) || a.id - b.id)
         .at(-1)?.quota ?? baseFreeQuota;
     record("quota base dopo la promozione", base === baseFreeQuota ? [] : ["quota"]);
   }
@@ -259,7 +259,7 @@ export function methodChanges(subscriptions, invoices, charges) {
           (line) => line.parent.subscription_item_details?.subscription === subscription.id,
         ),
       )
-      .sort((a, b) => a.status_transitions.paid_at - b.status_transitions.paid_at)
+      .toSorted((a, b) => a.status_transitions.paid_at - b.status_transitions.paid_at)
       .map((invoice) => methodOf.get(invoicePayment(invoice)))
       .filter(Boolean);
     if (!paid.length || paid[0] === method) continue;

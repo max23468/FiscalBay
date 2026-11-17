@@ -106,7 +106,7 @@ export function publicationRecord(
     const active = receiptActive(receipt, version);
     return active ? { ...receipt, active, artifact: artifact.id, run: run.id } : undefined;
   };
-  for (const artifact of named.sort((a, b) => b.id - a.id)) {
+  for (const artifact of named.toSorted((a, b) => b.id - a.id)) {
     const record = inspect(artifact);
     if (record) return record;
   }
@@ -121,7 +121,7 @@ export function publicationRecord(
       ).artifacts;
       for (const artifact of artifacts
         .filter((entry) => entry.name.startsWith("release-receipt-"))
-        .sort((a, b) => b.id - a.id)) {
+        .toSorted((a, b) => b.id - a.id)) {
         const record = inspect(
           {
             ...artifact,
@@ -148,11 +148,11 @@ export function publicationRecord(
         api(`repos/${repository}/actions/workflows/${workflow}/runs?branch=main&per_page=20`)
           .workflow_runs,
     )
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    .toSorted((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   for (const run of runs) {
     const [artifact] = api(`repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`)
       .artifacts.filter((entry) => entry.name.startsWith("production-state-"))
-      .sort((a, b) => b.id - a.id);
+      .toSorted((a, b) => b.id - a.id);
     if (!artifact) continue;
     const receipt = valid(artifact) ? download(repository, artifact) : undefined;
     const active =

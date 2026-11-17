@@ -395,7 +395,7 @@ it("con Pro i periodi di 6 e 12 mesi seguono quelli degli Ordini", async () => {
     .bind(hours(-24 * 240), hours(24 * 125))
     .run();
   const ids = async (period: string) =>
-    (await csv(await request("", { period }))).rows.map((row) => row["Numero ordine"]).sort();
+    (await csv(await request("", { period }))).rows.map((row) => row["Numero ordine"]).toSorted();
   expect(await ids("6m")).toEqual(["ebay-a", "ebay-c", "ebay-d"]);
   expect(await ids("12m")).toEqual(["ebay-8m", "ebay-a", "ebay-c", "ebay-d"]);
 });

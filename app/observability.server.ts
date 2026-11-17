@@ -40,7 +40,7 @@ type Scope = {
 function coveredMs(intervals: Interval[]) {
   let total = 0;
   let end = -Infinity;
-  for (const [from, to] of [...intervals].sort((a, b) => a[0] - b[0])) {
+  for (const [from, to] of [...intervals].toSorted((a, b) => a[0] - b[0])) {
     if (to <= end) continue;
     total += to - Math.max(from, end);
     end = to;

@@ -101,7 +101,7 @@ export const ebay = (
     const key = field === "creationdate" ? "creationDate" : "lastModifiedDate";
     const matching = orders
       .filter((item) => item[key] >= from! && item[key] <= to!)
-      .sort((a, b) => b.creationDate.localeCompare(a.creationDate));
+      .toSorted((a, b) => b.creationDate.localeCompare(a.creationDate));
     const limit = Math.min(Number(url.searchParams.get("limit")), options.pageLimit ?? Infinity);
     const offset = Number(url.searchParams.get("offset") ?? 0);
     const next = new URL(url);

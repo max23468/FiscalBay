@@ -351,7 +351,7 @@ describe("interruttori e ammissione", () => {
 
     const anomaly = (await listAnomalies(env.DB)).find((a) => a.kind === "service_off");
     expect(anomaly).toMatchObject({ severity: "p2", count: 3 });
-    expect(anomaly!.subjects.map((subject) => subject.id).sort()).toEqual([
+    expect(anomaly!.subjects.map((subject) => subject.id).toSorted()).toEqual([
       "ebay_calls",
       "purchases_open",
       "telegram_sends",

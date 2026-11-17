@@ -183,8 +183,8 @@ const readPullRequest = (repository, number) =>
 /** Esito dell'ultima esecuzione del controllo richiesto `Node 26`. */
 export function requiredPassed(checkRuns) {
   return (
-    checkRuns.filter((check) => check.name === "Node 26").sort((a, b) => b.id - a.id)[0]?.conclusion
-    === "success"
+    checkRuns.filter((check) => check.name === "Node 26").toSorted((a, b) => b.id - a.id)[0]
+      ?.conclusion === "success"
   );
 }
 
@@ -543,7 +543,7 @@ function headCiRun(repository, pr) {
     "databaseId,headSha,event,status,createdAt",
   )
     .filter((entry) => entry.headSha === pr.headRefOid && entry.event === "pull_request")
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    .toSorted((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return { run, jobs: run ? runJobs(repository, run.databaseId) : [] };
 }
 
@@ -567,7 +567,7 @@ export function runTimings(run, jobs, now = Date.now()) {
       Math.min(end, job.completed_at ? Date.parse(job.completed_at) : end),
     ])
     .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && b >= a)
-    .sort(([a], [b]) => a - b);
+    .toSorted(([a], [b]) => a - b);
   let active = 0;
   let until = start;
   for (const [a, b] of intervals) {
@@ -756,7 +756,7 @@ export function expectedRun(runs, sha, events, since, cancelled = new Set(), onl
         && Date.parse(item.createdAt) >= since
         && !cancelled.has(item.databaseId),
     )
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+    .toSorted((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
 }
 
 async function waitRun(
@@ -1140,7 +1140,7 @@ export function promotionMetrics(runs, receipts = [], jobs = new Map()) {
   }));
   const successful = rows.filter(({ conclusion }) => conclusion === "success");
   const done = successful.filter((row) => row.confirmed);
-  const sorted = successful.map(({ minutes }) => minutes).sort((a, b) => a - b);
+  const sorted = successful.map(({ minutes }) => minutes).toSorted((a, b) => a - b);
   return {
     rows,
     runs: rows.length,
@@ -1773,7 +1773,7 @@ export function candidateRun(runs, sha, since) {
         && run.event === "workflow_dispatch"
         && Date.parse(run.createdAt) >= since,
     )
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+    .toSorted((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
 }
 
 /**
@@ -2114,7 +2114,7 @@ function metricsCycle({ repository }) {
       "api",
       `repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`,
     );
-    const ordered = artifacts.filter((entry) => !entry.expired).sort((a, b) => b.id - a.id);
+    const ordered = artifacts.filter((entry) => !entry.expired).toSorted((a, b) => b.id - a.id);
     const artifact =
       ordered.find((entry) => entry.name.startsWith("production-state-"))
       ?? ordered.find((entry) => entry.name.startsWith("release-receipt-"));

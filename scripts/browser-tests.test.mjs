@@ -135,7 +135,7 @@ describe("prove browser divise fra macchine", () => {
     visit(JSON.parse(result.stdout));
     assert.ok(scenarios.size > 0);
     for (const [scenario, projects] of scenarios)
-      assert.deepEqual([...projects].sort(), ["chromium", "webkit"], scenario);
+      assert.deepEqual([...projects].toSorted(), ["chromium", "webkit"], scenario);
   });
 
   it("motiva come non applicabili le esclusioni possibili nella qualifica locale", () => {

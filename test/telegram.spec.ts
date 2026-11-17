@@ -655,7 +655,7 @@ describe("riepiloghi lunghi", () => {
       expect(notices.size).toBe(301);
       expect(reads).toHaveBeenCalledTimes(2);
       expect(reads.mock.calls.map((args) => args[5]!.ids!.length)).toEqual([300, 1]);
-      expect(reads.mock.calls.flatMap((args) => args[5]!.ids!).sort()).toEqual(ids.sort());
+      expect(reads.mock.calls.flatMap((args) => args[5]!.ids!).toSorted()).toEqual(ids.toSorted());
     } finally {
       reads.mockRestore();
     }

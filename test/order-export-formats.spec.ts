@@ -276,7 +276,7 @@ describe("colonne scelte e file XLSX", () => {
       await new Response(exportXlsxStream(pages(), "item", it_, "Europe/Rome", at)).arrayBuffer(),
     );
     const parts = unzipSync(bytes);
-    expect(Object.keys(parts).sort()).toEqual([
+    expect(Object.keys(parts).toSorted()).toEqual([
       "[Content_Types].xml",
       "_rels/.rels",
       "xl/_rels/workbook.xml.rels",

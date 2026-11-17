@@ -141,7 +141,7 @@ export function taxQuality(
     }
     comparable = true;
     if (
-      [parts, [...parts].reverse()].some(
+      [parts, [...parts].toReversed()].some(
         ([surname, given]) =>
           nameCode(surname!, false) + nameCode(given!, true) === value.slice(0, 6),
       )

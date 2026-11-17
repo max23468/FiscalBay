@@ -464,7 +464,7 @@ it("la ripresa manuale riaccoda al massimo 25 ricevute ferme del solo provider r
   )
     .bind(at)
     .all<{ id: string }>();
-  expect(results.map(({ id }) => id)).toEqual([...pending, "recent-queue"].sort());
+  expect(results.map(({ id }) => id)).toEqual([...pending, "recent-queue"].toSorted());
 });
 
 it("il consumer importa solo l'ordine del negozio verificato e non ripete gli effetti", async () => {

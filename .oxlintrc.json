@@ -1,7 +1,12 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "import"],
-  "rules": { "import/no-cycle": "error", "import/no-duplicates": "error" },
+  "rules": {
+    "import/no-cycle": "error",
+    "import/no-duplicates": "error",
+    "unicorn/no-array-reverse": "error",
+    "unicorn/no-array-sort": "error"
+  },
   "overrides": [
     {
       "files": ["scripts/**/*.mjs"],

@@ -116,7 +116,7 @@ export function previewListing(
   const arrival = new Date(new Date(now).getTime() + arrivalDelay);
   const snapshot = snapshotInstant(search.get(snapshotParam)) ?? new Date(now);
   const arrived = snapshot >= arrival;
-  const filtered = matching(arrived ? [...orders, ...incoming] : orders).sort(newestFirst);
+  const filtered = matching(arrived ? [...orders, ...incoming] : orders).toSorted(newestFirst);
   const waiting = arrived ? [] : matching(incoming);
   return {
     filtered,
@@ -142,5 +142,5 @@ export function previewTally(orders: OrderView[]): OrderTally {
 /** Ordini della ricerca della barra superiore, dal più recente, come «Vedi tutti». */
 export function previewSearchMatches(orders: OrderView[], query: string) {
   const tokens = searchTokens(query);
-  return orders.filter((order) => matchesSearch(order, tokens)).sort(newestFirst);
+  return orders.filter((order) => matchesSearch(order, tokens)).toSorted(newestFirst);
 }

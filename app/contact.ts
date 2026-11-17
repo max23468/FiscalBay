@@ -45,7 +45,9 @@ const callingCodes: Record<string, string> = {
   AU: "61",
 };
 
-const knownCodes = [...new Set(Object.values(callingCodes))].sort((a, b) => b.length - a.length);
+const knownCodes = [...new Set(Object.values(callingCodes))].toSorted(
+  (a, b) => b.length - a.length,
+);
 
 /** In Italia, San Marino e Vaticano lo zero iniziale fa parte del numero. */
 const keepsLeadingZero = new Set(["39", "378"]);

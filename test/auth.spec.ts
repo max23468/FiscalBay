@@ -939,8 +939,8 @@ describe("Better Auth su Workers e D1", () => {
       }),
     );
     const authorize = new URL((await start.json<{ url: string }>()).url);
-    expect(authorize.searchParams.get("scope")?.split(" ").sort()).toEqual(
-      [...ebayStoreScopes].sort(),
+    expect(authorize.searchParams.get("scope")?.split(" ").toSorted()).toEqual(
+      [...ebayStoreScopes].toSorted(),
     );
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = input instanceof Request ? input.url : String(input);

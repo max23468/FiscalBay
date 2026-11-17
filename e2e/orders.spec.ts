@@ -622,7 +622,7 @@ test.describe("area reale", () => {
       );
       expect(rows[0]).toEqual([other, it ? "Numero ordine" : "Order number"]);
       // Con Premium ogni ordine ha il suo dato, come testo.
-      expect(rows.slice(1).sort()).toEqual(
+      expect(rows.slice(1).toSorted()).toEqual(
         ["", "-2", "-3", "-4"].map((suffix) => [
           `VAT_ID: VALORE-SINTETICO-${language}${suffix}`,
           `${id}${suffix}`,

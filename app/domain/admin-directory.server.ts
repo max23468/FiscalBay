@@ -370,7 +370,7 @@ export async function listAllStores(
         disconnected: row.disconnected === 1,
         removed: row.removed === 1,
         syncing: row.syncing === 1,
-        pauses: row.pauses?.split(",").sort() ?? [],
+        pauses: row.pauses?.split(",").toSorted() ?? [],
       })),
     more: results.length > adminPageSize,
   };

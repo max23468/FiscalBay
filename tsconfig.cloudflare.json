@@ -12,7 +12,7 @@
   ],
   "compilerOptions": {
     "composite": true,
-    "lib": ["DOM", "DOM.Iterable", "ES2022", "ES2023.Intl"],
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
     "types": ["vite/client"],
     "target": "ES2022",
     "module": "ES2022",

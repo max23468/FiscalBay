@@ -620,8 +620,8 @@ describe("registrazione e verifica del contatto", () => {
     ).toEqual({ ok: true, notice: "Termini accettati." });
     expect(await notifications()).not.toContain(invitation);
     const { terms, marketing } = await agreements(userId);
-    expect(terms.map((row) => row.terms_version).sort()).toEqual(
-      ["bozza-precedente", legalVersions.terms].sort(),
+    expect(terms.map((row) => row.terms_version).toSorted()).toEqual(
+      ["bozza-precedente", legalVersions.terms].toSorted(),
     );
     expect(marketing).toEqual([
       { granted: 1, text_version: marketingTextVersions.settings, language: "it" },

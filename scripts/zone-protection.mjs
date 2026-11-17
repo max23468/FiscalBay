@@ -375,7 +375,7 @@ export function checkReadback(target, state) {
   const mx = (state.dns ?? [])
     .filter((record) => record.type === "MX" && record.name === target.zone)
     .map((record) => record.content)
-    .sort();
+    .toSorted();
   const hsts = state.settings?.security_header?.strict_transport_security ?? {};
   const responses = state.responses ?? {};
   const [host] = target.hosts;

@@ -135,8 +135,8 @@ export async function checkBot(request, target) {
     {
       item: "webhook: messaggi e pulsanti",
       ok:
-        JSON.stringify([...allowedUpdates].sort())
-        === JSON.stringify([...(webhook?.allowed_updates ?? [])].sort()),
+        JSON.stringify([...allowedUpdates].toSorted())
+        === JSON.stringify([...(webhook?.allowed_updates ?? [])].toSorted()),
     },
     {
       item: "webhook: nessun errore recente",

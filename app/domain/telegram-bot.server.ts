@@ -496,7 +496,7 @@ async function latestMessage(env: Env, link: Link, offset: number, now: Date): P
   );
   const listed = perStore
     .flat()
-    .sort((a, b) =>
+    .toSorted((a, b) =>
       b.order.creationTime === a.order.creationTime
         ? b.order.id.localeCompare(a.order.id)
         : b.order.creationTime.localeCompare(a.order.creationTime),

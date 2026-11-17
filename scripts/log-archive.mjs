@@ -147,7 +147,7 @@ function sameJson(a, b) {
 }
 
 const sameList = (a, b) =>
-  Array.isArray(a) && Array.isArray(b) && [...a].sort().join() === [...b].sort().join();
+  Array.isArray(a) && Array.isArray(b) && [...a].toSorted().join() === [...b].toSorted().join();
 
 /**
  * Controlli del readback: bucket UE senza accesso pubblico con la sola regola a 90 giorni, un solo
@@ -266,7 +266,7 @@ export function recordProblems(record, worker) {
 
 const increment = (counts, key) => counts.set(key, (counts.get(key) ?? 0) + 1);
 const sorted = (counts) =>
-  Object.fromEntries([...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])));
+  Object.fromEntries([...counts].toSorted((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])));
 
 /** Esito della verifica: conteggi, mai il contenuto dei messaggi. */
 export function verifyRecords(records, worker) {
@@ -339,7 +339,7 @@ export function correlationTrail(records, id) {
         Object.fromEntries(Object.entries(event).filter(([key]) => key !== "correlationId")),
       ),
     }))
-    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    .toSorted((a, b) => String(a.at).localeCompare(String(b.at)));
 }
 
 /** Prefissi giornalieri UTC degli ultimi `days` giorni, dal più recente. */
@@ -482,7 +482,7 @@ async function main() {
     // L'oggetto più recente degli ultimi due giorni: le chiavi iniziano con l'istante.
     const key = dayPrefixes(2)
       .flatMap((prefix) => listObjects(target, prefix))
-      .sort()
+      .toSorted()
       .at(-1);
     if (!key) throw new Error("Nessun oggetto esportato negli ultimi due giorni.");
     const result = { object: key, ...verifyRecords(readObject(target, key), target.worker) };

@@ -74,7 +74,7 @@ describe("negozi con problemi", () => {
       insertStore({ id: "s-senza-consenso" }),
     ]);
     const { rows } = await listAllStores(env.DB, { problems: true }, at(now));
-    expect(rows.map((row) => row.id).sort()).toEqual(["s-dettagli", "s-senza-consenso"]);
+    expect(rows.map((row) => row.id).toSorted()).toEqual(["s-dettagli", "s-senza-consenso"]);
     expect((await consoleSummary(env.DB, at(now))).stores).toEqual({ active: 2, problems: 2 });
   });
 });
@@ -318,7 +318,7 @@ describe("trasferimento assistito di un negozio", () => {
       confirmStoreTransfer(env, { id: first.id, actor: "admin" }, at(now)),
       confirmStoreTransfer(env, { id: second.id, actor: "admin" }, at(later(1))),
     ]);
-    expect(results.map(({ result }) => result).sort()).toEqual(["conflict", "done"]);
+    expect(results.map(({ result }) => result).toSorted()).toEqual(["conflict", "done"]);
     expect(
       await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM store_transfers WHERE executed_at IS NOT NULL",
@@ -344,7 +344,7 @@ describe("trasferimento assistito di un negozio", () => {
       confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now)),
       confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(later(1))),
     ]);
-    expect(results.map(({ result }) => result).sort()).toEqual(["already", "done"]);
+    expect(results.map(({ result }) => result).toSorted()).toEqual(["already", "done"]);
     expect(
       await env.DB.prepare("SELECT workspace_id FROM ebay_stores WHERE id = 's-a'").first(),
     ).toEqual({ workspace_id: "w-b" });
@@ -362,7 +362,7 @@ describe("trasferimento assistito di un negozio", () => {
       confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now)),
       confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now)),
     ]);
-    expect(results.map(({ result }) => result).sort()).toEqual(["already", "done"]);
+    expect(results.map(({ result }) => result).toSorted()).toEqual(["already", "done"]);
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM store_identity_marks").first()).toEqual({
       n: 0,
     });
@@ -476,7 +476,7 @@ describe("trasferimento assistito di un negozio", () => {
       cycle: { id: "c-b", used: 3 },
       remaining: 2,
     });
-    expect((await listStores(env.DB, buyer.userId)).map((store) => store.id).sort()).toEqual([
+    expect((await listStores(env.DB, buyer.userId)).map((store) => store.id).toSorted()).toEqual([
       "s-a",
       "s-b",
     ]);

@@ -25,7 +25,7 @@ export function shardTests(listing, current, total) {
   const digest = (test) => createHash("sha256").update(test).digest("hex");
   return tests
     .map((test) => [digest(test), test])
-    .sort(([a], [b]) => a.localeCompare(b))
+    .toSorted(([a], [b]) => a.localeCompare(b))
     .filter((_, index) => index % total === current - 1)
     .map(([, test]) => test);
 }
@@ -83,7 +83,7 @@ export async function browserProof(
   );
   const ordered = runs
     .filter((run) => run.head_repository?.id === repositoryId && String(run.id) !== String(exclude))
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    .toSorted((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   for (const run of ordered) {
     const outcome = browserOutcome(await latestRunJobs(repository, run.id, api));
     if (outcome === "failed") return null;
@@ -98,7 +98,7 @@ export async function browserProof(
 /** Impronta dell'inventario selezionato: prove, browser e filtri. */
 const inventoryKey = (ids, selection) =>
   createHash("sha256")
-    .update(JSON.stringify({ ids: [...ids].sort(), selection }))
+    .update(JSON.stringify({ ids: [...ids].toSorted(), selection }))
     .digest("hex");
 
 /** File con l'impronta dell'inventario della run, conservato come artefatto `browser-plan-<run>`. */

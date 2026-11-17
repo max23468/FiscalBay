@@ -123,7 +123,7 @@ export async function fiscalKey(notice: Pick<OrderNotice, "values">): Promise<st
     .map((value) =>
       JSON.stringify([value.kind === "PIVA" ? "CF" : value.kind, value.label, value.value]),
     )
-    .sort();
+    .toSorted();
   return fiscalDigest(`[${entries.join(",")}]`);
 }
 

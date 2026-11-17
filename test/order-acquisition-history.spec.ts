@@ -820,7 +820,7 @@ it("il lavoro periodico accoda ogni negozio dovuto, con un budget ciascuno, isol
     // prima lettura del profilo del negozio, fuori budget.
     expect(perStore(fetcher)).toEqual({ "token-s-a": 14, "token-s-c": 1, "token-s-d": 14 });
     expect(logged()).toBe(2);
-    expect(errors.mock.calls.map(([line]) => JSON.parse(String(line)).failure).sort()).toEqual([
+    expect(errors.mock.calls.map(([line]) => JSON.parse(String(line)).failure).toSorted()).toEqual([
       "credentials",
       "credentials",
     ]);
@@ -842,7 +842,7 @@ it("il lavoro periodico accoda ogni negozio dovuto, con un budget ciascuno, isol
     await insertStorePause({ storeId: "s-c" }).run();
     const later = ebay({ orders: [] });
     await cronTurn(env, later, new Date("2026-09-02T01:00:00.000Z"));
-    expect(Object.keys(perStore(later)).sort()).toEqual(["token-s-a", "token-s-d"]);
+    expect(Object.keys(perStore(later)).toSorted()).toEqual(["token-s-a", "token-s-d"]);
     expect(await attempted()).toMatchObject({ "s-b": null, "s-d": "2026-09-02T01:00:00.000Z" });
     expect(logged()).toBe(2);
     const expiring = ebay();

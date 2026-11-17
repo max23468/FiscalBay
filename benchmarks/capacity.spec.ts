@@ -98,7 +98,7 @@ async function metered<T>(
   try {
     const value = await run();
     const heaviest = [...bySql.values()]
-      .sort((a, b) => b.rowsRead + b.rowsWritten - (a.rowsRead + a.rowsWritten))
+      .toSorted((a, b) => b.rowsRead + b.rowsWritten - (a.rowsRead + a.rowsWritten))
       .slice(0, 5);
     return { value, cost, heaviest };
   } finally {

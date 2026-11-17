@@ -52,7 +52,11 @@ function taxCells(order: VisibleOrder) {
         `${tax.type}${tax.issuingCountry ? ` (${tax.issuingCountry})` : ""}: ${tax.value}`,
       );
   }
-  return { cf: joined(cf.sort()), vat: joined(vat.sort()), other: joined(other.sort()) };
+  return {
+    cf: joined(cf.toSorted()),
+    vat: joined(vat.toSorted()),
+    other: joined(other.toSorted()),
+  };
 }
 
 /**

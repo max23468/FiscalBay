@@ -117,7 +117,7 @@ function previewRecords(
 function previewSample(orders: OrderView[], t: AppCopy, timeZone: string): ExportSample {
   const sample = (chosen: OrderView[]): ExportSampleOrder[] =>
     [...chosen]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, exportSampleSize)
       .map((order) => ({
         createdAt: order.createdAt,

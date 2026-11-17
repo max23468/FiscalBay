@@ -161,7 +161,7 @@ async function runPass(ctx: Context, pass: Pass): Promise<boolean> {
       const sample = page.orders
         .map((order) => Math.abs(Date.parse(String(pass.key(order))) - near))
         .filter((distance) => Number.isFinite(distance))
-        .sort((a, b) => a - b);
+        .toSorted((a, b) => a - b);
       const bound = sample[Math.floor((sample.length * capacity * 0.8) / page.total)];
       width = Math.max(
         minimumSliceMilliseconds,
@@ -322,7 +322,7 @@ function recentPass(ctx: Context, state: SyncRow): Pass {
   const resumed = state.recent_end !== null;
   const end = resumed ? state.recent_end! : ctx.at;
   // Un orologio indietro rispetto al limite già applicato non produce un intervallo vuoto.
-  const [checkpoint] = [state.cursor, end].sort();
+  const [checkpoint] = [state.cursor, end].toSorted();
   const from = resumed ? checkpoint! : instant(Date.parse(checkpoint!) - overlapMilliseconds);
   return {
     from,

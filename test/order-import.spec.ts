@@ -567,7 +567,7 @@ it("consolida più acquisti, conserva grant e quota anche al replay e con righe 
     ).toMatchObject({ orderId, outcome: "unchanged" });
   }
   expect(await listVisibleOrders(env.DB, "u-a")).toHaveLength(1);
-  expect(visible[0]!.summary.lineItems.map((item) => item.lineItemId).sort()).toEqual([
+  expect(visible[0]!.summary.lineItems.map((item) => item.lineItemId).toSorted()).toEqual([
     "riga-k1",
     "riga-k2",
   ]);
@@ -699,7 +699,7 @@ it("ricollega al definitivo gli ordini già uniti a un provvisorio assorbito", a
     [
       { id: absorbed, merged_into: kept },
       { id: child, merged_into: kept },
-    ].sort((a, b) => a.id.localeCompare(b.id)),
+    ].toSorted((a, b) => a.id.localeCompare(b.id)),
   );
 });
 

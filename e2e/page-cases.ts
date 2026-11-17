@@ -97,7 +97,7 @@ const shownReleases = parseChangelog(
       existsSync(changesDirectory)
         ? readdirSync(changesDirectory)
             .filter((name) => name.endsWith(".md"))
-            .sort()
+            .toSorted()
             .map((name) => readFileSync(new URL(name, changesDirectory), "utf8"))
         : [],
     ),

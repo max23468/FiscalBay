@@ -91,7 +91,7 @@ export function interactionToNextPaint(durations: Iterable<number>) {
 
 /** Interazione che dà l'INP, con la stessa regola di `interactionToNextPaint`. */
 export function inpInteraction<T extends { duration: number }>(entries: Iterable<T>) {
-  const slowest = [...entries].sort((a, b) => b.duration - a.duration);
+  const slowest = [...entries].toSorted((a, b) => b.duration - a.duration);
   return slowest[Math.min(Math.floor(slowest.length / 50), slowest.length - 1)];
 }
 

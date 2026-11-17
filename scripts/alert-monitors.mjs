@@ -129,11 +129,11 @@ const comparable = ({ name, description, enabled, alert_type, mechanisms, filter
   description,
   enabled,
   alert_type,
-  emails: (mechanisms?.email ?? []).map(({ id }) => id).sort(),
+  emails: (mechanisms?.email ?? []).map(({ id }) => id).toSorted(),
   filters: Object.fromEntries(
     Object.entries(filters ?? {})
       .filter(([key]) => !key.startsWith("alert_trigger_preferences_long"))
-      .sort(([a], [b]) => a.localeCompare(b)),
+      .toSorted(([a], [b]) => a.localeCompare(b)),
   ),
 });
 

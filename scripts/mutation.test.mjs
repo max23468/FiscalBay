@@ -475,7 +475,10 @@ describe("esito dei mutation test", () => {
         [3, "Survived"],
       ],
     );
-    assert.deepEqual(Object.keys(merged.testFiles).sort(), ["test/a.spec.ts", "test/b.spec.ts"]);
+    assert.deepEqual(Object.keys(merged.testFiles).toSorted(), [
+      "test/a.spec.ts",
+      "test/b.spec.ts",
+    ]);
     assert.equal(mergeReports([]), undefined);
   });
 

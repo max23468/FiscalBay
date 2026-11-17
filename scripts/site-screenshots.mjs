@@ -370,7 +370,7 @@ const shotVersion = (name, language) => {
   const variant = new RegExp(`^${name}-${language}-(?:light|dark)(?:-\\d+)?\\.\\w+$`, "u");
   for (const file of readdirSync(output)
     .filter((file) => variant.test(file))
-    .sort())
+    .toSorted())
     hash.update(file).update(readFileSync(path.join(output, file)));
   return hash.digest("hex").slice(0, 10);
 };
