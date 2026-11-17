@@ -1,8 +1,9 @@
 /**
- * D1 locale sullo stato che usano anche `vite dev` e `vite preview`. Temporaneo: `cf --local`
- * stampa l'esito ma non termina (cloudflare/cf#64, cloudflare/cf#25), quindi qui resta Wrangler,
- * con una configurazione minima ricavata da `cloudflare.config.ts`. Da rimuovere quando `cf d1 ...
- * --local` termina da solo.
+ * D1 locale sullo stato che usano anche `vite dev` e `vite preview`. Temporaneo: in locale `cf d1
+ * query` non esiste e `cf d1 raw` esegue il testo come una sola istruzione, che con gli account
+ * sintetici supera il limite di SQLite. Qui resta quindi Wrangler, che divide il file in
+ * istruzioni, con una configurazione minima ricavata da `cloudflare.config.ts`. Da rimuovere quando
+ * `cf` esegue in locale un file SQL di più istruzioni.
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -25,7 +26,7 @@ function wrangler(args) {
     config,
     JSON.stringify({
       name: "fiscalbay-test",
-      compatibility_date: "2026-11-10",
+      compatibility_date: "2026-11-17",
       d1_databases: [
         {
           binding: "DB",

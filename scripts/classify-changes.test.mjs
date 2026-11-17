@@ -884,6 +884,7 @@ describe("esecuzione del classificatore", () => {
         "release/records.mjs",
         "lib/provider.mjs",
         "lib/critical-modules.mjs",
+        "lib/build-output.mjs",
       ])
         cpSync(path.join("scripts", file), path.join(repo, "scripts", file));
       mkdirSync(path.join(repo, "app"));
