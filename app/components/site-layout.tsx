@@ -3,12 +3,14 @@ import { useRouteLoaderData } from "react-router";
 
 import { useCopy } from "~/components/copy-context";
 import { LanguageSwitch } from "~/components/language-switch";
+import { useScriptNonce } from "~/components/script-nonce";
 import { siteColumn } from "~/components/site-column";
 import { SiteFooter } from "~/components/site-footer";
 import { mainContentId, SkipLink } from "~/components/skip-link";
 import { SourceLinks } from "~/components/source-links";
 import { Logo } from "~/components/standalone-page";
 import { buttonLink } from "~/components/ui/button-variants";
+
 import {
   accessPath,
   faqPath,
@@ -18,7 +20,6 @@ import {
   siteSecurityPath,
   visitParam,
 } from "../app-links";
-import { useScriptNonce } from "~/components/script-nonce";
 import { localizedPath } from "../i18n";
 import { speculationRules } from "../speculation-rules";
 import { webAnalyticsBeacon, webAnalyticsScript } from "../web-analytics";
@@ -115,7 +116,7 @@ function NavLinks({ path, className }: { path: string; className: string }) {
             aria-current={
               path === item.path || path.startsWith(`${item.path}/`) ? "page" : undefined
             }
-            className="inline-flex min-h-11 items-center rounded-md px-2.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:font-medium aria-[current=page]:text-foreground max-lg:rounded-none max-lg:border-b-2 max-lg:border-transparent max-lg:px-0 max-lg:aria-[current=page]:border-primary lg:min-h-0 lg:py-1.5"
+            className="inline-flex min-h-11 items-center rounded-md px-2.5 text-muted-foreground transition-colors duration-(--duration-quick) outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:font-medium aria-[current=page]:text-foreground max-lg:rounded-none max-lg:border-b-2 max-lg:border-transparent max-lg:px-0 max-lg:aria-[current=page]:border-primary lg:min-h-0 lg:py-1.5"
           >
             {t.site.nav[item.key]}
           </a>

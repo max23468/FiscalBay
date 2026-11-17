@@ -1,18 +1,19 @@
 import { CloudOff } from "lucide-react";
 import { Link, useLocation } from "react-router";
 
+import { useCopy, useLinks } from "~/components/copy-context";
 import { EmptyState } from "~/components/empty-state";
 import { StandalonePage } from "~/components/standalone-page";
 import { buttonLink } from "~/components/ui/button-variants";
-import { useCopy, useLinks } from "~/components/copy-context";
+
 import { appCopy, pageTitle } from "../app-copy";
 import { appHref } from "../app-links";
 import { localizedPath, type Language } from "../i18n";
 
 /**
- * Auth o database non rispondono: nessun dato letto e nessuna promessa, soltanto Riprova. La
- * pagina è a sé, senza la shell, perché nome, campanella e preferenze vengono dal database;
- * l'anteprima mostra la stessa pagina sotto la barra degli scenari.
+ * Auth o database non rispondono: nessun dato letto e nessuna promessa, soltanto Riprova. La pagina
+ * è a sé, senza la shell, perché nome, campanella e preferenze vengono dal database; l'anteprima
+ * mostra la stessa pagina sotto la barra degli scenari.
  */
 export function UnavailablePage({
   language,
@@ -44,8 +45,8 @@ export function UnavailablePage({
 }
 
 /**
- * Indirizzo dell'app che non corrisponde a un ordine, a un negozio o a una
- * pagina: resta dentro la shell, con la strada per tornare all'elenco.
+ * Indirizzo dell'app che non corrisponde a un ordine, a un negozio o a una pagina: resta dentro la
+ * shell, con la strada per tornare all'elenco.
  */
 export function NotFoundState({ kind }: { kind: "order" | "store" | "page" }) {
   const { links } = useLinks();

@@ -5,12 +5,13 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+
 import { latestRunJobs } from "./lib/provider.mjs";
 
 /**
  * Prove dello shard `current` su `total`: l'ordine segue un'impronta del titolo, a turno. In ordine
- * di elenco le varianti lente della stessa prova finivano sempre nelle stesse partizioni. Il calcolo
- * è deterministico: ogni macchina ricava da sola la propria parte.
+ * di elenco le varianti lente della stessa prova finivano sempre nelle stesse partizioni. Il
+ * calcolo è deterministico: ogni macchina ricava da sola la propria parte.
  */
 export function shardTests(listing, current, total) {
   const tests = [];
@@ -24,7 +25,7 @@ export function shardTests(listing, current, total) {
   const digest = (test) => createHash("sha256").update(test).digest("hex");
   return tests
     .map((test) => [digest(test), test])
-    .sort(([a], [b]) => a.localeCompare(b))
+    .toSorted(([a], [b]) => a.localeCompare(b))
     .filter((_, index) => index % total === current - 1)
     .map(([, test]) => test);
 }
@@ -48,7 +49,10 @@ export function browserShards(count) {
   return { include: Array.from({ length: total }, (_, index) => ({ shard: index + 1, total })) };
 }
 
-/** Esito delle prove browser di una run della PR: `passed` con ogni parte riuscita, `failed`, o nulla. */
+/**
+ * Esito delle prove browser di una run della PR: `passed` con ogni parte riuscita, `failed`, o
+ * nulla.
+ */
 export function browserOutcome(jobs) {
   const own = jobs.filter((job) => /^Browser \d+\/\d+$/u.test(job.name));
   if (!own.length) return null;
@@ -57,8 +61,8 @@ export function browserOutcome(jobs) {
   if (!own.every((job) => job.conclusion === "success")) return null;
   const parts = own.map((job) => /(\d+)\/(\d+)$/u.exec(job.name));
   const total = parts[0][2];
-  return parts.every((part) => part[2] === total) &&
-    new Set(parts.map((part) => part[1])).size === Number(total)
+  return parts.every((part) => part[2] === total)
+    && new Set(parts.map((part) => part[1])).size === Number(total)
     ? "passed"
     : null;
 }
@@ -79,7 +83,7 @@ export async function browserProof(
   );
   const ordered = runs
     .filter((run) => run.head_repository?.id === repositoryId && String(run.id) !== String(exclude))
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    .toSorted((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   for (const run of ordered) {
     const outcome = browserOutcome(await latestRunJobs(repository, run.id, api));
     if (outcome === "failed") return null;
@@ -94,7 +98,7 @@ export async function browserProof(
 /** Impronta dell'inventario selezionato: prove, browser e filtri. */
 const inventoryKey = (ids, selection) =>
   createHash("sha256")
-    .update(JSON.stringify({ ids: [...ids].sort(), selection }))
+    .update(JSON.stringify({ ids: [...ids].toSorted(), selection }))
     .digest("hex");
 
 /** File con l'impronta dell'inventario della run, conservato come artefatto `browser-plan-<run>`. */

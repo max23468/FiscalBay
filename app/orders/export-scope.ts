@@ -5,8 +5,8 @@ import { pagesParam } from "./order-list";
 /**
  * Ambito dell'esportazione richiamata dagli Ordini, uguale nell'area reale e nell'anteprima.
  * L'indirizzo dell'esportazione porta l'intera query dell'elenco (filtri, ricerca cifrata,
- * istantanea e pagine caricate) e, se c'è, la selezione: i filtri e l'istantanea danno lo
- * stesso conteggio dell'elenco, il resto serve a tornarvi con lo stesso contesto.
+ * istantanea e pagine caricate) e, se c'è, la selezione: i filtri e l'istantanea danno lo stesso
+ * conteggio dell'elenco, il resto serve a tornarvi con lo stesso contesto.
  */
 
 /**
@@ -59,8 +59,10 @@ export function exportContext(
     order: scope.kind === "orders" && scope.ids.length === 1 ? order : null,
     // Istantanea e ambiente eBay non restringono l'elenco.
     filtered:
-      scope.kind === "filtered" &&
-      [...scope.criteria.keys()].some((key) => key !== snapshotParam && key !== environmentParam),
+      scope.kind === "filtered"
+      && [...scope.criteria.keys()].some(
+        (key) => key !== snapshotParam && key !== environmentParam,
+      ),
     returnHref: exportReturnHref(ordersPath, query),
     query: query.toString(),
     search: scope.kind === "filtered" ? names.search : null,
@@ -113,9 +115,9 @@ export function exportReturnHref(ordersPath: string, query: URLSearchParams) {
 }
 
 /**
- * Selezione da ripristinare tornando all'elenco da cui è partita l'esportazione, con Indietro o
- * con il collegamento della sezione. Vale soltanto per quello stesso indirizzo, istantanea
- * compresa, e resta nella scheda del browser.
+ * Selezione da ripristinare tornando all'elenco da cui è partita l'esportazione, con Indietro o con
+ * il collegamento della sezione. Vale soltanto per quello stesso indirizzo, istantanea compresa, e
+ * resta nella scheda del browser.
  */
 const selectionKey = "fiscalbay-selezione-esportata";
 
@@ -131,12 +133,12 @@ export function exportedSelection(list: string): string[] | null {
   try {
     const saved: unknown = JSON.parse(sessionStorage.getItem(selectionKey) ?? "null");
     if (
-      saved &&
-      typeof saved === "object" &&
-      "list" in saved &&
-      saved.list === list &&
-      "ids" in saved &&
-      Array.isArray(saved.ids)
+      saved
+      && typeof saved === "object"
+      && "list" in saved
+      && saved.list === list
+      && "ids" in saved
+      && Array.isArray(saved.ids)
     )
       return saved.ids.filter((id): id is string => typeof id === "string");
   } catch {

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 import { classifyFailure, type ErrorCode } from "./errors";
+import { samplePath } from "./metrics-queries";
 import {
   invocationPoint,
   phasePoint,
@@ -12,7 +13,6 @@ import {
   type Phase,
   type PhaseOperation,
 } from "./metrics.server";
-import { samplePath } from "./metrics-queries";
 
 /** Inizio e fine di una misura, in millisecondi di `performance.now()`. */
 type Interval = readonly [number, number];
@@ -34,13 +34,13 @@ type Scope = {
 };
 
 /**
- * Tempo coperto da almeno una misura: le misure in parallelo, come le letture D1 di una
- * pagina, contano una volta sola, così una fase non supera mai la durata della richiesta.
+ * Tempo coperto da almeno una misura: le misure in parallelo, come le letture D1 di una pagina,
+ * contano una volta sola, così una fase non supera mai la durata della richiesta.
  */
 function coveredMs(intervals: Interval[]) {
   let total = 0;
   let end = -Infinity;
-  for (const [from, to] of [...intervals].sort((a, b) => a[0] - b[0])) {
+  for (const [from, to] of [...intervals].toSorted((a, b) => a[0] - b[0])) {
     if (to <= end) continue;
     total += to - Math.max(from, end);
     end = to;
@@ -52,9 +52,9 @@ function coveredMs(intervals: Interval[]) {
 const invocationScope = new AsyncLocalStorage<Scope>();
 
 /**
- * Esegue un'invocazione raccogliendo le misure delle fasi, poi scrive su Analytics Engine un
- * punto per l'invocazione e uno per ogni fase, operazione ed esito incontrati. Le chiavi sono
- * elenchi chiusi, quindi i punti restano pochi e lontani dal limite per invocazione.
+ * Esegue un'invocazione raccogliendo le misure delle fasi, poi scrive su Analytics Engine un punto
+ * per l'invocazione e uno per ogni fase, operazione ed esito incontrati. Le chiavi sono elenchi
+ * chiusi, quindi i punti restano pochi e lontani dal limite per invocazione.
  */
 async function observe<T>(
   run: () => Promise<T>,
@@ -112,9 +112,9 @@ const statusClass = (status: number): InvocationOutcome =>
 
 /**
  * Esegue la richiesta raccogliendo la durata di ogni fase, poi la espone nell'header
- * `Server-Timing` per le misure del browser. Le durate sono in millisecondi, una per fase.
- * Con il tracing del Worker ogni fase apre anche il proprio span; esito, latenza e fasi vanno
- * su Analytics Engine.
+ * `Server-Timing` per le misure del browser. Le durate sono in millisecondi, una per fase. Con il
+ * tracing del Worker ogni fase apre anche il proprio span; esito, latenza e fasi vanno su Analytics
+ * Engine.
  */
 export async function withPhaseTimings(
   request: Request,
@@ -155,9 +155,9 @@ export async function withPhaseTimings(
 }
 
 /**
- * Misura un'invocazione della coda o del cron: esito, durata e fasi su Analytics Engine, span
- * delle fasi con il tracing del Worker. Un'eccezione resta all'invocazione e la marca non
- * riuscita; `outcome` distingue i messaggi rimessi in coda.
+ * Misura un'invocazione della coda o del cron: esito, durata e fasi su Analytics Engine, span delle
+ * fasi con il tracing del Worker. Un'eccezione resta all'invocazione e la marca non riuscita;
+ * `outcome` distingue i messaggi rimessi in coda.
  */
 export async function withInvocationMetrics<T>(
   invocation: "queue" | "cron",
@@ -187,8 +187,8 @@ export async function withInvocationMetrics<T>(
 }
 
 /**
- * Misura una fase: span Workers per la diagnosi, tempo coperto per `Server-Timing` e per
- * Analytics Engine. Un errore porta soltanto il suo codice stabile, mai l'eccezione grezza.
+ * Misura una fase: span Workers per la diagnosi, tempo coperto per `Server-Timing` e per Analytics
+ * Engine. Un errore porta soltanto il suo codice stabile, mai l'eccezione grezza.
  */
 export async function measure<T>(
   phase: Phase,

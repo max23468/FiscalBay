@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Controlli locali della documentazione. Nessuna dipendenza o richiesta di rete.
- * Non verifica semantica del prodotto, conformità o stato live dei provider.
- * Uso: node scripts/verify-docs.mjs [--assets] [--json] [--root DIRECTORY]
- * docs/archive non partecipa ai controlli ordinari: i suoi documenti sono storici.
+ * Controlli locali della documentazione. Nessuna dipendenza o richiesta di rete. Non verifica
+ * semantica del prodotto, conformità o stato live dei provider. Uso: node scripts/verify-docs.mjs
+ * [--assets] [--json] [--root DIRECTORY] docs/archive non partecipa ai controlli ordinari: i suoi
+ * documenti sono storici.
  */
+
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -78,11 +79,11 @@ function stripFences(text, name) {
         return "";
       }
       if (
-        open &&
-        match &&
-        match[1][0] === open.char &&
-        match[1].length >= open.len &&
-        !match[2].trim()
+        open
+        && match
+        && match[1][0] === open.char
+        && match[1].length >= open.len
+        && !match[2].trim()
       ) {
         open = null;
         return "";
@@ -198,8 +199,8 @@ function main() {
       }
       if (fragment && dest.endsWith(".md")) {
         const set =
-          anchors.get(dest) ||
-          getAnchors(stripFences(fs.readFileSync(dest, "utf8"), relative(dest)), relative(dest));
+          anchors.get(dest)
+          || getAnchors(stripFences(fs.readFileSync(dest, "utf8"), relative(dest)), relative(dest));
         if (!set.has(fragment)) error("LINK_ANCHOR", `${relative(file)}: ${target}`);
       }
     }
@@ -237,19 +238,19 @@ function main() {
     stats.assets_checked = 0;
     for (const asset of manifest) {
       if (
-        typeof asset.file !== "string" ||
-        !/^[a-f\d]{64}$/i.test(asset.sha256) ||
-        !Number.isSafeInteger(asset.bytes)
+        typeof asset.file !== "string"
+        || !/^[a-f\d]{64}$/i.test(asset.sha256)
+        || !Number.isSafeInteger(asset.bytes)
       ) {
         error("ASSET_SCHEMA", String(asset.file));
         continue;
       }
       const file = path.resolve(path.dirname(manifestFile), asset.file);
       if (
-        !inside(file) ||
-        seen.has(file) ||
-        !fs.existsSync(file) ||
-        !inside(fs.realpathSync(file))
+        !inside(file)
+        || seen.has(file)
+        || !fs.existsSync(file)
+        || !inside(fs.realpathSync(file))
       ) {
         error("ASSET_PATH", asset.file);
         continue;
@@ -258,8 +259,8 @@ function main() {
       const bytes = fs.readFileSync(file);
       stats.assets_checked++;
       if (
-        bytes.length !== asset.bytes ||
-        crypto.createHash("sha256").update(bytes).digest("hex") !== asset.sha256
+        bytes.length !== asset.bytes
+        || crypto.createHash("sha256").update(bytes).digest("hex") !== asset.sha256
       )
         error("ASSET_HASH", asset.file);
     }

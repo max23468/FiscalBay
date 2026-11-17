@@ -9,9 +9,9 @@ export type SupportTopic = (typeof supportTopics)[number];
 export const maxSupportMessage = 4000;
 
 /**
- * Campi della richiesta di assistenza inviati dal modulo. La casella del riepilogo vale «on»
- * quando è spuntata e si allega soltanto se il riepilogo è mostrato, cioè con il suo correlation
- * ID (`reference`), che parte insieme perché l'email riporti il riferimento visto dall'utente.
+ * Campi della richiesta di assistenza inviati dal modulo. La casella del riepilogo vale «on» quando
+ * è spuntata e si allega soltanto se il riepilogo è mostrato, cioè con il suo correlation ID
+ * (`reference`), che parte insieme perché l'email riporti il riferimento visto dall'utente.
  */
 export function supportFields(
   form: FormData,
@@ -27,8 +27,8 @@ export function supportFields(
 }
 
 /**
- * Stato dei diritti nel riepilogo diagnostico dell'assistenza, nell'area reale e
- * nell'anteprima: piano, prova, concessione o periodicità, con gli sblocchi del Free.
+ * Stato dei diritti nel riepilogo diagnostico dell'assistenza, nell'area reale e nell'anteprima:
+ * piano, prova, concessione o periodicità, con gli sblocchi del Free.
  */
 export function planDiagnostics(
   account: Pick<AccountView, "plan" | "waitlisted" | "quota" | "trial" | "grant" | "premium">,

@@ -10,12 +10,13 @@ import { useDate } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
+
 import type { AppCopy } from "../../app-copy";
 import { appHref, reconnectHref } from "../../app-links";
 import { formatRelative } from "../../format";
 import type { Language } from "../../i18n";
-import { trialDaysLeft, trialEnding } from "../../view-models";
 import { ebayDownNotice, importingNotice, type OrdersPageData } from "../../orders/page-data";
+import { trialDaysLeft, trialEnding } from "../../view-models";
 
 export function OrdersHeader({ data }: { data: OrdersPageData }) {
   const { t } = useCopy();
@@ -288,10 +289,10 @@ export function TrialNotice({ data }: { data: OrdersPageData }) {
 /** La prova si offre dopo la prima lettura riuscita, con l'elenco o senza ordini. */
 function trialOffered(data: OrdersPageData) {
   return (
-    !data.account.trial &&
-    data.account.trialAvailable &&
-    !!data.sync.lastAt &&
-    (data.view === "list" || data.view === "empty")
+    !data.account.trial
+    && data.account.trialAvailable
+    && !!data.sync.lastAt
+    && (data.view === "list" || data.view === "empty")
   );
 }
 

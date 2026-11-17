@@ -1,6 +1,7 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
-import { expect, networkIdle, test, pagePath } from "./fixtures";
+
 import { canonicalPath } from "../app/i18n.ts";
+import { expect, networkIdle, test, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -11,8 +12,8 @@ import { testAccount } from "./test-account";
  */
 
 /**
- * Sceglie lo scenario dell'anteprima come il selettore della pagina. Il modulo dichiara la
- * propria origine, come il browser: le action dell'anteprima rifiutano gli altri siti.
+ * Sceglie lo scenario dell'anteprima come il selettore della pagina. Il modulo dichiara la propria
+ * origine, come il browser: le action dell'anteprima rifiutano gli altri siti.
  */
 export async function setScenario(page: Page, scenario: string, base = "/anteprima") {
   await page.request.post(base, {
@@ -23,8 +24,8 @@ export async function setScenario(page: Page, scenario: string, base = "/antepri
 }
 
 /**
- * Clic dopo una ricarica: il controllo è già visibile prima dell'hydration, quando il clic
- * andrebbe perso. Si attende che React abbia collegato proprio quell'elemento.
+ * Clic dopo una ricarica: il controllo è già visibile prima dell'hydration, quando il clic andrebbe
+ * perso. Si attende che React abbia collegato proprio quell'elemento.
  */
 export async function clickHydrated(target: Locator) {
   await expect

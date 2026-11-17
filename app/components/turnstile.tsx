@@ -3,6 +3,7 @@ import { useRouteLoaderData } from "react-router";
 
 import { useCopy, useLinks } from "~/components/copy-context";
 import { FieldError } from "~/components/ui/field";
+
 import { turnstileField, turnstileScript, type TurnstileAction } from "../turnstile";
 
 type TurnstileApi = {
@@ -42,10 +43,10 @@ type Waiting = { resolve: (token: string) => void; reject: () => void };
 
 /**
  * Verifica Turnstile di un modulo (§29). Senza `prepare` lo script arriva all'invio e il token
- * nasce subito prima della richiesta; `prepare`, chiamata quando si comincia a compilare, avvia
- * la verifica in anticipo e l'invio usa il token già pronto, o ne chiede uno nuovo se è scaduto.
- * Il widget compare soltanto quando Cloudflare chiede un'interazione. Nell'anteprima, senza
- * chiave del sito, e senza azione non c'è verifica.
+ * nasce subito prima della richiesta; `prepare`, chiamata quando si comincia a compilare, avvia la
+ * verifica in anticipo e l'invio usa il token già pronto, o ne chiede uno nuovo se è scaduto. Il
+ * widget compare soltanto quando Cloudflare chiede un'interazione. Nell'anteprima, senza chiave del
+ * sito, e senza azione non c'è verifica.
  */
 export function useTurnstile(action: TurnstileAction | null) {
   const root = useRouteLoaderData<{ turnstileSiteKey?: string }>("root");
@@ -157,8 +158,8 @@ export function useTurnstile(action: TurnstileAction | null) {
       });
     },
     /**
-     * Invio di un modulo nativo, da chiamare in `onSubmit` dopo la convalida: ferma l'invio,
-     * scrive il token nel modulo e lo ripete con lo stesso pulsante.
+     * Invio di un modulo nativo, da chiamare in `onSubmit` dopo la convalida: ferma l'invio, scrive
+     * il token nel modulo e lo ripete con lo stesso pulsante.
      */
     submit(event: React.FormEvent<HTMLFormElement>) {
       if (!siteKey || event.defaultPrevented) return;

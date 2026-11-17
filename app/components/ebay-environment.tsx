@@ -1,16 +1,17 @@
 import { useId } from "react";
 
+import { useCopy } from "~/components/copy-context";
 import { Field, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
-import { useCopy } from "~/components/copy-context";
+
 import { appCopy } from "../app-copy";
 import type { EbayEnvironment } from "../view-models";
 
 const environments: readonly EbayEnvironment[] = ["production", "sandbox"];
 
 /**
- * Scelta dell'ambiente eBay, sul solo dominio di test: nome dell'ambiente e tipo di account.
- * Con due sole opzioni restano entrambe visibili.
+ * Scelta dell'ambiente eBay, sul solo dominio di test: nome dell'ambiente e tipo di account. Con
+ * due sole opzioni restano entrambe visibili.
  */
 export function EbayEnvironmentField({
   className,

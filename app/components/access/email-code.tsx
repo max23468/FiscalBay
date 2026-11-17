@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState } from "react";
 import { cn } from "cn";
 import { ExternalLink, MailCheck } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { useCopy } from "~/components/copy-context";
 import { useHydrated } from "~/components/hydrated";
@@ -11,6 +11,7 @@ import { buttonLink } from "~/components/ui/button-variants";
 import { FieldError } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
+
 import { accessPath, planChoiceParam } from "../../app-links";
 import { localizedPath } from "../../i18n";
 import { turnstileActions } from "../../turnstile";
@@ -41,9 +42,9 @@ const sizes = {
 };
 
 /**
- * Sei caselle sopra un solo campo trasparente, che resta il vero controllo: tastiera,
- * incolla e compilazione automatica del codice funzionano come in un campo normale. Prima
- * dell'idratazione il campo è visibile, con un pulsante, così il modulo funziona senza JavaScript.
+ * Sei caselle sopra un solo campo trasparente, che resta il vero controllo: tastiera, incolla e
+ * compilazione automatica del codice funzionano come in un campo normale. Prima dell'idratazione il
+ * campo è visibile, con un pulsante, così il modulo funziona senza JavaScript.
  */
 function CodeCells({
   size,
@@ -263,7 +264,7 @@ export function ConfirmEmail({
             <span className="font-medium wrap-anywhere text-foreground">{email}</span>{" "}
             <a
               href={`${localizedPath(language, accessPath)}?${signUp}`}
-              className="link-underline whitespace-nowrap"
+              className="whitespace-nowrap link-underline"
             >
               {t.emailCodeChange}
             </a>

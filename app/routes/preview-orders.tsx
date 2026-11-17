@@ -6,10 +6,18 @@ import {
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 
-import { OrdersPage } from "~/components/orders/page";
 import { VerifyEmail } from "~/components/access-notice";
+import { useLinks } from "~/components/copy-context";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersLoading } from "~/components/orders/loading";
+import { OrdersPage } from "~/components/orders/page";
+
+import { appCopy, pageTitle } from "../app-copy";
+import { appHref, previewOrdersPath } from "../app-links";
+import { historyWindowDays } from "../domain/history-window.server";
+import { languageFromPath, localizedPath } from "../i18n";
+import { rememberedStoreHref, revalidateUnlessSnapshot } from "../orders/order-list";
+import { openSearch } from "../orders/order-search.server";
 import {
   readUnlockForm,
   remainingUnlocks,
@@ -18,14 +26,7 @@ import {
   type OrdersPageData,
   type UnlockResult,
 } from "../orders/page-data";
-import { useLinks } from "~/components/copy-context";
-import { appHref, previewOrdersPath } from "../app-links";
-import { historyWindowDays } from "../domain/history-window.server";
-import { appCopy, pageTitle } from "../app-copy";
-import { languageFromPath, localizedPath } from "../i18n";
 import { defaultTemplate } from "../preferences";
-import { rememberedStoreHref, revalidateUnlessSnapshot } from "../orders/order-list";
-import { openSearch } from "../orders/order-search.server";
 import { previewOrderPage, previewSearchScope } from "../preview/order-list.server";
 import { scenarioVerified } from "../preview/scenarios.server";
 import {
@@ -69,8 +70,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     (next) => `${localizedPath(language, previewOrdersPath)}?${next.toString()}`,
   );
   const detail = params.ordine
-    ? ([...scenario.orders, ...scenario.incoming].find((order) => order.id === params.ordine) ??
-      null)
+    ? ([...scenario.orders, ...scenario.incoming].find((order) => order.id === params.ordine)
+      ?? null)
     : null;
   if (params.ordine && !detail) throw data(null, { status: 404 });
   const vintage = scenario.stores[0];
@@ -90,8 +91,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       storeName: vintage?.name ?? null,
       // Come nell'area reale: prima del primo avvio vale la finestra del piano.
       historyDays:
-        vintage?.historyDays ??
-        historyWindowDays(scenario.account.plan === "premium", new Date(scenario.now)),
+        vintage?.historyDays
+        ?? historyWindowDays(scenario.account.plan === "premium", new Date(scenario.now)),
     },
     onboarding: scenario.onboarding,
     marketingProposal: !!scenario.marketingProposal && !state.marketingAnswered,
@@ -121,8 +122,8 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
 }
 
 /**
- * Sblocco simulato con gli stessi controlli del server reale su appartenenza e
- * quota; le altre azioni rispondono con la simulazione comune.
+ * Sblocco simulato con gli stessi controlli del server reale su appartenenza e quota; le altre
+ * azioni rispondono con la simulazione comune.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertPreviewAction(request);
@@ -141,9 +142,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (state.scenario === "sblocco-non-riuscito" && !state.saveFailed)
     return data(unlockFailure(remaining), {
       status: 409,
-      headers: {
-        "Set-Cookie": await writePreviewState({ ...state, saveFailed: true }),
-      },
+      headers: { "Set-Cookie": await writePreviewState({ ...state, saveFailed: true }) },
     });
   const result: UnlockResult = {
     unlocked: ids,

@@ -73,8 +73,8 @@ export function syntheticEbay(
       });
     }
     if (url.includes("/sell/fulfillment/v1/order")) {
-      const payload = (options.ordersPayload ??
-        (options.orders ? { orders: options.orders, total: 0 } : syntheticOrders())) as {
+      const payload = (options.ordersPayload
+        ?? (options.orders ? { orders: options.orders, total: 0 } : syntheticOrders())) as {
         orders?: Array<{ orderId: string }>;
       };
       // `getOrder` legge il singolo ordine dell'elenco.

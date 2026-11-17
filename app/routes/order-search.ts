@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import type { SearchResults } from "~/components/shell-search";
+
 import {
   assertSameOrigin,
   requestedEbayEnvironment,
@@ -9,8 +10,8 @@ import {
   type AccountArea,
 } from "../account-area.server";
 import { ordersPath } from "../app-links";
-import { searchVisibleOrders } from "../domain/orders.server";
 import { orderAllowance } from "../domain/grants.server";
+import { searchVisibleOrders } from "../domain/orders.server";
 import { listStoreScopes } from "../domain/stores.server";
 import { errorResponse, postOnly } from "../error-response";
 import { localizedPath } from "../i18n";
@@ -24,10 +25,10 @@ import type { Route } from "./+types/order-search";
 export const loader = postOnly;
 
 /**
- * Ricerca ordini della barra superiore, con lo stesso filtro della pagina Ordini. La query
- * arriva nel corpo e l'elenco la riceve cifrata, così un Codice Fiscale o una Partita IVA non
- * finiscono in URL, referrer o log. Con `Accept: application/json` risponde con i primi ordini,
- * il loro numero e gli indirizzi; un modulo inviato senza JavaScript apre direttamente l'elenco.
+ * Ricerca ordini della barra superiore, con lo stesso filtro della pagina Ordini. La query arriva
+ * nel corpo e l'elenco la riceve cifrata, così un Codice Fiscale o una Partita IVA non finiscono in
+ * URL, referrer o log. Con `Accept: application/json` risponde con i primi ordini, il loro numero e
+ * gli indirizzi; un modulo inviato senza JavaScript apre direttamente l'elenco.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);

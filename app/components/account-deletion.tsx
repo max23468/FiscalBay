@@ -2,6 +2,7 @@ import { UserX } from "lucide-react";
 
 import { StandalonePage } from "~/components/standalone-page";
 import { buttonLink } from "~/components/ui/button-variants";
+
 import { appCopy, supportEmail } from "../app-copy";
 import { localizedPath, type Language } from "../i18n";
 

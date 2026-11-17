@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Avvisa i motori che aderiscono a IndexNow (Bing e quelli che ne usano l'indice) delle pagine
- * della sitemap Production, dopo una promozione che aggiunge o cambia pagine pubbliche. La
- * chiave è pubblica per protocollo: il file `public/<chiave>.txt` prova che il dominio è nostro.
- * Crawler Hints di Cloudflare non basta: segnala i MISS della cache, e le pagine del sito escono
- * dal Worker con `no-store`.
+ * della sitemap Production, dopo una promozione che aggiunge o cambia pagine pubbliche. La chiave è
+ * pubblica per protocollo: il file `public/<chiave>.txt` prova che il dominio è nostro. Crawler
+ * Hints di Cloudflare non basta: segnala i MISS della cache, e le pagine del sito escono dal Worker
+ * con `no-store`.
  *
  * Uso: node scripts/indexnow.mjs <plan|submit>
  */
@@ -31,12 +31,7 @@ export function payload(urls, origin = productionOrigin) {
   const { host } = new URL(origin);
   const foreign = urls.filter((url) => new URL(url).host !== host);
   if (foreign.length) throw new Error(`Indirizzi fuori da ${host}: ${foreign.join(", ")}`);
-  return {
-    host,
-    key: indexNowKey,
-    keyLocation: `${origin}/${indexNowKey}.txt`,
-    urlList: urls,
-  };
+  return { host, key: indexNowKey, keyLocation: `${origin}/${indexNowKey}.txt`, urlList: urls };
 }
 
 async function main() {

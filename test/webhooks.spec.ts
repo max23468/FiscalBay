@@ -1,36 +1,23 @@
-import { env } from "cloudflare:workers";
-
 import { createHash, sign } from "node:crypto";
 
+import { env } from "cloudflare:workers";
 import { expect, it, vi } from "vitest";
 
-import { receiveWebhook, consumeWebhooks } from "../app/webhooks.server";
-
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
+import { consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
+import { setSwitch } from "../app/domain/service-settings.server";
 import {
   recoverWebhookIngress,
   resumeStalledReceipts,
 } from "../app/domain/webhook-receipts.server";
-
 import { verifyEbayNotification } from "../app/integrations/ebay/notifications.server";
-
-import { setSwitch } from "../app/domain/service-settings.server";
-
-import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-
+import { receiveWebhook, consumeWebhooks } from "../app/webhooks.server";
 import worker from "../workers/app";
-
-import { consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
-
-import delivery from "./fixtures/ebay-order-notification.json";
-
-import { fakeBot } from "./fixtures/telegram-fixtures";
-
 import { insertStorePause } from "./fixtures/database-fixtures";
-
+import delivery from "./fixtures/ebay-order-notification.json";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
-
 import { stripeSignature } from "./fixtures/stripe-fixtures";
-
+import { fakeBot } from "./fixtures/telegram-fixtures";
 import {
   now,
   grantedAt,
@@ -477,7 +464,7 @@ it("la ripresa manuale riaccoda al massimo 25 ricevute ferme del solo provider r
   )
     .bind(at)
     .all<{ id: string }>();
-  expect(results.map(({ id }) => id)).toEqual([...pending, "recent-queue"].sort());
+  expect(results.map(({ id }) => id)).toEqual([...pending, "recent-queue"].toSorted());
 });
 
 it("il consumer importa solo l'ordine del negozio verificato e non ripete gli effetti", async () => {
@@ -1232,13 +1219,15 @@ it("una ricevuta conserva il retry anche se il rilascio della lease fallisce", a
   await receive();
   const row = (await receipt())!;
   const original = env.DB.prepare.bind(env.DB);
-  const failing = vi.spyOn(env.DB, "prepare").mockImplementation((query) =>
-    query.startsWith("UPDATE webhook_receipts SET lease = NULL")
-      ? ({
-          bind: () => ({ run: () => Promise.reject(new Error("database_unavailable")) }),
-        } as unknown as D1PreparedStatement)
-      : original(query),
-  );
+  const failing = vi
+    .spyOn(env.DB, "prepare")
+    .mockImplementation((query) =>
+      query.startsWith("UPDATE webhook_receipts SET lease = NULL")
+        ? ({
+            bind: () => ({ run: () => Promise.reject(new Error("database_unavailable")) }),
+          } as unknown as D1PreparedStatement)
+        : original(query),
+    );
   const logged = vi.spyOn(console, "error").mockImplementation(() => {});
   const work = batch({ receiptId: row.id });
   try {

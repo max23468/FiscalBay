@@ -1,5 +1,4 @@
 import { env } from "cloudflare:workers";
-
 import {
   afterAll,
   beforeAll,
@@ -11,47 +10,26 @@ import {
   type MockInstance,
 } from "vitest";
 
-import { marketingTextVersions } from "../app/domain/registration.server";
-
-import { revokeSession } from "../app/domain/sessions.server";
-
-import { action as storesAction } from "../app/routes/stores";
-
-import { action as settingsAction } from "../app/routes/settings";
-
-import { action as languageAction } from "../app/routes/language";
-
-import { action as ordersAction } from "../app/routes/orders";
-
-import { action as orderExportAction } from "../app/routes/order-export";
-
-import { requestLimitRules } from "../app/request-limits";
-import { fakeRateLimiters } from "./fixtures/rate-limiter";
-
-import { action as notificationsAction } from "../app/routes/notifications";
-
 import { appCopy, supportEmail } from "../app/app-copy";
-
-import type { ActionResult } from "../app/view-models";
-
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-
+import { marketingTextVersions } from "../app/domain/registration.server";
+import { revokeSession } from "../app/domain/sessions.server";
 import { supportRequestLimit } from "../app/domain/support-requests.server";
-
+import { requestLimitRules } from "../app/request-limits";
+import { action as languageAction } from "../app/routes/language";
+import { action as notificationsAction } from "../app/routes/notifications";
+import { action as orderExportAction } from "../app/routes/order-export";
+import { action as ordersAction } from "../app/routes/orders";
+import { action as settingsAction } from "../app/routes/settings";
+import { action as storesAction } from "../app/routes/stores";
 import { maxSupportMessage, supportFields } from "../app/support";
-
-import { insertStore, insertWorkspace, now } from "./fixtures/database-fixtures";
-
-import { verifiedSession } from "./fixtures/account-fixtures";
-
-import { homeFor } from "./fixtures/account-route-fixtures";
-
-import { siteverify } from "./fixtures/turnstile-fixtures";
-
 import { turnstileField } from "../app/turnstile";
-
+import type { ActionResult } from "../app/view-models";
+import { verifiedSession } from "./fixtures/account-fixtures";
+import { homeFor } from "./fixtures/account-route-fixtures";
+import { insertStore, insertWorkspace, now } from "./fixtures/database-fixtures";
+import { fakeRateLimiters } from "./fixtures/rate-limiter";
 import { areaShell, callRoute, routeResponse, testOrigin } from "./fixtures/route-fixtures";
-
 import {
   day,
   linkedSeller,
@@ -61,6 +39,7 @@ import {
   saveSetting,
   setupScenarios,
 } from "./fixtures/stores-scenarios";
+import { siteverify } from "./fixtures/turnstile-fixtures";
 
 setupScenarios();
 
@@ -81,11 +60,7 @@ it("apre le Impostazioni reali con le sole categorie che hanno un servizio", asy
     ],
     // Con chiave e prezzi Stripe configurati il piano offre acquisto e portale clienti; con il
     // bot dell'ambiente compaiono le notifiche Telegram.
-    services: {
-      billing: true,
-      billingPortal: true,
-      telegram: true,
-    },
+    services: { billing: true, billingPortal: true, telegram: true },
     account: { plan: "free", trialAvailable: false, quota: undefined },
     preferences: { theme: "system", timeZone: "auto", detectedTimeZone: null, marketing: false },
     // Senza negozi il riepilogo lo dice; la versione viene dal deploy.
@@ -606,10 +581,7 @@ it("conferma l'identità sul posto con la password senza uscire", async () => {
   });
   expect((wrong.init.headers as Headers).getSetCookie()).toEqual([]);
   expect((await confirm({ metodo: "altro" })).data.ok).toBe(false);
-  const right = await confirm({
-    metodo: "password",
-    password: "Una-password-negozio-molto-lunga",
-  });
+  const right = await confirm({ metodo: "password", password: "Una-password-negozio-molto-lunga" });
   expect(right.data).toEqual({ ok: true });
   // La sessione nuova sostituisce quella in uso, che si chiude.
   expect((right.init.headers as Headers).getSetCookie().join(";")).toContain("session_token");

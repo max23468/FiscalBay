@@ -43,8 +43,8 @@ export function shippingLabel(order: OrderView, t: AppCopy) {
 /** Nome dell'acquirente; senza nome, lo username eBay. */
 export function buyerLabel(order: OrderView, t: AppCopy) {
   return (
-    buyerNameView(order.buyerName) ??
-    order.buyerUsername ??
-    (order.maskedContacts?.includes("name") ? t.orders.maskedContact : t.orders.notProvided)
+    buyerNameView(order.buyerName)
+    ?? order.buyerUsername
+    ?? (order.maskedContacts?.includes("name") ? t.orders.maskedContact : t.orders.notProvided)
   );
 }

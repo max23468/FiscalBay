@@ -1,14 +1,20 @@
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApplicationError, classifyFailure, correlateResponse, logFailure } from "../app/errors";
-import { errorResponse } from "../app/error-response";
 import { appCopy } from "../app/app-copy";
-import { formatAmount, languageFromPath, localizedPath } from "../app/i18n";
-import { minorToDecimal, parseMinor } from "../app/money";
+import { issueTimingTicket } from "../app/domain/page-timing.server";
+import { errorResponse } from "../app/error-response";
+import { ApplicationError, classifyFailure, correlateResponse, logFailure } from "../app/errors";
 import { formatDate } from "../app/format";
-import { loader as loadAccess } from "../app/routes/sign-in";
-
+import { formatAmount, languageFromPath, localizedPath } from "../app/i18n";
+import { invocationPoint, writePoints } from "../app/metrics.server";
+import { minorToDecimal, parseMinor } from "../app/money";
+import {
+  describeRequest,
+  measure,
+  withInvocationMetrics,
+  withPhaseTimings,
+} from "../app/observability.server";
 import {
   addLayoutShift,
   firstHiddenTime,
@@ -19,17 +25,10 @@ import {
   loadedHere,
   timingValue,
 } from "../app/page-timing";
-import { issueTimingTicket } from "../app/domain/page-timing.server";
-import { loader as pageTimingRead, action as pageTiming } from "../app/routes/page-timing";
 import { loader as cspReportRead, action as cspReport } from "../app/routes/csp-report";
+import { loader as pageTimingRead, action as pageTiming } from "../app/routes/page-timing";
+import { loader as loadAccess } from "../app/routes/sign-in";
 import { fakeRateLimiters } from "./fixtures/rate-limiter";
-import { invocationPoint, writePoints } from "../app/metrics.server";
-import {
-  describeRequest,
-  measure,
-  withInvocationMetrics,
-  withPhaseTimings,
-} from "../app/observability.server";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
 // Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+
 import { comparisonBase, lastDeployed } from "./find-deployed.mjs";
 import { publicationRecord, publicVersion, receiptActive } from "./release/records.mjs";
 

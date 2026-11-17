@@ -1,10 +1,11 @@
 import { cn } from "cn";
 import type { ComponentType, SVGProps } from "react";
 
-import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
-import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
 import { IconTile } from "~/components/icon-tile";
 import type { TileTone } from "~/components/tile-tone";
+
+import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
+import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
 
 /** Logo orizzontale nelle due versioni del tema; `onDark` per fondi sempre scuri. */
 export function Logo({ className, onDark = false }: { className?: string; onDark?: boolean }) {
@@ -31,9 +32,7 @@ export function Logo({ className, onDark = false }: { className?: string; onDark
   );
 }
 
-/**
- * Pagine fuori dall'app: logo e riquadro nello stesso gruppo centrato.
- */
+/** Pagine fuori dall'app: logo e riquadro nello stesso gruppo centrato. */
 export function StandalonePage({
   icon,
   tone,

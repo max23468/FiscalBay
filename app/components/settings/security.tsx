@@ -1,5 +1,6 @@
 import { AccessNotice } from "~/components/access-notice";
 import { AccountSecurity } from "~/components/settings/account-security";
+
 import type { AccessNoticeView } from "../../access-notice";
 import type { PendingEmailChange } from "../../domain/email-change.server";
 import type { PasskeySignals } from "../../domain/passkey-user.server";

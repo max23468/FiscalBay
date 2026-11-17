@@ -6,8 +6,8 @@ export const now = "2026-09-13T20:00:00.000Z";
 /** Istante a `minutes` minuti da `now`. */
 export const later = (minutes: number) => new Date(Date.parse(now) + minutes * 60_000);
 /**
- * Tabelle che vivono con l'utente Better Auth: le prove creano utenti con email proprie e il
- * reset non li elimina, quindi conserva anche profilo, consensi e preferenze personali.
+ * Tabelle che vivono con l'utente Better Auth: le prove creano utenti con email proprie e il reset
+ * non li elimina, quindi conserva anche profilo, consensi e preferenze personali.
  */
 const userTables = new Set([
   "user",
@@ -309,8 +309,8 @@ export function insertOrder(
       storeId,
       externalId,
       createdAt,
-      buyerJson ??
-        (buyer ? JSON.stringify({ username: buyer.username, name: "Mario Rossi" }) : null),
+      buyerJson
+        ?? (buyer ? JSON.stringify({ username: buyer.username, name: "Mario Rossi" }) : null),
       buyer?.eias ?? null,
       mergedInto,
       retentionUntil,

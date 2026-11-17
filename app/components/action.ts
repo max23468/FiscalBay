@@ -7,16 +7,16 @@ import type { ActionResult } from "../view-models";
 export const NoticeContext = createContext<(message: string) => void>(() => {});
 
 /**
- * Conferma breve di un'azione, annunciata anche ai lettori di schermo. Sparisce da sola: un
- * errore va invece mostrato accanto all'azione, finché non si riprova.
+ * Conferma breve di un'azione, annunciata anche ai lettori di schermo. Sparisce da sola: un errore
+ * va invece mostrato accanto all'azione, finché non si riprova.
  */
 export function useNotice() {
   return useContext(NoticeContext);
 }
 
 /**
- * Reazione a un nuovo esito del fetcher, una sola volta e a richiesta conclusa: una
- * rilettura della pagina o un nuovo rendering non ripropongono l'esito già gestito.
+ * Reazione a un nuovo esito del fetcher, una sola volta e a richiesta conclusa: una rilettura della
+ * pagina o un nuovo rendering non ripropongono l'esito già gestito.
  */
 export function useFetcherResult<T>(
   fetcher: { state: string; data: T | undefined },
@@ -34,9 +34,9 @@ export function useFetcherResult<T>(
 
 /**
  * Azione sulla route corrente, o su quella indicata da `action`, distinta da `intent`: esito e
- * avviso li decide il server. L'anteprima risponde con una simulazione, le route reali
- * eseguono. `onResult` riceve ogni nuovo esito, dopo l'avviso. Con `inlineErrors` l'avviso
- * a tempo resta per gli esiti riusciti: un errore lo mostra il chiamante accanto all'azione.
+ * avviso li decide il server. L'anteprima risponde con una simulazione, le route reali eseguono.
+ * `onResult` riceve ogni nuovo esito, dopo l'avviso. Con `inlineErrors` l'avviso a tempo resta per
+ * gli esiti riusciti: un errore lo mostra il chiamante accanto all'azione.
  */
 export function useAction(
   onResult?: (result: ActionResult) => void,

@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { createAuth } from "../app/auth.server";
 import {
   currentFreePromotion,
   orderAllowance,
@@ -10,10 +12,11 @@ import {
 } from "../app/domain/grants.server";
 import { listVisibleOrders, paymentState, shippingState } from "../app/domain/orders.server";
 import { completeRegistration } from "../app/domain/registration.server";
-import { createAuth } from "../app/auth.server";
+import { formatDate } from "../app/format";
 import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
-import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as securityAction } from "../app/routes/settings";
+import { loader as loadAccess } from "../app/routes/sign-in";
+import { syntheticProfile } from "./fixtures/account-fixtures";
 import {
   insertEntitlement,
   insertStore,
@@ -23,8 +26,7 @@ import {
   resetDatabase,
   seed,
 } from "./fixtures/database-fixtures";
-import { syntheticProfile } from "./fixtures/account-fixtures";
-import { formatDate } from "../app/format";
+import { searchOrders } from "./fixtures/order-search-fixtures";
 import {
   callRoute,
   routeData,
@@ -32,8 +34,6 @@ import {
   routeResponse,
   testOrigin,
 } from "./fixtures/route-fixtures";
-
-import { searchOrders } from "./fixtures/order-search-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

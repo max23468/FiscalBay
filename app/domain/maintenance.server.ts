@@ -1,16 +1,16 @@
 import { orderSearchText } from "../orders/order-search";
 import { dayMilliseconds } from "../time";
 import { purgeDeletionMarkers } from "./account-deletion.server";
+import { auditRetentionDays } from "./admin-audit.server";
 import { purgeAuthAttempts } from "./auth-attempts.server";
 import { purgeEbayDeletionMarkers } from "./ebay-account-deletion.server";
 import { purgeExitFeedback } from "./exit-feedback.server";
-import { auditRetentionDays } from "./admin-audit.server";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
 import { notificationRetentionDays } from "./owner-notifications.server";
 import { syncDailyRetentionDays } from "./product-metrics.server";
 import { purgeSupportRequests } from "./support-requests.server";
-import { purgeTelegramLinks } from "./telegram.server";
 import { purgeTelegramDeliveries } from "./telegram-deliveries.server";
+import { purgeTelegramLinks } from "./telegram.server";
 
 /** Ordini scaduti per istruzione e istruzioni per esecuzione; i residui restano al giorno dopo. */
 const purgeBatch = 200;
@@ -20,10 +20,10 @@ const deletionKeyDays = 730;
 
 /**
  * Ordini scaduti a blocchi. Le FK eliminano anche buyer, articoli, fonti, verifiche, versioni e
- * grant. La riga di `order_expiry_purges`, visibile soltanto dentro il batch, dice al trigger
- * che la scadenza non blocca il reimport: con una finestra più ampia l'ordine torna. Il `+`
- * lascia l'indice di `merged_into`, che vale per quasi ogni ordine, e fa leggere soltanto quelli
- * scaduti dall'indice di `purge_after`.
+ * grant. La riga di `order_expiry_purges`, visibile soltanto dentro il batch, dice al trigger che
+ * la scadenza non blocca il reimport: con una finestra più ampia l'ordine torna. Il `+` lascia
+ * l'indice di `merged_into`, che vale per quasi ogni ordine, e fa leggere soltanto quelli scaduti
+ * dall'indice di `purge_after`.
  */
 async function purgeExpiredOrders(db: D1Database, at: string) {
   for (let batch = 0; batch < purgeBatches; batch++) {
@@ -42,8 +42,8 @@ async function purgeExpiredOrders(db: D1Database, at: string) {
 }
 
 /**
- * Pulizia periodica degli ordini e dei dati tecnici scaduti, eseguita dal consumer
- * del compito giornaliero. L'accesso è già negato prima della cancellazione fisica.
+ * Pulizia periodica degli ordini e dei dati tecnici scaduti, eseguita dal consumer del compito
+ * giornaliero. L'accesso è già negato prima della cancellazione fisica.
  */
 export async function purgeExpiredRecords(db: D1Database, now = new Date()): Promise<void> {
   const at = now.toISOString();
@@ -122,8 +122,8 @@ const searchBatches = 25;
 
 /**
  * Calcola il testo cercabile degli ordini che ancora non l'hanno, cioè quelli presenti prima
- * dell'indicizzazione: le letture successive lo mantengono. Restituisce quanti ne ha scritti;
- * gli eventuali residui restano al turno seguente.
+ * dell'indicizzazione: le letture successive lo mantengono. Restituisce quanti ne ha scritti; gli
+ * eventuali residui restano al turno seguente.
  */
 export async function indexOrderSearch(db: D1Database): Promise<number> {
   let indexed = 0;
@@ -148,15 +148,17 @@ export async function indexOrderSearch(db: D1Database): Promise<number> {
     if (results.length === 0) break;
     await db.batch(
       results.map((row) =>
-        db.prepare("UPDATE orders SET search_text = ? WHERE id = ? AND search_text IS NULL").bind(
-          orderSearchText({
-            ebayOrderId: row.ebay_order_id,
-            buyerName: row.buyer_name,
-            buyerUsername: row.buyer_username,
-            items: JSON.parse(row.items_json) as Array<{ title: string; sku: string | null }>,
-          }),
-          row.id,
-        ),
+        db
+          .prepare("UPDATE orders SET search_text = ? WHERE id = ? AND search_text IS NULL")
+          .bind(
+            orderSearchText({
+              ebayOrderId: row.ebay_order_id,
+              buyerName: row.buyer_name,
+              buyerUsername: row.buyer_username,
+              items: JSON.parse(row.items_json) as Array<{ title: string; sku: string | null }>,
+            }),
+            row.id,
+          ),
       ),
     );
     indexed += results.length;

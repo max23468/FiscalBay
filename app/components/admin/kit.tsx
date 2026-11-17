@@ -15,8 +15,9 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { maxAuditReason } from "../../limits";
+
 import type { AdminActionResult } from "../../admin-console.server";
+import { maxAuditReason } from "../../limits";
 import { useAdmin } from "./use-admin";
 
 /** Titolo del riquadro che contiene una tabella: dà il nome alla sua area scorrevole. */
@@ -141,9 +142,9 @@ export function ActionForm({
 }
 
 /**
- * Operazione richiudibile: i campi, motivo compreso, compaiono soltanto quando l'admin la
- * apre, così le azioni rare non affollano la scheda. Con `destructive` l'etichetta è rossa,
- * come il pulsante delle operazioni pericolose, e si distingue da quelle ordinarie.
+ * Operazione richiudibile: i campi, motivo compreso, compaiono soltanto quando l'admin la apre,
+ * così le azioni rare non affollano la scheda. Con `destructive` l'etichetta è rossa, come il
+ * pulsante delle operazioni pericolose, e si distingue da quelle ordinarie.
  */
 export function Disclosure({
   label,
@@ -176,9 +177,9 @@ export function Disclosure({
 type TableRow = { key: string; cells: ReactNode[] };
 
 /**
- * Tabella leggera da 768 px; sotto, ogni riga diventa una scheda: la prima cella fa da titolo,
- * le altre seguono con la loro etichetta e la colonna «Azioni» chiude la scheda. Le intestazioni
- * sono distinte e fanno da chiave delle celle. Senza righe dice che è vuota.
+ * Tabella leggera da 768 px; sotto, ogni riga diventa una scheda: la prima cella fa da titolo, le
+ * altre seguono con la loro etichetta e la colonna «Azioni» chiude la scheda. Le intestazioni sono
+ * distinte e fanno da chiave delle celle. Senza righe dice che è vuota.
  */
 export function DataTable({
   head,
@@ -281,8 +282,8 @@ export function DataTable({
 }
 
 /**
- * Coppie etichetta e valore, in due colonne anche su mobile. Email, identificativi ed etichette
- * di stato vanno a capo invece di uscire dalla colonna.
+ * Coppie etichetta e valore, in due colonne anche su mobile. Email, identificativi ed etichette di
+ * stato vanno a capo invece di uscire dalla colonna.
  */
 export function Facts({ items }: { items: [string, ReactNode][] }) {
   return (
@@ -347,8 +348,8 @@ export function Stat({
 }
 
 /**
- * Griglia dei riquadri numerici: due colonne su mobile; su schermi ampi quattro, oppure tre per
- * sei riquadri, così ogni riga resta piena.
+ * Griglia dei riquadri numerici: due colonne su mobile; su schermi ampi quattro, oppure tre per sei
+ * riquadri, così ogni riga resta piena.
  */
 export function StatGrid({ children, wide = 4 }: { children: ReactNode; wide?: 3 | 4 }) {
   return (

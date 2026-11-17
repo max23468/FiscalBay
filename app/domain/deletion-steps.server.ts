@@ -2,17 +2,17 @@ import { logFailure } from "../errors";
 import { queueRetryDelay, workLockUntil } from "./work-timing";
 
 /**
- * Lavoro a passi delle cancellazioni, dell'account e chieste da eBay: ogni passo prende il
- * blocco della richiesta, elimina gli ordini entro un budget e restituisce «more» quando ne
- * restano, così la coda o il compito periodico lo ripetono.
+ * Lavoro a passi delle cancellazioni, dell'account e chieste da eBay: ogni passo prende il blocco
+ * della richiesta, elimina gli ordini entro un budget e restituisce «more» quando ne restano, così
+ * la coda o il compito periodico lo ripetono.
  */
 
 /** Tabelle delle richieste a passi, con le colonne `completed_at` e `locked_until`. */
 type StepTable = "account_deletions" | "ebay_account_deletions";
 
 /**
- * Prende il blocco di una richiesta non conclusa e ne restituisce le `columns`, oppure
- * l'esito se non è lavorabile. Il rilascio vale soltanto per il blocco ancora preso da questo passo.
+ * Prende il blocco di una richiesta non conclusa e ne restituisce le `columns`, oppure l'esito se
+ * non è lavorabile. Il rilascio vale soltanto per il blocco ancora preso da questo passo.
  */
 export async function claimStepJob<Job>(
   db: D1Database,
@@ -50,8 +50,8 @@ export async function claimStepJob<Job>(
 export const orderBudget = { batch: 200, batches: 25 };
 
 /**
- * Tetto di una richiesta che elimina gli ordini di un negozio senza coda: oltre, chi l'ha
- * chiesta la ripete e l'eliminazione riprende dagli ordini rimasti.
+ * Tetto di una richiesta che elimina gli ordini di un negozio senza coda: oltre, chi l'ha chiesta
+ * la ripete e l'eliminazione riprende dagli ordini rimasti.
  */
 export const requestOrderBudget = { batch: 200, batches: 250 };
 
@@ -93,9 +93,9 @@ export async function deleteOrders(
 const queueRetries = 3;
 
 /**
- * Esegue un passo dalla coda. Con «more» il lavoro riparte con un nuovo messaggio; ogni altro
- * esito chiude la consegna. Un errore riprova con backoff per poche consegne, entro il limite
- * della coda, poi la richiesta passa al compito periodico.
+ * Esegue un passo dalla coda. Con «more» il lavoro riparte con un nuovo messaggio; ogni altro esito
+ * chiude la consegna. Un errore riprova con backoff per poche consegne, entro il limite della coda,
+ * poi la richiesta passa al compito periodico.
  */
 export async function consumeStepJob(
   message: Message<unknown>,

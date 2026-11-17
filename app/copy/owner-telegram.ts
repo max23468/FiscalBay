@@ -2,8 +2,8 @@ import type { OwnerCommand } from "../bot-commands";
 
 /**
  * Testi del Control Center Telegram dell'owner, soltanto in italiano. Etichette di sezioni,
- * anomalie, lavori e metriche vengono dalla console (`admin-copy`), così bot e console parlano
- * allo stesso modo.
+ * anomalie, lavori e metriche vengono dalla console (`admin-copy`), così bot e console parlano allo
+ * stesso modo.
  */
 export const ownerTelegramCopy = {
   /** Menu della chat dell'owner, nell'ordine in cui compare. */
@@ -55,11 +55,7 @@ export const ownerTelegramCopy = {
   resolvedAt: "Rientrata",
   subjects: "Riguarda",
   action: "Azione",
-  incident: {
-    opened: "Aperta",
-    escalated: "Aggravata",
-    resolved: "Rientrata",
-  },
+  incident: { opened: "Aperta", escalated: "Aggravata", resolved: "Rientrata" },
   severityIcon: { p1: "🔴", p2: "🟠", p3: "🟡" },
   resolvedIcon: "🟢",
   accounts: "Account",
@@ -103,9 +99,7 @@ export const ownerTelegramCopy = {
       `${from} – ${to ?? "senza fine"} · ${quota} sblocchi`,
     noPromotions: "Nessuna promozione recente",
   },
-  metrics: {
-    window: (days: number) => `Ultimi ${days} giorni`,
-  },
+  metrics: { window: (days: number) => `Ultimi ${days} giorni` },
   exitsView: {
     lead: "Ultimi 30 giorni · ultimi 12 mesi",
     counts: (days30: number, months12: number) => `${days30} · ${months12}`,

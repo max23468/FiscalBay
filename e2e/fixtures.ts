@@ -1,8 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
+
 import { test as base, type BrowserContext, type Page, type Request } from "@playwright/test";
 
 import { webAnalyticsCollector, webAnalyticsScript } from "../app/web-analytics";
-import { abortedDataRequest } from "./page-cases";
 import {
   createLocalIdentity,
   localOrigin,
@@ -10,6 +10,7 @@ import {
   useLocalAccount,
   writeLocalDatabase,
 } from "./local-account";
+import { abortedDataRequest } from "./page-cases";
 
 export { expect } from "@playwright/test";
 
@@ -27,8 +28,8 @@ interface Traffic {
 const traffic = new WeakMap<BrowserContext, WeakMap<Page, Traffic>>();
 
 /**
- * Frame della richiesta; null per quelle del service worker e per la navigazione che apre una
- * nuova scheda, partita prima che il frame esista: la nuova pagina si osserva dal suo documento.
+ * Frame della richiesta; null per quelle del service worker e per la navigazione che apre una nuova
+ * scheda, partita prima che il frame esista: la nuova pagina si osserva dal suo documento.
  */
 function frameOf(request: Request) {
   if (request.serviceWorker()) return null;
@@ -40,10 +41,10 @@ function frameOf(request: Request) {
 }
 
 /**
- * Un caricamento `.data` senza risposta dopo questo tempo è stato annullato: dopo il redirect
- * dalla radice agli Ordini Chromium annulla quello del documento lasciato senza riportarne la
- * fine, e nessun caricamento o documento successivo lo chiude. Il Worker lo vede annullato dal
- * browser entro un paio di secondi.
+ * Un caricamento `.data` senza risposta dopo questo tempo è stato annullato: dopo il redirect dalla
+ * radice agli Ordini Chromium annulla quello del documento lasciato senza riportarne la fine, e
+ * nessun caricamento o documento successivo lo chiude. Il Worker lo vede annullato dal browser
+ * entro un paio di secondi.
  */
 const abandonedDataMilliseconds = 10_000;
 
@@ -109,8 +110,8 @@ export function watchNetwork(context: BrowserContext) {
 
 /**
  * Rete ferma: dopo `load`, nessuna richiesta della pagina in corso per 500 ms. Sostituisce
- * `waitForLoadState("networkidle")`, che Playwright ritira all'evento `load` se è scattato prima
- * e nel frattempo sono partite richieste, senza poi riarmarlo: su WebKit lento accade con i testi
+ * `waitForLoadState("networkidle")`, che Playwright ritira all'evento `load` se è scattato prima e
+ * nel frattempo sono partite richieste, senza poi riarmarlo: su WebKit lento accade con i testi
  * della lingua importati da `entry.client` prima dell'idratazione, e l'attesa non finisce più.
  */
 export async function networkIdle(page: Page) {
@@ -122,8 +123,8 @@ export async function networkIdle(page: Page) {
     if (current)
       for (const request of current.pending)
         if (
-          dataRequest(request) &&
-          Date.now() - (current.started.get(request) ?? Date.now()) >= abandonedDataMilliseconds
+          dataRequest(request)
+          && Date.now() - (current.started.get(request) ?? Date.now()) >= abandonedDataMilliseconds
         ) {
           current.pending.delete(request);
           current.changed = Date.now();

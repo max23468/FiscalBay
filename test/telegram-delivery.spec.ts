@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { setSwitch } from "../app/domain/service-settings.server";
+import { configureBotCommands } from "../app/domain/telegram-bot.server";
 import { deliverTelegram } from "../app/domain/telegram-deliveries.server";
-import { localClock, zonedInstant } from "../app/time";
 import { escape, splitBlocks, when } from "../app/domain/telegram-messages.server";
 import { saveTelegramChange, telegramSettings } from "../app/domain/telegram.server";
-import { configureBotCommands } from "../app/domain/telegram-bot.server";
 import { ebayOrderHref } from "../app/orders/ebay-links";
+import { localClock, zonedInstant } from "../app/time";
 import {
   insertEntitlement,
   insertTaxIdentifiers,
@@ -1433,7 +1433,7 @@ describe("esiti delle consegne", () => {
     const texts = Object.fromEntries(
       api.texts().map((call) => [call.params.chat_id, String(call.params.text)]),
     );
-    expect(Object.keys(texts).sort()).toEqual(["661", "662"]);
+    expect(Object.keys(texts).toSorted()).toEqual(["661", "662"]);
     expect(texts["661"]).toMatch(/Riepilogo del[\s\S]*ebay-o-orario-esatto/u);
     expect(texts["662"]).toMatch(/^🛒 <b>Nuovo ordine<\/b>[\s\S]*ebay-o-per-ordine/u);
     expect(await digestOf(each)).toBeNull();

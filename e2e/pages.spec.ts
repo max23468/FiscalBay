@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { BrowserContext, Response } from "@playwright/test";
+
 import { expect, networkIdle, test, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { abortedDataRequest, pageCases, knownPagePath, expectedPageError } from "./page-cases";
@@ -31,9 +32,9 @@ const breakpointEdges = [320, 359, 360, 399, 400, 639, 640, 767, 768, 1023, 1024
 const scenarios = production
   ? pageCases.filter(
       (scenario, index) =>
-        !scenario.preview ||
-        pageCases.findIndex((entry) => entry.preview && entry.pattern === scenario.pattern) ===
-          index,
+        !scenario.preview
+        || pageCases.findIndex((entry) => entry.preview && entry.pattern === scenario.pattern)
+          === index,
     )
   : pageCases;
 // Sul dominio remoto l'accesso avviene una volta per worker: le visite riusano la sessione,
@@ -107,8 +108,8 @@ for (const scenario of scenarios) {
             const [answer] = await Promise.all([
               page.waitForResponse(
                 (response) =>
-                  response.request().method() === "POST" &&
-                  /\/(?:accesso|sign-in)$/u.test(new URL(response.url()).pathname),
+                  response.request().method() === "POST"
+                  && /\/(?:accesso|sign-in)$/u.test(new URL(response.url()).pathname),
                 { timeout: 30_000 },
               ),
               signIn.getByRole("button", { name: "Accedi", exact: true }).click(),
@@ -190,9 +191,9 @@ for (const scenario of scenarios) {
           // iniettati dalla prova, come axe, che non hanno un file di origine. Quelle dell'app ne
           // hanno sempre uno e restano errori.
           if (
-            !url &&
-            message.text().startsWith("[Report Only]") &&
-            message.text().includes("require-trusted-types-for")
+            !url
+            && message.text().startsWith("[Report Only]")
+            && message.text().includes("require-trusted-types-for")
           )
             return;
           if (message.text().startsWith("Failed to load resource"))
@@ -204,13 +205,13 @@ for (const scenario of scenarios) {
           const url = new URL(response.url());
           if (response.headers()["cf-speculation-refused"]) refusedPrefetches.add(response.url());
           if (
-            response.request().resourceType() !== "document" &&
-            response.status() >= 400 &&
-            url.origin === new URL(baseURL!).origin &&
-            !(url.pathname === ownData && response.status() === expectedStatus) &&
+            response.request().resourceType() !== "document"
+            && response.status() >= 400
+            && url.origin === new URL(baseURL!).origin
+            && !(url.pathname === ownData && response.status() === expectedStatus)
             // Cloudflare rifiuta i precaricamenti speculativi verso il Worker: la navigazione
             // reale carica comunque la pagina, quindi il rifiuto non è un errore visibile.
-            !response.headers()["cf-speculation-refused"]
+            && !response.headers()["cf-speculation-refused"]
           )
             errors.push(`Risorsa ${response.status()}: ${url.pathname}`);
         });
@@ -295,8 +296,8 @@ for (const scenario of scenarios) {
               .evaluateAll((images) =>
                 images.every(
                   (image) =>
-                    (image as HTMLImageElement).complete &&
-                    (image as HTMLImageElement).naturalWidth > 0,
+                    (image as HTMLImageElement).complete
+                    && (image as HTMLImageElement).naturalWidth > 0,
                 ),
               ),
           )
@@ -308,9 +309,11 @@ for (const scenario of scenarios) {
         expect(
           links.every(
             (href) =>
-              href !== null &&
-              href !== "" &&
-              ["http:", "https:", "mailto:", "tel:"].includes(new URL(href, page.url()).protocol),
+              href !== null
+              && href !== ""
+              && ["http:", "https:", "mailto:", "tel:"].includes(
+                new URL(href, page.url()).protocol,
+              ),
           ),
         ).toBe(true);
         for (const href of links) {
@@ -331,9 +334,9 @@ for (const scenario of scenarios) {
             if (!element || element === document.body) return null;
             const style = getComputedStyle(element);
             const outline =
-              style.outlineStyle !== "none" &&
-              parseFloat(style.outlineWidth) > 0 &&
-              !/rgba\([^)]*,\s*0\)|transparent/u.test(style.outlineColor);
+              style.outlineStyle !== "none"
+              && parseFloat(style.outlineWidth) > 0
+              && !/rgba\([^)]*,\s*0\)|transparent/u.test(style.outlineColor);
             const ring = style.boxShadow !== "none";
             return {
               visible: outline || ring,
@@ -406,13 +409,13 @@ for (const scenario of scenarios) {
                 .filter(
                   ({ target }) =>
                     !(
-                      browserName === "webkit" &&
-                      id === "aria-command-name" &&
-                      target.every(
+                      browserName === "webkit"
+                      && id === "aria-command-name"
+                      && target.every(
                         (selector) =>
-                          typeof selector === "string" &&
-                          selector.startsWith("span[") &&
-                          selector.includes("[data-base-ui-focus-guard"),
+                          typeof selector === "string"
+                          && selector.startsWith("span[")
+                          && selector.includes("[data-base-ui-focus-guard"),
                       )
                     ),
                 )
@@ -448,8 +451,8 @@ for (const scenario of scenarios) {
         // dell'idratazione non rende navigabile il logo.
         // Gli Ordini aggiungono all'indirizzo soltanto l'istantanea dell'elenco.
         const atHome = (url: URL) =>
-          url.pathname === new URL(home, baseURL!).pathname &&
-          [...url.searchParams.keys()].every((key) => key === "vista");
+          url.pathname === new URL(home, baseURL!).pathname
+          && [...url.searchParams.keys()].every((key) => key === "vista");
         if (!modal && (await homeLink.isVisible()) && new URL(before).pathname !== home) {
           // Un clic arrivato dopo la ricarica ma prima dell'idratazione si perde: si ripete.
           await expect(async () => {
@@ -476,10 +479,10 @@ for (const scenario of scenarios) {
         }
         // Con il pannello di un ordine aperto la barra superiore resta sotto la velatura modale.
         if (
-          scenario.role === "member" &&
-          scenario.area === "orders" &&
-          scenario.status === 200 &&
-          !scenario.dialog
+          scenario.role === "member"
+          && scenario.area === "orders"
+          && scenario.status === 200
+          && !scenario.dialog
         ) {
           // La barra superiore trova il codice sbloccato e non quello da sbloccare; la query
           // resta fuori dall'indirizzo.
@@ -505,9 +508,7 @@ for (const scenario of scenarios) {
               `${pagePath(prefix, "/app/ordini")}\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`,
               "u",
             ),
-            {
-              timeout: 15_000,
-            },
+            { timeout: 15_000 },
           );
           expect(page.url()).not.toContain(testAccount.taxCodes.unlocked);
           await expect(page.getByText(testAccount.taxCodes.unlocked).first()).toBeVisible();

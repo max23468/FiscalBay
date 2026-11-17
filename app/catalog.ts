@@ -6,15 +6,14 @@ export const premiumOffers = ["monthly", "annual", "lifetime"] as const;
 export type PremiumOffer = (typeof premiumOffers)[number];
 
 /**
- * Acquisto dalla pagina del piano: possibile, in attesa della prima lettura riuscita di un
- * negozio, fermo per una copertura già in corso oppure sospeso senza capacità per nuovi
- * Premium.
+ * Acquisto dalla pagina del piano: possibile, in attesa della prima lettura riuscita di un negozio,
+ * fermo per una copertura già in corso oppure sospeso senza capacità per nuovi Premium.
  */
 export type PurchaseState = "available" | "needs-sync" | "covered" | "closed";
 
 /**
- * Acquisto possibile dopo la prima lettura riuscita di un negozio, se nessuna copertura lo
- * ferma e gli acquisti non sono sospesi. Regola comune all'area reale e all'anteprima.
+ * Acquisto possibile dopo la prima lettura riuscita di un negozio, se nessuna copertura lo ferma e
+ * gli acquisti non sono sospesi. Regola comune all'area reale e all'anteprima.
  */
 export function purchaseStateFrom({
   covered,
@@ -29,10 +28,10 @@ export function purchaseStateFrom({
 }
 
 /**
- * Offerta lifetime per la pagina del piano: in vendita, esaurita, in attesa della prima
- * lettura o sospesa come gli altri acquisti. `credit` è il periodo pagato non usato, in centesimi, che si detrae dal prezzo;
- * `replaces` indica un abbonamento che con il lifetime si chiude; `seats` i posti ancora liberi
- * sul totale, come sul sito.
+ * Offerta lifetime per la pagina del piano: in vendita, esaurita, in attesa della prima lettura o
+ * sospesa come gli altri acquisti. `credit` è il periodo pagato non usato, in centesimi, che si
+ * detrae dal prezzo; `replaces` indica un abbonamento che con il lifetime si chiude; `seats` i
+ * posti ancora liberi sul totale, come sul sito.
  */
 export type LifetimeOffer = {
   state: "available" | "needs-sync" | "sold-out" | "closed";
@@ -42,9 +41,9 @@ export type LifetimeOffer = {
 };
 
 /**
- * Listino canonico in centesimi di euro, IVA e imposte escluse. Una nuova generazione di
- * prezzi si aggiunge accanto a questa: gli abbonamenti continuano con il listino con cui sono
- * nati, riconoscibile dalla generazione salvata nei metadati del checkout.
+ * Listino canonico in centesimi di euro, IVA e imposte escluse. Una nuova generazione di prezzi si
+ * aggiunge accanto a questa: gli abbonamenti continuano con il listino con cui sono nati,
+ * riconoscibile dalla generazione salvata nei metadati del checkout.
  */
 export const priceGeneration = {
   id: "2026-09",
@@ -55,17 +54,17 @@ export const priceGeneration = {
 export const baseFreeQuota = 5;
 
 /**
- * Fine registrata di una promozione del Free senza data: dura finché la console non la termina.
- * Il database vuole una fine, quindi la promozione aperta ne ha una che nessun ciclo raggiunge;
- * chi la legge la riporta come assente.
+ * Fine registrata di una promozione del Free senza data: dura finché la console non la termina. Il
+ * database vuole una fine, quindi la promozione aperta ne ha una che nessun ciclo raggiunge; chi la
+ * legge la riporta come assente.
  */
 export const openPromotionEnd = "9999-12-31T23:59:59.999Z";
 
 /**
- * Venti posti lifetime fra vendite e omaggi (D031). Il numero del posto è il vincolo atomico
- * del tetto: una prenotazione occupa il posto più basso libero prima del Checkout, la conferma
- * verificata di Stripe lo rende attivo e soltanto una sessione che non può più incassare lo
- * libera. Un posto attivo, anche rimborsato o di un account cancellato, non torna disponibile.
+ * Venti posti lifetime fra vendite e omaggi (D031). Il numero del posto è il vincolo atomico del
+ * tetto: una prenotazione occupa il posto più basso libero prima del Checkout, la conferma
+ * verificata di Stripe lo rende attivo e soltanto una sessione che non può più incassare lo libera.
+ * Un posto attivo, anche rimborsato o di un account cancellato, non torna disponibile.
  */
 export const lifetimeSlots = 20;
 
@@ -78,8 +77,8 @@ export const priceVariable = {
 
 /**
  * Prezzo netto in euro, senza decimali quando è intero. Locali e raggruppamento sono quelli di
- * `locales` e `formatAmount` in `i18n.ts`, ripetuti qui: `scripts/stripe-account.mjs` carica
- * questo modulo con Node, che non risolve gli import senza estensione di `i18n.ts`.
+ * `locales` e `formatAmount` in `i18n.ts`, ripetuti qui: `scripts/stripe-account.mjs` carica questo
+ * modulo con Node, che non risolve gli import senza estensione di `i18n.ts`.
  */
 export function formatPrice(cents: number, language: Language) {
   return new Intl.NumberFormat(language === "it" ? "it-IT" : "en-GB", {
@@ -91,9 +90,9 @@ export function formatPrice(cents: number, language: Language) {
 }
 
 /**
- * Totale con l'IVA italiana ordinaria, mostrato accanto al netto sul sito. Stripe calcola
- * l'imposta effettiva del paese dell'acquirente; qui l'imposta della riga si arrotonda al
- * centesimo come nelle sue fatture.
+ * Totale con l'IVA italiana ordinaria, mostrato accanto al netto sul sito. Stripe calcola l'imposta
+ * effettiva del paese dell'acquirente; qui l'imposta della riga si arrotonda al centesimo come
+ * nelle sue fatture.
  */
 export function italianGross(cents: number) {
   return cents + Math.round(cents * 0.22);
@@ -105,16 +104,16 @@ export function annualPaidMonths() {
 }
 
 /**
- * Il Checkout di Stripe accetta una prova che finisce almeno due giorni dopo l'apertura. Durata
- * in linea: `scripts/stripe-account.mjs` carica questo modulo con Node, senza bundler.
+ * Il Checkout di Stripe accetta una prova che finisce almeno due giorni dopo l'apertura. Durata in
+ * linea: `scripts/stripe-account.mjs` carica questo modulo con Node, senza bundler.
  */
 const minimumCheckoutTrial = 2 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000;
 
 /**
- * Primo addebito di un acquisto durante la prova: alla fine della prova, al secondo intero
- * come le date di Stripe. Null quando ne mancano meno di due giorni, perché il Checkout non
- * accetta una prova più breve: allora il primo addebito è subito e il periodo pagato parte
- * dall'acquisto, senza interrompere Premium.
+ * Primo addebito di un acquisto durante la prova: alla fine della prova, al secondo intero come le
+ * date di Stripe. Null quando ne mancano meno di due giorni, perché il Checkout non accetta una
+ * prova più breve: allora il primo addebito è subito e il periodo pagato parte dall'acquisto, senza
+ * interrompere Premium.
  */
 export function firstChargeAt(trialEndsAt: string, now: string | Date) {
   const at = Math.ceil(Date.parse(trialEndsAt) / 1000) * 1000;

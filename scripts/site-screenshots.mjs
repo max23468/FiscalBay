@@ -2,26 +2,28 @@
 /**
  * Immagini del sito pubblico prese dalle schermate reali dell'anteprima, con i soli dati di
  * esempio: ogni immagine è ritagliata sull'elemento, senza la barra dell'anteprima, in italiano e
- * inglese e nei temi chiaro e scuro. Il messaggio Telegram, che l'app non mostra, è ricostruito
- * con il formato di `orderMessage` sul tema di Telegram. Scrive i WebP in `public/site/` e le
+ * inglese e nei temi chiaro e scuro. Il messaggio Telegram, che l'app non mostra, è ricostruito con
+ * il formato di `orderMessage` sul tema di Telegram. Scrive i WebP in `public/site/` e le
  * dimensioni in `app/site-shots.json`, letto dalle pagine per riservare lo spazio. L'immagine del
- * primo schermo della home ha anche la versione AVIF e le larghezze di 640 e 960 px, convertite
- * dal WebP con ImageMagick (`brew install imagemagick`): Chromium non codifica AVIF.
+ * primo schermo della home ha anche la versione AVIF e le larghezze di 640 e 960 px, convertite dal
+ * WebP con ImageMagick (`brew install imagemagick`): Chromium non codifica AVIF.
  *
  * Da rieseguire quando cambiano le schermate mostrate dal sito, su una preview locale della build:
- *   pnpm build && E2E_PORT=5300 node scripts/local-preview.mjs
- *   node node_modules/vite/bin/vite.js preview .cloudflare/preview --config vite.config.ts --port 5300
- *   E2E_PORT=5300 pnpm site:screenshots
- * Senza un indirizzo come argomento vale l'origine della preview locale di `e2e/local-account.ts`:
- * `E2E_PORT`, la porta fissa in CI o quella del worktree.
- * Ogni schermata porta nell'indirizzo una versione ricavata dai suoi file, così il browser la
- * conserva a lungo: dopo una modifica a mano dei file, `node scripts/site-screenshots.mjs --versions`.
+ * pnpm build && E2E_PORT=5300 node scripts/local-preview.mjs node node_modules/vite/bin/vite.js
+ * preview .cloudflare/preview --config vite.config.ts --port 5300 E2E_PORT=5300 pnpm
+ * site:screenshots Senza un indirizzo come argomento vale l'origine della preview locale di
+ * `e2e/local-account.ts`: `E2E_PORT`, la porta fissa in CI o quella del worktree. Ogni schermata
+ * porta nell'indirizzo una versione ricavata dai suoi file, così il browser la conserva a lungo:
+ * dopo una modifica a mano dei file, `node scripts/site-screenshots.mjs --versions`.
  */
-import { chromium } from "@playwright/test";
+
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+
+import { chromium } from "@playwright/test";
+
 import { localOrigin } from "../e2e/local-account.ts";
 
 const base = process.argv[2] ?? localOrigin;
@@ -31,9 +33,9 @@ const schemes = ["light", "dark"];
 
 /**
  * Schermate: percorso dell'anteprima, scenario, finestra, elemento da ritagliare e densità. Le
- * pagine intere stanno a densità 1 perché il sito le mostra rimpicciolite; i dettagli a 2.
- * `mobile` cambia la finestra, ed eventualmente il ritaglio, della variante `<nome>-mobile`
- * che il sito usa sotto i 640 px, dove una schermata larga sarebbe illeggibile.
+ * pagine intere stanno a densità 1 perché il sito le mostra rimpicciolite; i dettagli a 2. `mobile`
+ * cambia la finestra, ed eventualmente il ritaglio, della variante `<nome>-mobile` che il sito usa
+ * sotto i 640 px, dove una schermata larga sarebbe illeggibile.
  */
 const phone = { width: 390, height: 1400 };
 const shots = [
@@ -205,8 +207,8 @@ const sheetRows = [
 ];
 
 /**
- * `columns` sceglie le colonne e `compact` tiene i soli ordini con il Codice Fiscale: su
- * smartphone restano ordine, acquirente e Codice Fiscale in un foglio abbastanza stretto da leggersi.
+ * `columns` sceglie le colonne e `compact` tiene i soli ordini con il Codice Fiscale: su smartphone
+ * restano ordine, acquirente e Codice Fiscale in un foglio abbastanza stretto da leggersi.
  */
 function sheetPage(language, scheme, columns = [0, 1, 2, 3, 4, 5], compact = false) {
   const t = sheet[language];
@@ -368,7 +370,7 @@ const shotVersion = (name, language) => {
   const variant = new RegExp(`^${name}-${language}-(?:light|dark)(?:-\\d+)?\\.\\w+$`, "u");
   for (const file of readdirSync(output)
     .filter((file) => variant.test(file))
-    .sort())
+    .toSorted())
     hash.update(file).update(readFileSync(path.join(output, file)));
   return hash.digest("hex").slice(0, 10);
 };

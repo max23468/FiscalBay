@@ -1,20 +1,13 @@
 import { env } from "cloudflare:workers";
-
 import { expect, it, vi } from "vitest";
 
 import { readDetail } from "../app/domain/order-acquisition-details.server";
-import { openBudget } from "./fixtures/ebay-client-fixtures";
-
-import { listVisibleOrders } from "../app/domain/orders.server";
-
 import { recordOrderObservation } from "../app/domain/order-import.server";
-
 import { type OrderObservation } from "../app/domain/order-observation.server";
-
+import { listVisibleOrders } from "../app/domain/orders.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
-
 import { insertStorePause, now, resetOrderFixtures } from "./fixtures/database-fixtures";
-
+import { openBudget } from "./fixtures/ebay-client-fixtures";
 import {
   grantedAt,
   target,
@@ -33,11 +26,7 @@ it("conserva ogni variazione fiscale effettiva e mostra solo il dato corrente", 
       taxIdentifiers: {
         source: "ebay_trading_get_orders",
         complete,
-        values: values.map((value) => ({
-          type: "CODICE_FISCALE",
-          issuingCountry: "IT",
-          value,
-        })),
+        values: values.map((value) => ({ type: "CODICE_FISCALE", issuingCountry: "IT", value })),
       },
     });
   const changes = async (input: OrderObservation, observedAt: string) =>
@@ -223,9 +212,7 @@ it("prima dello sblocco nomina Partita IVA il numero che eBay riporta come Codic
 it("normalizza le riletture, aggiorna il tipo presente e conserva gli altri identificativi", async () => {
   const value = { type: "CODICE_FISCALE", issuingCountry: null, value: " rssmra80a01h501u " };
   const fiscal = (values: NonNullable<OrderObservation["taxIdentifiers"]>["values"]) =>
-    observation({
-      taxIdentifiers: { source: "ebay_trading_get_orders", complete: false, values },
-    });
+    observation({ taxIdentifiers: { source: "ebay_trading_get_orders", complete: false, values } });
   await recordOrderObservation(
     env.DB,
     target(),
@@ -361,9 +348,7 @@ it("la sola provenienza non genera un cambiamento fiscale o una seconda prima di
 
 it("mantiene distinti tipo e Paese degli identificativi esteri", async () => {
   const fiscal = (values: NonNullable<OrderObservation["taxIdentifiers"]>["values"]) =>
-    observation({
-      taxIdentifiers: { source: "ebay_trading_get_orders", complete: false, values },
-    });
+    observation({ taxIdentifiers: { source: "ebay_trading_get_orders", complete: false, values } });
   await recordOrderObservation(
     env.DB,
     target(),
@@ -445,9 +430,7 @@ it("il guard transazionale tratta gli identificativi esterni come dati", async (
 
 it("l'indicazione di modifica resta legata al tipo di identificativo", async () => {
   const fiscal = (values: NonNullable<OrderObservation["taxIdentifiers"]>["values"]) =>
-    observation({
-      taxIdentifiers: { source: "ebay_trading_get_orders", complete: false, values },
-    });
+    observation({ taxIdentifiers: { source: "ebay_trading_get_orders", complete: false, values } });
   await recordOrderObservation(
     env.DB,
     target(),
@@ -926,10 +909,7 @@ it("non scrive con un consenso diverso o con il negozio in pausa", async () => {
   await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
   await recordOrderObservation(env.DB, target(), observation());
   await insertStorePause().run();
-  const later = observation({
-    lastModifiedTime: "2026-09-10T12:00:00Z",
-    paymentStatus: "PENDING",
-  });
+  const later = observation({ lastModifiedTime: "2026-09-10T12:00:00Z", paymentStatus: "PENDING" });
   expect(await recordOrderObservation(env.DB, target(), later)).toEqual({
     outcome: "not_writable",
   });

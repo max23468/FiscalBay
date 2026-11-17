@@ -38,8 +38,8 @@ if (typeof document !== "undefined")
 
 /**
  * Primo momento in cui la pagina è stata nascosta: dalle voci `visibility-state`, che partono
- * dall'apertura del documento, o dal ripiego. FCP e LCP disegnati dopo, come in una scheda
- * aperta in background, non misurano il caricamento visto dall'utente.
+ * dall'apertura del documento, o dal ripiego. FCP e LCP disegnati dopo, come in una scheda aperta
+ * in background, non misurano il caricamento visto dall'utente.
  */
 export function firstHiddenTime(
   entries: ReadonlyArray<{ name: string; startTime: number }> | null,
@@ -82,8 +82,8 @@ const updateDelay = 1_000;
 const maxFrames = 200;
 
 /**
- * INP della pagina: l'interazione più lenta, scartandone una ogni cinquanta come fa il
- * 98° percentile della definizione di Core Web Vitals. Senza interazioni resta assente.
+ * INP della pagina: l'interazione più lenta, scartandone una ogni cinquanta come fa il 98°
+ * percentile della definizione di Core Web Vitals. Senza interazioni resta assente.
  */
 export function interactionToNextPaint(durations: Iterable<number>) {
   return inpInteraction([...durations].map((duration) => ({ duration })))?.duration;
@@ -91,7 +91,7 @@ export function interactionToNextPaint(durations: Iterable<number>) {
 
 /** Interazione che dà l'INP, con la stessa regola di `interactionToNextPaint`. */
 export function inpInteraction<T extends { duration: number }>(entries: Iterable<T>) {
-  const slowest = [...entries].sort((a, b) => b.duration - a.duration);
+  const slowest = [...entries].toSorted((a, b) => b.duration - a.duration);
   return slowest[Math.min(Math.floor(slowest.length / 50), slowest.length - 1)];
 }
 
@@ -180,8 +180,8 @@ type DeferredFetch = (url: string, init: DeferredInit) => { readonly activated: 
 
 /**
  * Ripiego di `fetchLater` per i browser che non lo hanno: invia con `keepalive` e priorità bassa
- * quando la pagina viene nascosta o alla scadenza. Dopo l'invio `activated` è vero, e il report
- * non si aggiorna più: il biglietto vale una volta sola.
+ * quando la pagina viene nascosta o alla scadenza. Dopo l'invio `activated` è vero, e il report non
+ * si aggiorna più: il biglietto vale una volta sola.
  */
 const fetchLaterFallback: DeferredFetch = (url, { activateAfter, ...init }) => {
   let activated = false;
@@ -211,11 +211,11 @@ const fetchLaterFallback: DeferredFetch = (url, { activateAfter, ...init }) => {
 };
 
 /**
- * Misure del caricamento in cui la pagina è stata resa, con il biglietto del suo loader, per
- * tutta la permanenza sulla pagina: il report è affidato al browser con `fetchLater`, aggiornato
- * a ogni nuova misura, e parte quando il documento si chiude o poco prima che il biglietto
- * scada. INP e CLS maturano mentre la si usa; FCP e LCP restano fuori se la pagina era nascosta
- * prima di disegnarli. Senza biglietto, come nell'anteprima, non parte nessun report.
+ * Misure del caricamento in cui la pagina è stata resa, con il biglietto del suo loader, per tutta
+ * la permanenza sulla pagina: il report è affidato al browser con `fetchLater`, aggiornato a ogni
+ * nuova misura, e parte quando il documento si chiude o poco prima che il biglietto scada. INP e
+ * CLS maturano mentre la si usa; FCP e LCP restano fuori se la pagina era nascosta prima di
+ * disegnarli. Senza biglietto, come nell'anteprima, non parte nessun report.
  */
 export function usePageTiming(page: TimedPage, ticket: string | undefined) {
   // Il biglietto conta soltanto al primo caricamento: le rivalidazioni non lo rinnovano.
@@ -258,8 +258,8 @@ export function usePageTiming(page: TimedPage, ticket: string | undefined) {
         (entries) => {
           for (const entry of entries)
             if (
-              entry.interactionId &&
-              entry.duration > (interactions.get(entry.interactionId)?.duration ?? -1)
+              entry.interactionId
+              && entry.duration > (interactions.get(entry.interactionId)?.duration ?? -1)
             )
               interactions.set(entry.interactionId, entry);
           changed();

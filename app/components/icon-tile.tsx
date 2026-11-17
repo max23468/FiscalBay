@@ -11,8 +11,8 @@ const sizes = {
 };
 
 /**
- * Icona su una tessera tinta: dà un colore riconoscibile a sezioni e
- * categorie. È decorativa, il testo accanto porta il significato.
+ * Icona su una tessera tinta: dà un colore riconoscibile a sezioni e categorie. È decorativa, il
+ * testo accanto porta il significato.
  */
 export function IconTile({
   icon: Icon,

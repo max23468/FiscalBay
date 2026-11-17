@@ -1,7 +1,7 @@
 import type { AppCopy } from "./app-copy";
+import { displayTimeZone } from "./format";
 import type { Language } from "./i18n";
 import { type NotificationView } from "./view-models";
-import { displayTimeZone } from "./format";
 
 /** Preferenze dell'account con i valori ammessi, condivise fra Impostazioni e server. */
 
@@ -76,10 +76,7 @@ export interface DisplayPreferences {
   timeZone: string;
 }
 
-export const defaultDisplay: DisplayPreferences = {
-  theme: "system",
-  timeZone: displayTimeZone,
-};
+export const defaultDisplay: DisplayPreferences = { theme: "system", timeZone: displayTimeZone };
 
 /**
  * Messaggio all'acquirente nella sua lingua, indipendente da quella dell'interfaccia: per questo

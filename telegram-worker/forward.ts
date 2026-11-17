@@ -3,8 +3,8 @@ const methodPattern = /^\/[A-Za-z]{1,64}$/u;
 
 /**
  * Inoltra a Telegram una chiamata della Bot API ricevuta dal Worker principale, aggiungendo il
- * token del bot all'indirizzo. Restituisce la risposta di Telegram com'è: stato, intestazioni
- * come `Retry-After` e corpo restano da classificare al chiamante.
+ * token del bot all'indirizzo. Restituisce la risposta di Telegram com'è: stato, intestazioni come
+ * `Retry-After` e corpo restano da classificare al chiamante.
  */
 export async function forward(
   request: Request,

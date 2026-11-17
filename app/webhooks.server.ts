@@ -1,36 +1,18 @@
-import { z } from "zod";
 import { createHash } from "node:crypto";
-import { stripeEnvironment, verifyStripeEvent } from "./integrations/stripe.server";
-import {
-  answerCallback,
-  telegramConfigured,
-  TelegramSecretMismatch,
-  verifyTelegramUpdate,
-} from "./integrations/telegram.server";
-import {
-  admitOrigin,
-  NotificationLimit,
-  NotificationRejected,
-  verifyEbayNotification,
-} from "./integrations/ebay/notifications.server";
-import { rejectCredentials } from "./integrations/ebay/seller-credentials.server";
-import { readBounded, UpstreamError } from "./integrations/http.server";
-import { ebayEnvironmentAvailable } from "./integrations/ebay/environment.server";
+
+import { z } from "zod";
+
+import { isProduction } from "./app-links";
 import { applyStripeEvent } from "./domain/billing.server";
-import { consumeOrderConfirmation } from "./domain/order-acquisition.server";
-import { recordBulkDataThreshold } from "./domain/ebay-quotas.server";
-import { consumeOwnerUpdate } from "./domain/owner-control.server";
 import {
   type EbayAccountDeletion,
   recordEbayAccountDeletion,
 } from "./domain/ebay-account-deletion.server";
+import { recordBulkDataThreshold } from "./domain/ebay-quotas.server";
+import { consumeOrderConfirmation } from "./domain/order-acquisition.server";
+import { consumeOwnerUpdate } from "./domain/owner-control.server";
 import { consumeTelegramUpdate } from "./domain/telegram-bot.server";
 import { deliverTelegram } from "./domain/telegram-deliveries.server";
-import { isProduction } from "./app-links";
-import { logFailure } from "./errors";
-import { webhookPaths } from "./webhook-paths";
-import { dayMilliseconds } from "./time";
-import { queueRetryDelay } from "./domain/work-timing";
 import {
   enqueueReceipt,
   eventStore,
@@ -41,6 +23,26 @@ import {
   releaseReceipt,
   type Receipt,
 } from "./domain/webhook-receipts.server";
+import { queueRetryDelay } from "./domain/work-timing";
+import { logFailure } from "./errors";
+import { ebayEnvironmentAvailable } from "./integrations/ebay/environment.server";
+import {
+  admitOrigin,
+  NotificationLimit,
+  NotificationRejected,
+  verifyEbayNotification,
+} from "./integrations/ebay/notifications.server";
+import { rejectCredentials } from "./integrations/ebay/seller-credentials.server";
+import { readBounded, UpstreamError } from "./integrations/http.server";
+import { stripeEnvironment, verifyStripeEvent } from "./integrations/stripe.server";
+import {
+  answerCallback,
+  telegramConfigured,
+  TelegramSecretMismatch,
+  verifyTelegramUpdate,
+} from "./integrations/telegram.server";
+import { dayMilliseconds } from "./time";
+import { webhookPaths } from "./webhook-paths";
 
 const maxBytes = 262_144;
 const retention = 7 * dayMilliseconds;
@@ -157,9 +159,9 @@ function telegramEvent(request: Request, body: string, env: Env, now: Date): Rec
 
 /**
  * Notifica eBay firmata; null se autentica ma senza lavoro da accodare. La soglia della Bulk Data
- * Transfer Policy riguarda l'applicazione: apre subito l'anomalia della console, senza ricevuta.
- * La cancellazione di un account eBay non passa dalle ricevute: ha una richiesta propria. Entrambe
- * si scrivono dopo la verifica, così un database guasto risponde 503 ed eBay ritenta.
+ * Transfer Policy riguarda l'applicazione: apre subito l'anomalia della console, senza ricevuta. La
+ * cancellazione di un account eBay non passa dalle ricevute: ha una richiesta propria. Entrambe si
+ * scrivono dopo la verifica, così un database guasto risponde 503 ed eBay ritenta.
  */
 async function ebayEvent(
   request: Request,
@@ -230,7 +232,7 @@ async function ebayEvent(
   };
 }
 
-/** null lascia la richiesta al router; le callback OAuth non sono webhook. */
+/** Null lascia la richiesta al router; le callback OAuth non sono webhook. */
 export async function receiveWebhook(
   request: Request,
   env: Env,
@@ -256,10 +258,7 @@ export async function receiveWebhook(
     });
   }
   if (request.method !== "POST")
-    return new Response(null, {
-      status: 405,
-      headers: { allow: postOnly ? "POST" : "GET, POST" },
-    });
+    return new Response(null, { status: 405, headers: { allow: postOnly ? "POST" : "GET, POST" } });
   try {
     // Prima di leggere il corpo e di cercare la chiave pubblica: una sola origine non esaurisce
     // le risorse dell'ingresso eBay.
@@ -275,9 +274,9 @@ export async function receiveWebhook(
             : await ebayEvent(request, body, env, path, fetcher, now);
     } catch (error) {
       if (
-        error instanceof InvalidWebhook ||
-        error instanceof UpstreamError ||
-        error instanceof NotificationLimit
+        error instanceof InvalidWebhook
+        || error instanceof UpstreamError
+        || error instanceof NotificationLimit
       )
         throw error;
       if (error instanceof TelegramSecretMismatch) throw new InvalidWebhook(401);
@@ -330,16 +329,16 @@ export async function receiveWebhook(
     }
     // Un ID riusato con altro contenuto non modifica il lavoro già verificato.
     if (
-      receipt.topic !== event.topic ||
-      receipt.object_id !== event.object_id ||
-      receipt.store_id !== event.store_id ||
-      receipt.consent_granted_at !== event.consent_granted_at ||
-      receipt.link_token_hash !== event.link_token_hash ||
-      receipt.command !== event.command ||
-      receipt.callback_id !== event.callback_id ||
-      receipt.message_id !== event.message_id ||
+      receipt.topic !== event.topic
+      || receipt.object_id !== event.object_id
+      || receipt.store_id !== event.store_id
+      || receipt.consent_granted_at !== event.consent_granted_at
+      || receipt.link_token_hash !== event.link_token_hash
+      || receipt.command !== event.command
+      || receipt.callback_id !== event.callback_id
+      || receipt.message_id !== event.message_id
       // Il tocco su un pulsante prende la data dalla ricezione, che un nuovo tentativo cambia.
-      (!event.callback_id && receipt.event_at !== event.event_at)
+      || (!event.callback_id && receipt.event_at !== event.event_at)
     )
       throw new InvalidWebhook(409);
     if (!receipt.queued_at && !receipt.completed_at) {
@@ -362,14 +361,14 @@ export async function receiveWebhook(
 }
 
 /**
- * Aggiornamenti del bot a cui risponde chi scrive: la coda aggiungerebbe da pochi decimi a
- * diversi secondi prima della risposta.
+ * Aggiornamenti del bot a cui risponde chi scrive: la coda aggiungerebbe da pochi decimi a diversi
+ * secondi prima della risposta.
  */
 const interactiveTopics = new Set(["start", "command", "callback", "owner", "owner_callback"]);
 
 /**
- * Esegue subito la ricevuta, con lo stesso lease del consumer. False se non si è completata:
- * allora la ricevuta passa alla coda come le altre, e un'interruzione la lascia al recupero.
+ * Esegue subito la ricevuta, con lo stesso lease del consumer. False se non si è completata: allora
+ * la ricevuta passa alla coda come le altre, e un'interruzione la lascia al recupero.
  */
 async function consumeNow(env: Env, receiptId: string, fetcher: typeof fetch, now: Date) {
   let done = false;
@@ -477,9 +476,7 @@ export async function consumeWebhooks(
           logFailure({ error: cleanup, operation: "webhook_consumer" }),
         );
       const delay = error instanceof UpstreamError ? error.details.retryAfter : undefined;
-      message.retry({
-        delaySeconds: Math.min(43_200, delay ?? queueRetryDelay(message.attempts)),
-      });
+      message.retry({ delaySeconds: Math.min(43_200, delay ?? queueRetryDelay(message.attempts)) });
       logFailure({ error, operation: "webhook_consumer" });
     }
   }

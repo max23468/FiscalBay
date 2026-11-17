@@ -35,8 +35,8 @@ export function errorResponse(request: Request, code: ErrorCode): Response {
 }
 
 /**
- * Auth o database non rispondono: 503 senza dati, con la sola indicazione di riprovare. La
- * pagina non promette una consultazione che non può servire (§20, §32).
+ * Auth o database non rispondono: 503 senza dati, con la sola indicazione di riprovare. La pagina
+ * non promette una consultazione che non può servire (§20, §32).
  */
 export function unavailablePage(request: Request, error: unknown) {
   logFailure({ request, code: "UPSTREAM_UNAVAILABLE", error, operation: "route" });
@@ -45,10 +45,7 @@ export function unavailablePage(request: Request, error: unknown) {
 
 /** La stessa risposta, per un errore già registrato da chi lo ha ricevuto. */
 export function unavailableData() {
-  return data(null, {
-    status: 503,
-    headers: { "cache-control": "no-store", "retry-after": "60" },
-  });
+  return data(null, { status: 503, headers: { "cache-control": "no-store", "retry-after": "60" } });
 }
 
 /** Percorso che riceve soltanto invii: una lettura non ha contenuto. */

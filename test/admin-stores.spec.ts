@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
-import { storeActions } from "../app/components/admin/store-actions";
-
 import { describe, expect, it, vi } from "vitest";
+
+import { storeActions } from "../app/components/admin/store-actions";
 
 it.each([
   [true, [], 0, { sync: true, retryDetails: false }],
@@ -20,44 +20,28 @@ import {
   normalizedName,
   reviewAbuseSignal,
 } from "../app/domain/abuse-review.server";
-
 import { consoleSummary, listAllStores } from "../app/domain/admin-directory.server";
-
 import { grantHistoryExtension, revokeHistoryExtension } from "../app/domain/concessions.server";
-
 import {
   applyWorkspacePlan,
   assistFreeStore,
   chooseFreeStore,
 } from "../app/domain/free-store.server";
-
 import { orderAllowance } from "../app/domain/grants.server";
-
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-
 import { requestStoreSync } from "../app/domain/order-sync.server";
-
-import { confirmStoreTransfer, prepareStoreTransfer } from "../app/domain/store-transfer.server";
-
-import { listStores, resumeStore, setAdminPause } from "../app/domain/stores.server";
-
-import { action as exportAction } from "../app/routes/order-export";
-
-import { loader as ordersLoader } from "../app/routes/orders";
-
 import { completeStoreLink } from "../app/domain/store-link.server";
-
+import { confirmStoreTransfer, prepareStoreTransfer } from "../app/domain/store-transfer.server";
+import { listStores, resumeStore, setAdminPause } from "../app/domain/stores.server";
 import {
   claimStoreLinkSession,
   startStoreLink as beginLink,
 } from "../app/integrations/ebay/store-link.server";
-
-import { syntheticEbay } from "./fixtures/ebay-fixtures";
-
+import { action as exportAction } from "../app/routes/order-export";
+import { loader as ordersLoader } from "../app/routes/orders";
 import { loader as loadStores } from "../app/routes/stores";
-
 import { verifiedSession } from "./fixtures/account-fixtures";
-
+import { at, hour, later, admin, audit, act, setupScenarios } from "./fixtures/admin-scenarios";
 import {
   insertCredentials,
   insertEntitlement,
@@ -66,12 +50,9 @@ import {
   insertWorkspace,
   now,
 } from "./fixtures/database-fixtures";
-
+import { syntheticEbay } from "./fixtures/ebay-fixtures";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
-
 import { callRoute, routeResponse } from "./fixtures/route-fixtures";
-
-import { at, hour, later, admin, audit, act, setupScenarios } from "./fixtures/admin-scenarios";
 
 setupScenarios();
 
@@ -93,7 +74,7 @@ describe("negozi con problemi", () => {
       insertStore({ id: "s-senza-consenso" }),
     ]);
     const { rows } = await listAllStores(env.DB, { problems: true }, at(now));
-    expect(rows.map((row) => row.id).sort()).toEqual(["s-dettagli", "s-senza-consenso"]);
+    expect(rows.map((row) => row.id).toSorted()).toEqual(["s-dettagli", "s-senza-consenso"]);
     expect((await consoleSummary(env.DB, at(now))).stores).toEqual({ active: 2, problems: 2 });
   });
 });
@@ -258,9 +239,7 @@ describe("trasferimento assistito di un negozio", () => {
     // Ripetuta, la conferma non esegue nulla di nuovo.
     expect(
       await confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(later(1000))),
-    ).toEqual({
-      result: "already",
-    });
+    ).toEqual({ result: "already" });
 
     expect((await listStores(env.DB, owner.userId)).map((store) => store.id)).toEqual(["s-a2"]);
     // Il nuovo spazio non vede ancora il negozio: lo ricollega con il proprio consenso.
@@ -339,7 +318,7 @@ describe("trasferimento assistito di un negozio", () => {
       confirmStoreTransfer(env, { id: first.id, actor: "admin" }, at(now)),
       confirmStoreTransfer(env, { id: second.id, actor: "admin" }, at(later(1))),
     ]);
-    expect(results.map(({ result }) => result).sort()).toEqual(["conflict", "done"]);
+    expect(results.map(({ result }) => result).toSorted()).toEqual(["conflict", "done"]);
     expect(
       await env.DB.prepare(
         "SELECT COUNT(*) AS n FROM store_transfers WHERE executed_at IS NOT NULL",
@@ -365,7 +344,7 @@ describe("trasferimento assistito di un negozio", () => {
       confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now)),
       confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(later(1))),
     ]);
-    expect(results.map(({ result }) => result).sort()).toEqual(["already", "done"]);
+    expect(results.map(({ result }) => result).toSorted()).toEqual(["already", "done"]);
     expect(
       await env.DB.prepare("SELECT workspace_id FROM ebay_stores WHERE id = 's-a'").first(),
     ).toEqual({ workspace_id: "w-b" });
@@ -383,7 +362,7 @@ describe("trasferimento assistito di un negozio", () => {
       confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now)),
       confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now)),
     ]);
-    expect(results.map(({ result }) => result).sort()).toEqual(["already", "done"]);
+    expect(results.map(({ result }) => result).toSorted()).toEqual(["already", "done"]);
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM store_identity_marks").first()).toEqual({
       n: 0,
     });
@@ -497,7 +476,7 @@ describe("trasferimento assistito di un negozio", () => {
       cycle: { id: "c-b", used: 3 },
       remaining: 2,
     });
-    expect((await listStores(env.DB, buyer.userId)).map((store) => store.id).sort()).toEqual([
+    expect((await listStores(env.DB, buyer.userId)).map((store) => store.id).toSorted()).toEqual([
       "s-a",
       "s-b",
     ]);

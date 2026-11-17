@@ -1,9 +1,8 @@
 import { env } from "cloudflare:workers";
 import { vi } from "vitest";
 
-import { completeRegistration } from "../../app/domain/registration.server";
 import { createAuth } from "../../app/auth.server";
-
+import { completeRegistration } from "../../app/domain/registration.server";
 import { now } from "./database-fixtures";
 
 export const syntheticProfile = {

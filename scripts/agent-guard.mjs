@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Hook `PreToolUse` degli agenti (`.claude/settings.json`): ferma prima dell'esecuzione le
- * insidie già costate lavoro, con il motivo e la strada giusta. Riceve su stdin l'evento JSON
- * dello strumento; esce con 2 e il messaggio su stderr per bloccarlo, con 0 per lasciarlo passare.
- * Le stesse regole valgono per chi lavora a mano: il gate le ritrova in `verify:repo`, nel
+ * Hook `PreToolUse` degli agenti (`.claude/settings.json`): ferma prima dell'esecuzione le insidie
+ * già costate lavoro, con il motivo e la strada giusta. Riceve su stdin l'evento JSON dello
+ * strumento; esce con 2 e il messaggio su stderr per bloccarlo, con 0 per lasciarlo passare. Le
+ * stesse regole valgono per chi lavora a mano: il gate le ritrova in `verify:repo`, nel
  * classificatore o nel deploy, ma soltanto dopo.
  */
 import { execFileSync } from "node:child_process";
@@ -40,9 +40,9 @@ const emDash = String.fromCodePoint(0x2014);
 
 /**
  * Esito per l'evento dello strumento: il messaggio che lo blocca, oppure null. `root` dà la radice
- * della repository che contiene il file, null fuori da ogni repository: vale anche per un
- * worktree diverso dalla cartella della sessione. `applied` dice se una migration esiste già su
- * `develop` in quella repository, cioè se il database l'ha registrata.
+ * della repository che contiene il file, null fuori da ogni repository: vale anche per un worktree
+ * diverso dalla cartella della sessione. `applied` dice se una migration esiste già su `develop` in
+ * quella repository, cioè se il database l'ha registrata.
  */
 export function guard(event, { root = () => null, applied = () => false } = {}) {
   const input = event.tool_input ?? {};

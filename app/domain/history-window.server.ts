@@ -1,13 +1,13 @@
-import { activeEntitlementSql } from "./grants.server";
 import { dayMilliseconds } from "../time";
+import { activeEntitlementSql } from "./grants.server";
 
 /**
- * Finestra dello storico (§4, §11, §30). Il Free importa, consulta e conserva gli ordini per
- * trenta giorni dalla loro data; una copertura in corso (Premium, prova, lifetime o concessa)
- * per un anno di calendario, o per l'estensione più lunga concessa allo spazio, mai oltre i due
- * anni che eBay restituisce. La stessa finestra fissa l'inizio dell'importazione, il termine di
- * un ordine nuovo e il riallineamento dei termini quando la copertura cambia.
- * Gli argomenti sono espressioni SQL, mai valori.
+ * Finestra dello storico (§4, §11, §30). Il Free importa, consulta e conserva gli ordini per trenta
+ * giorni dalla loro data; una copertura in corso (Premium, prova, lifetime o concessa) per un anno
+ * di calendario, o per l'estensione più lunga concessa allo spazio, mai oltre i due anni che eBay
+ * restituisce. La stessa finestra fissa l'inizio dell'importazione, il termine di un ordine nuovo e
+ * il riallineamento dei termini quando la copertura cambia. Gli argomenti sono espressioni SQL, mai
+ * valori.
  */
 
 /** Storico del Free, in giorni dalla data dell'ordine. */

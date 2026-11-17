@@ -2,8 +2,8 @@ import type { ErrorCode } from "./errors";
 import type { TimedPage } from "./page-timing";
 
 /**
- * Fasi misurate di una richiesta. I nomi, le operazioni e gli attributi sono un elenco chiuso:
- * mai valori dell'utente, dell'ordine o del provider.
+ * Fasi misurate di una richiesta. I nomi, le operazioni e gli attributi sono un elenco chiuso: mai
+ * valori dell'utente, dell'ordine o del provider.
  */
 export type Phase = "auth" | "d1" | "ebay";
 
@@ -19,26 +19,26 @@ export type PhaseOperation =
   | "request";
 
 /**
- * Metriche tecniche su Workers Analytics Engine (§31): contatori e istogrammi per esito e
- * latenza, con le fasi Auth, D1 ed eBay separate, in un dataset per ambiente. Ogni campo viene
- * da un elenco chiuso: mai CF, buyer, email, ID utente, URL o query. Analytics Engine non
- * deduplica e campiona: i KPI che devono resistere a retry restano eventi in D1. Il rendering
- * consuma soltanto CPU, che l'orologio del Worker non misura: si legge dai Workers Logs.
+ * Metriche tecniche su Workers Analytics Engine (§31): contatori e istogrammi per esito e latenza,
+ * con le fasi Auth, D1 ed eBay separate, in un dataset per ambiente. Ogni campo viene da un elenco
+ * chiuso: mai CF, buyer, email, ID utente, URL o query. Analytics Engine non deduplica e campiona:
+ * i KPI che devono resistere a retry restano eventi in D1. Il rendering consuma soltanto CPU, che
+ * l'orologio del Worker non misura: si legge dai Workers Logs.
  *
  * Disposizione dei punti, letta dalle query di `metrics-queries.ts`:
+ *
  * - `index1` = `blob1:blob2`, chiave del campionamento equo;
- * - `blob1` famiglia (`invocation`, `phase`, `page`), `blob2` invocazione (`http`, `queue`,
- *   `cron`, `browser`), `blob3` dettaglio (classe della route, tipo di messaggio, fase o
- *   pagina), `blob4` operazione della fase o metodo HTTP, `blob5` esito, `blob6` versione del
- *   Worker;
- * - invocazioni e fasi: `double1` conteggio, `double2` durata totale e `double3` durata massima,
- *   in millisecondi; per un'invocazione il conteggio è il numero di messaggi della coda (1 per
- *   HTTP e cron) e la durata è quella dell'invocazione intera; una richiesta HTTP dura fino alla
- *   risposta pronta, senza lo streaming del corpo;
- * - pagine: `double1` TTFB, `double2` FCP, `double3` LCP, `double4` pronta, `double5`..`double7`
- *   fasi del server Auth, D1 ed eBay, `double9` INP, in millisecondi, `double10` CLS in
- *   millesimi; -1 per una misura assente. `double8` resta vuoto: i punti scritti prima portano lì
- *   un rendering sempre nullo, che le query non leggono.
+ * - `blob1` famiglia (`invocation`, `phase`, `page`), `blob2` invocazione (`http`, `queue`, `cron`,
+ *   `browser`), `blob3` dettaglio (classe della route, tipo di messaggio, fase o pagina), `blob4`
+ *   operazione della fase o metodo HTTP, `blob5` esito, `blob6` versione del Worker;
+ * - Invocazioni e fasi: `double1` conteggio, `double2` durata totale e `double3` durata massima, in
+ *   millisecondi; per un'invocazione il conteggio è il numero di messaggi della coda (1 per HTTP e
+ *   cron) e la durata è quella dell'invocazione intera; una richiesta HTTP dura fino alla risposta
+ *   pronta, senza lo streaming del corpo;
+ * - Pagine: `double1` TTFB, `double2` FCP, `double3` LCP, `double4` pronta, `double5`..`double7` fasi
+ *   del server Auth, D1 ed eBay, `double9` INP, in millisecondi, `double10` CLS in millesimi; -1
+ *   per una misura assente. `double8` resta vuoto: i punti scritti prima portano lì un rendering
+ *   sempre nullo, che le query non leggono.
  */
 
 export type Invocation = "http" | "queue" | "cron";

@@ -1,24 +1,23 @@
 import { appCopy } from "../app-copy";
-import { legalVersions } from "./registration.server";
+import { formatDate } from "../format";
 import type { Language } from "../i18n";
 import { type NotificationView } from "../view-models";
-import { formatDate } from "../format";
 import { whatsNewNotifications } from "../whats-new.server";
 import { finishedExportJobs } from "./export-jobs.server";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
+import { legalVersions } from "./registration.server";
 import { activeServiceNotices } from "./service-notices.server";
 import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
 
 /**
  * Notifiche della campanella, derivate dallo stato corrente: un problema risolto esce dalla
- * campanella. Oggi le fonti sono i collegamenti dei negozi scaduti o in scadenza, le letture
- * che non riescono, di un negozio oppure di tutti quando eBay non risponde, e la pausa per
- * inattività del Free, le esportazioni preparate dalla coda, pronte finché il file resta
- * scaricabile o non riuscite, e le comunicazioni di servizio della console; ogni notifica ha un
- * identificativo stabile per problema, così la lettura vale finché il problema resta lo stesso.
- * Si aggiunge una voce per ogni rilascio con Novità, identificata dalla sua versione, e
- * l'invito ad accettare la versione corrente dei Termini finché manca. Le notifiche eliminate
- * dall'utente non compaiono.
+ * campanella. Oggi le fonti sono i collegamenti dei negozi scaduti o in scadenza, le letture che
+ * non riescono, di un negozio oppure di tutti quando eBay non risponde, e la pausa per inattività
+ * del Free, le esportazioni preparate dalla coda, pronte finché il file resta scaricabile o non
+ * riuscite, e le comunicazioni di servizio della console; ogni notifica ha un identificativo
+ * stabile per problema, così la lettura vale finché il problema resta lo stesso. Si aggiunge una
+ * voce per ogni rilascio con Novità, identificata dalla sua versione, e l'invito ad accettare la
+ * versione corrente dei Termini finché manca. Le notifiche eliminate dall'utente non compaiono.
  */
 export async function listNotifications(
   db: D1Database,
@@ -69,7 +68,7 @@ export async function listNotifications(
       at: failing
         .filter((store) => store.ebayEnvironment === environment)
         .map((store) => store.recent[1]!.at)
-        .sort()[0]!,
+        .toSorted()[0]!,
       read: false,
     })),
     ...failing
@@ -88,7 +87,7 @@ export async function listNotifications(
   // La pausa per inattività del Free ferma tutti i negozi dello spazio: una sola notifica.
   const inactiveSince = stores
     .flatMap((store) => (store.inactiveSince ? [store.inactiveSince] : []))
-    .sort()[0];
+    .toSorted()[0];
   const inactivity: NotificationView[] = inactiveSince
     ? [
         {
@@ -151,5 +150,5 @@ export async function listNotifications(
   return items
     .filter((item) => !dismissed.has(item.id))
     .map((item) => ({ ...item, read: read.has(item.id) }))
-    .sort((a, b) => b.at.localeCompare(a.at));
+    .toSorted((a, b) => b.at.localeCompare(a.at));
 }

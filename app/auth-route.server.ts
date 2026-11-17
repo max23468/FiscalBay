@@ -1,24 +1,7 @@
-import {
-  authAttemptWait,
-  countAuthAttempt,
-  longestAttemptWindow,
-} from "./domain/auth-attempts.server";
 import { redirect } from "react-router";
 import { z } from "zod";
 
-import { createAuth, readSession } from "./auth.server";
-import { registrationComplete, registrationStatus } from "./domain/registration.server";
-import { recordEmailChange } from "./domain/email-change.server";
-import { passkeyUserHandle, withPasskeyUser } from "./domain/passkey-user.server";
-import { passkeyChangeBlock, recentSignIn } from "./domain/sessions.server";
-import { completeStoreLink } from "./domain/store-link.server";
-import {
-  claimStoreLinkSession,
-  recordStoreLinkOutcome,
-  type StoreLinkOutcome,
-} from "./integrations/ebay/store-link.server";
 import { linkLanguage, notifySecurityEvent } from "./account-email.server";
-import { logFailure, tracePhase } from "./errors";
 import {
   appBase,
   authErrorPath,
@@ -28,11 +11,28 @@ import {
   storeNoticeParam,
   ordersPath,
 } from "./app-links";
+import { createAuth, readSession } from "./auth.server";
+import {
+  authAttemptWait,
+  countAuthAttempt,
+  longestAttemptWindow,
+} from "./domain/auth-attempts.server";
+import { recordEmailChange } from "./domain/email-change.server";
+import { passkeyUserHandle, withPasskeyUser } from "./domain/passkey-user.server";
+import { registrationComplete, registrationStatus } from "./domain/registration.server";
+import { passkeyChangeBlock, recentSignIn } from "./domain/sessions.server";
+import { completeStoreLink } from "./domain/store-link.server";
+import { logFailure, tracePhase } from "./errors";
 import { localizedPath } from "./i18n";
-import { sha256Hex } from "./sealed.server";
+import {
+  claimStoreLinkSession,
+  recordStoreLinkOutcome,
+  type StoreLinkOutcome,
+} from "./integrations/ebay/store-link.server";
 import { maxPasskeyName } from "./limits";
 import type { RequestLimit } from "./request-limits";
 import { clientKey, limitedHeaders, requestLimitWait } from "./request-limits.server";
+import { sha256Hex } from "./sealed.server";
 
 // I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
 // che conservano sempre un accesso valido. L'elenco delle sessioni restituirebbe i token delle
@@ -120,11 +120,7 @@ const attemptLimits = (): Array<{ paths: RegExp; limit: RequestLimit; anyMethod?
   { paths: /^\/(sign-in|sign-up|change-email)(\/|$)/u, limit: "attempts" },
   { paths: /^\/passkey\/verify-(authentication|registration)(\/|$)/u, limit: "attempts" },
   { paths: /^\/email-otp\/verify-email$/u, limit: "attempts" },
-  {
-    paths: /^\/passkey\/generate-register-options(\/|$)/u,
-    limit: "attempts",
-    anyMethod: true,
-  },
+  { paths: /^\/passkey\/generate-register-options(\/|$)/u, limit: "attempts", anyMethod: true },
   {
     paths: /^\/passkey\/generate-authenticate-options(\/|$)/u,
     limit: "challenges",
@@ -146,8 +142,8 @@ function authPath(request: Request): string {
 }
 
 /**
- * Secondi di attesa del filtro per IP sui percorsi Auth sensibili. I moduli dell'app lo
- * chiamano prima di Turnstile e poi inoltrano la richiesta già ammessa.
+ * Secondi di attesa del filtro per IP sui percorsi Auth sensibili. I moduli dell'app lo chiamano
+ * prima di Turnstile e poi inoltrano la richiesta già ammessa.
  */
 export function authLimitWait(env: Env, request: Request, path = authPath(request)) {
   const rule = attemptLimits().find(({ paths }) => paths.test(path));
@@ -165,10 +161,10 @@ export function tooManyAuthRequests(wait: number): Response {
 }
 
 /**
- * Soglie per indirizzo email, indipendenti dall'IP: chi cambia rete non prova più password
- * sullo stesso account né riempie di email la casella di un altro. Il limite del login vale
- * solo per l'accesso con password: Google, eBay e passkey restano disponibili al titolare.
- * Come per i tentativi, l'elenco si compone a ogni richiesta per la mutation.
+ * Soglie per indirizzo email, indipendenti dall'IP: chi cambia rete non prova più password sullo
+ * stesso account né riempie di email la casella di un altro. Il limite del login vale solo per
+ * l'accesso con password: Google, eBay e passkey restano disponibili al titolare. Come per i
+ * tentativi, l'elenco si compone a ogni richiesta per la mutation.
  */
 const addressLimits = () => [
   { paths: /^\/sign-in\/email$/u, window: 900, max: 10 },
@@ -200,8 +196,8 @@ const linkSocialBody = z.looseObject({ idToken: z.never().optional() });
 const changeEmailBody = z.object({ newEmail: z.string() });
 
 /**
- * Nome facoltativo della passkey in un corpo oggetto: non vuoto e al più 80 caratteri. Un corpo
- * di altra forma, o assente come nelle opzioni di registrazione, resta da validare ad Auth.
+ * Nome facoltativo della passkey in un corpo oggetto: non vuoto e al più 80 caratteri. Un corpo di
+ * altra forma, o assente come nelle opzioni di registrazione, resta da validare ad Auth.
  */
 const passkeyBody = z.union([
   z.object({
@@ -231,9 +227,9 @@ function formBody(request: Request): boolean {
 }
 
 /**
- * Applica i limiti per indirizzo, coerenti fra data center; restituisce i secondi di attesa
- * oltre il limite. Attivo sui domini HTTPS come il filtro per IP; il limite interno di Better
- * Auth resta spento (vedi auth.server.ts).
+ * Applica i limiti per indirizzo, coerenti fra data center; restituisce i secondi di attesa oltre
+ * il limite. Attivo sui domini HTTPS come il filtro per IP; il limite interno di Better Auth resta
+ * spento (vedi auth.server.ts).
  */
 async function addressWait(request: Request, env: Env): Promise<number | "unsupported" | null> {
   if (request.method !== "POST" || !env.APP_ORIGIN.startsWith("https:")) return null;
@@ -318,10 +314,10 @@ async function authResponse(request: Request, env: Env, admitted = false): Promi
   }
   if (
     // Il percorso sta qui e non in una costante del modulo: così la mutation lo prova.
-    pathname === "/api/auth/passkey/generate-register-options" &&
-    response.ok &&
-    response.headers.get("content-type")?.startsWith("application/json") &&
-    enrollingUser
+    pathname === "/api/auth/passkey/generate-register-options"
+    && response.ok
+    && response.headers.get("content-type")?.startsWith("application/json")
+    && enrollingUser
   ) {
     return passkeyOptionsResponse(response, {
       handle: await passkeyUserHandle(env.DB, enrollingUser.id),
@@ -354,17 +350,12 @@ async function handleEbayCallback(
     // è ancora in corso si torna agli ordini senza un esito anticipato.
     outcome = sessionUserId === link.userId ? link.outcome : "errore";
   } else {
-    outcome = await completeStoreLink({
-      env,
-      link,
-      sessionUserId,
-      search,
-      fetcher,
-      request,
-    }).catch((error: unknown) => {
-      logFailure({ request, error, operation: "store_link" });
-      return "errore" as const;
-    });
+    outcome = await completeStoreLink({ env, link, sessionUserId, search, fetcher, request }).catch(
+      (error: unknown) => {
+        logFailure({ request, error, operation: "store_link" });
+        return "errore" as const;
+      },
+    );
     await recordStoreLinkOutcome(env.DB, state, outcome);
   }
   // Lo state comincia con la lingua e, se il collegamento parte da Negozi, con «-negozi».
@@ -381,9 +372,9 @@ async function handleEbayCallback(
 }
 
 /**
- * Il link di cancellazione appartiene all'utente della sessione e vale ancora. Better Auth
- * consuma il token prima del confronto con l'utente: verificarlo qui evita che lo bruci una
- * sessione diversa, un accesso mancante o un metodo diverso da GET, e il titolare lo conserva.
+ * Il link di cancellazione appartiene all'utente della sessione e vale ancora. Better Auth consuma
+ * il token prima del confronto con l'utente: verificarlo qui evita che lo bruci una sessione
+ * diversa, un accesso mancante o un metodo diverso da GET, e il titolare lo conserva.
  */
 async function deletionLinkOwned(request: Request, env: Env): Promise<boolean> {
   const token = new URL(request.url).searchParams.get("token");
@@ -393,15 +384,15 @@ async function deletionLinkOwned(request: Request, env: Env): Promise<boolean> {
   const { internalAdapter } = await createAuth(env).$context;
   const verification = await internalAdapter.findVerificationValue(`delete-account-${token}`);
   return (
-    verification?.value === session.user.id &&
-    new Date(verification.expiresAt).getTime() > Date.now()
+    verification?.value === session.user.id
+    && new Date(verification.expiresAt).getTime() > Date.now()
   );
 }
 
 /**
- * Link di conferma della cancellazione: riuscito porta all'esito senza la sessione, che il
- * lavoro ha già chiuso; scaduto, già usato o aperto senza la sessione dello stesso utente porta
- * alla pagina di errore, nella lingua della richiesta, invece della risposta JSON di Auth. Se la
+ * Link di conferma della cancellazione: riuscito porta all'esito senza la sessione, che il lavoro
+ * ha già chiuso; scaduto, già usato o aperto senza la sessione dello stesso utente porta alla
+ * pagina di errore, nella lingua della richiesta, invece della risposta JSON di Auth. Se la
  * richiesta non si registra la pagina invita a riprovare con un nuovo link.
  */
 async function handleDeletionCallback(request: Request, env: Env): Promise<Response> {
@@ -453,8 +444,8 @@ export async function signInChallengeWait(env: Env, request: Request): Promise<n
 const signInPath = "/api/auth/sign-in/email";
 
 /**
- * Accesso con password chiamato direttamente: conta gli errori come il modulo e, quando il
- * modulo chiederebbe Turnstile, si rifiuta, perché qui la sfida non si può presentare.
+ * Accesso con password chiamato direttamente: conta gli errori come il modulo e, quando il modulo
+ * chiederebbe Turnstile, si rifiuta, perché qui la sfida non si può presentare.
  */
 async function directSignIn(request: Request, env: Env): Promise<Response> {
   const limited = await authLimitWait(env, request);
@@ -486,9 +477,9 @@ export function handleAuthRequest(
 const forwardedHeaders = ["cookie", "origin", "user-agent", "accept-language", "cf-connecting-ip"];
 
 /**
- * Invia al router di Better Auth un'azione dei moduli dell'app, con gli stessi limiti dei
- * tentativi delle chiamate dirette alle route Auth. `admitted` indica che il modulo ha già
- * applicato il filtro per IP di `authLimitWait`, che non conta due volte lo stesso invio.
+ * Invia al router di Better Auth un'azione dei moduli dell'app, con gli stessi limiti dei tentativi
+ * delle chiamate dirette alle route Auth. `admitted` indica che il modulo ha già applicato il
+ * filtro per IP di `authLimitWait`, che non conta due volte lo stesso invio.
  */
 export async function forwardToAuth(
   env: Env,
@@ -525,8 +516,8 @@ export function redirectWithCookies(location: string, response: Response): Respo
 
 /**
  * Redirect dopo l'uscita: oltre ai cookie chiusi da Auth, il browser svuota la memoria del sito
- * (`sessionStorage`, `localStorage`, IndexedDB), così chi usa lo stesso dispositivo non ritrova
- * lo stato della sessione precedente. I cookie restano ad Auth, che chiude soltanto i suoi.
+ * (`sessionStorage`, `localStorage`, IndexedDB), così chi usa lo stesso dispositivo non ritrova lo
+ * stato della sessione precedente. I cookie restano ad Auth, che chiude soltanto i suoi.
  */
 export function signedOutRedirect(location: string, response: Response): Response {
   const signedOut = redirectWithCookies(location, response);

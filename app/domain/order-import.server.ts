@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 import { writeLog } from "../log-records";
 import { orderSearchText } from "../orders/order-search";
 import { buyerTaxKey, taxComparisonKey, taxIdentifierType } from "../tax-quality";
@@ -64,9 +65,9 @@ type StoredItem = {
 };
 
 /**
- * Un campo mascherato non cancella il valore letto prima: lo snapshot lo conserva e il campo
- * resta in `masked` solo se non è mai stato fornito. Il contenitore è sempre presente, perché
- * la fonte segnala un campo annidato solo insieme al suo contenitore.
+ * Un campo mascherato non cancella il valore letto prima: lo snapshot lo conserva e il campo resta
+ * in `masked` solo se non è mai stato fornito. Il contenitore è sempre presente, perché la fonte
+ * segnala un campo annidato solo insieme al suo contenitore.
  */
 function keepMaskedValues(buyer: BuyerSnapshot, stored: string | null): BuyerSnapshot {
   if (!buyer.masked || !stored) return buyer;
@@ -85,8 +86,8 @@ function keepMaskedValues(buyer: BuyerSnapshot, stored: string | null): BuyerSna
 }
 
 /**
- * Istante con cui si controllano le scadenze di un lavoro: mai prima del suo inizio, così un
- * job iniziato prima della scadenza non la prolunga.
+ * Istante con cui si controllano le scadenze di un lavoro: mai prima del suo inizio, così un job
+ * iniziato prima della scadenza non la prolunga.
  */
 export function deadlineCheckAt(startedAt: string): string {
   return new Date(Math.max(Date.now(), Date.parse(startedAt))).toISOString();
@@ -172,18 +173,18 @@ async function matchOrder(
   }));
   const only = parsed.length === 1 ? parsed[0]! : null;
   const disjoint =
-    new Set(parsed.flatMap((entry) => entry.keys)).size ===
-    parsed.reduce((count, entry) => count + entry.keys.length, 0);
+    new Set(parsed.flatMap((entry) => entry.keys)).size
+    === parsed.reduce((count, entry) => count + entry.keys.length, 0);
   if (
-    !missingIdentity &&
-    !observation.provisional &&
-    parsed.length > 0 &&
-    disjoint &&
-    parsed.every(
+    !missingIdentity
+    && !observation.provisional
+    && parsed.length > 0
+    && disjoint
+    && parsed.every(
       ({ candidate, keys: candidateKeys }) =>
-        candidate.is_provisional &&
-        candidateKeys.length > 0 &&
-        candidateKeys.every((key) => keySet.has(key)),
+        candidate.is_provisional
+        && candidateKeys.length > 0
+        && candidateKeys.every((key) => keySet.has(key)),
     )
   ) {
     const matched = direct ?? parsed[0]!.candidate;
@@ -195,13 +196,13 @@ async function matchOrder(
     };
   }
   if (
-    !direct &&
-    only &&
-    !missingIdentity &&
-    !only.keys.includes(null) &&
-    (only.keys.every((key) => keySet.has(key)) ||
-      (observation.provisional && !only.candidate.is_provisional)) &&
-    keys.every(Set.prototype.has, new Set(only.keys))
+    !direct
+    && only
+    && !missingIdentity
+    && !only.keys.includes(null)
+    && (only.keys.every((key) => keySet.has(key))
+      || (observation.provisional && !only.candidate.is_provisional))
+    && keys.every(Set.prototype.has, new Set(only.keys))
   ) {
     return { matched: only.candidate, absorbed: [], related: [], overlappingIds };
   }
@@ -221,32 +222,32 @@ async function matchOrder(
 }
 
 /**
- * Fulfillment è la fonte dei campi dell'ordine e subentra sempre a un ordine letto solo da
- * Trading: le date delle due fonti non sono confrontabili. Un provvisorio non sostituisce il
- * definitivo e una lettura più vecchia della stessa fonte aggancia soltanto il riferimento.
+ * Fulfillment è la fonte dei campi dell'ordine e subentra sempre a un ordine letto solo da Trading:
+ * le date delle due fonti non sono confrontabili. Un provvisorio non sostituisce il definitivo e
+ * una lettura più vecchia della stessa fonte aggancia soltanto il riferimento.
  */
 function fieldOwnership(observation: Observation, matched: StoredOrder | null) {
   const takeover = observation.source === "fulfillment" && !!matched && !matched.has_fulfillment;
   const ownsFields =
-    !matched ||
-    (!(observation.provisional && !matched.is_provisional) &&
-      (takeover ||
-        ((observation.source === "fulfillment" || !matched.has_fulfillment) &&
-          observation.lastModifiedTime >= matched.last_modified_time)));
+    !matched
+    || (!(observation.provisional && !matched.is_provisional)
+      && (takeover
+        || ((observation.source === "fulfillment" || !matched.has_fulfillment)
+          && observation.lastModifiedTime >= matched.last_modified_time)));
   return { takeover, ownsFields };
 }
 
 /**
- * Versione dei dati fiscali. Le date Trading e Fulfillment non sono intercambiabili: una
- * risposta senza data può introdurre un dato, ma non sostituire una verifica con versione
- * autorevole già nota.
+ * Versione dei dati fiscali. Le date Trading e Fulfillment non sono intercambiabili: una risposta
+ * senza data può introdurre un dato, ma non sostituire una verifica con versione autorevole già
+ * nota.
  */
 function taxVersion(observation: Observation): string | null {
   const tax = observation.taxIdentifiers;
   return (
-    tax?.lastModifiedTime ??
-    (tax?.source ===
-    (observation.source === "fulfillment" ? "ebay_fulfillment" : "ebay_trading_get_orders")
+    tax?.lastModifiedTime
+    ?? (tax?.source
+    === (observation.source === "fulfillment" ? "ebay_fulfillment" : "ebay_trading_get_orders")
       ? observation.lastModifiedTime
       : null)
   );
@@ -264,10 +265,10 @@ const newOrderEndSql = (creationTime: string, at: string) =>
   historyEndSql(literal(creationTime), storeWorkspaceSql("?1"), literal(at));
 
 /**
- * Condizione di ogni scrittura: consenso, retention e dati eliminati, e assenza di una lettura
- * più recente della stessa fonte o degli stessi dati fiscali. Si ripete nel batch, così vale
- * anche se una risposta più recente arriva dopo le letture preparatorie. `at` è l'istante del
- * controllo delle scadenze.
+ * Condizione di ogni scrittura: consenso, retention e dati eliminati, e assenza di una lettura più
+ * recente della stessa fonte o degli stessi dati fiscali. Si ripete nel batch, così vale anche se
+ * una risposta più recente arriva dopo le letture preparatorie. `at` è l'istante del controllo
+ * delle scadenze.
  */
 function writeGuard(input: {
   observation: Observation;
@@ -310,8 +311,8 @@ function writeGuard(input: {
 
 /**
  * Articoli dell'ordine: aggiorna quelli cambiati, aggiunge i nuovi e rimuove gli assenti. Le
- * identità stabili si confrontano fra loro; altrimenti vale l'ID riga della fonte.
- * Parametri: ?1 negozio, ?2 consenso; `orderExists` usa ?4 come ordine.
+ * identità stabili si confrontano fra loro; altrimenti vale l'ID riga della fonte. Parametri: ?1
+ * negozio, ?2 consenso; `orderExists` usa ?4 come ordine.
  */
 function itemStatements(
   db: D1Database,
@@ -326,8 +327,8 @@ function itemStatements(
   for (const item of items) {
     const existing = stored.find(
       (row) =>
-        !kept.has(row.id) &&
-        (item.stableKey && row.stable_key
+        !kept.has(row.id)
+        && (item.stableKey && row.stable_key
           ? row.stable_key === item.stableKey
           : row.line_item_id === item.lineItemId),
     );
@@ -383,10 +384,10 @@ function itemStatements(
 }
 
 /**
- * Variazioni degli identificativi fiscali della fonte: chiude i valori sostituiti, poi aggiunge
- * i nuovi, nella stessa transazione. Un valore presente aggiorna quel tipo/Paese; l'omissione
- * di un altro tipo non lo rimuove, salvo una lettura completa. Un provvisorio non rimuove i
- * valori di un definitivo.
+ * Variazioni degli identificativi fiscali della fonte: chiude i valori sostituiti, poi aggiunge i
+ * nuovi, nella stessa transazione. Un valore presente aggiorna quel tipo/Paese; l'omissione di un
+ * altro tipo non lo rimuove, salvo una lettura completa. Un provvisorio non rimuove i valori di un
+ * definitivo.
  */
 async function taxStatements(
   db: D1Database,
@@ -649,16 +650,16 @@ async function prepareFiscalWrites(input: {
 /**
  * Registra una lettura dell'ordine nello stesso negozio, con un UUID interno stabile.
  *
- * L'ordine si riconosce dall'identificativo esterno già visto (qualunque fonte) oppure, se è
- * nuovo, dalle identità stabili delle righe. Più provvisori con righe disgiunte interamente
- * contenute nel definitivo confluiscono nello stesso UUID; gli originali conservano storico
- * e grant. Un provvisorio tardivo interamente contenuto si aggancia al definitivo. Identità
- * mancanti, sovrapposizioni parziali e candidati concorrenti restano anomalie esplicite.
+ * L'ordine si riconosce dall'identificativo esterno già visto (qualunque fonte) oppure, se è nuovo,
+ * dalle identità stabili delle righe. Più provvisori con righe disgiunte interamente contenute nel
+ * definitivo confluiscono nello stesso UUID; gli originali conservano storico e grant. Un
+ * provvisorio tardivo interamente contenuto si aggancia al definitivo. Identità mancanti,
+ * sovrapposizioni parziali e candidati concorrenti restano anomalie esplicite.
  *
- * I campi dell'ordine appartengono a Fulfillment quando l'ha letto; un provvisorio non
- * sovrascrive mai un definitivo. Gli identificativi fiscali conservano la propria fonte e
- * ogni variazione effettiva resta nello storico. Una lettura più vecchia di quella già
- * applicata per la stessa fonte viene scartata prima di ogni scrittura.
+ * I campi dell'ordine appartengono a Fulfillment quando l'ha letto; un provvisorio non sovrascrive
+ * mai un definitivo. Gli identificativi fiscali conservano la propria fonte e ogni variazione
+ * effettiva resta nello storico. Una lettura più vecchia di quella già applicata per la stessa
+ * fonte viene scartata prima di ogni scrittura.
  */
 export async function recordOrderObservation(
   db: D1Database,
@@ -668,9 +669,9 @@ export async function recordOrderObservation(
   const observation = orderObservationSchema.parse(input);
   const observedAt = utc.parse(target.observedAt);
   if (
-    new Set(observation.items.map((item) => item.lineItemId)).size !== observation.items.length ||
-    new Set(observation.items.flatMap((item) => (item.stableKey ? [item.stableKey] : []))).size !==
-      observation.items.filter((item) => item.stableKey).length
+    new Set(observation.items.map((item) => item.lineItemId)).size !== observation.items.length
+    || new Set(observation.items.flatMap((item) => (item.stableKey ? [item.stableKey] : []))).size
+      !== observation.items.filter((item) => item.stableKey).length
   )
     throw new DuplicateLineIdentity();
   const scope = [target.storeId, target.consentGrantedAt] as const;
@@ -759,16 +760,13 @@ export async function recordOrderObservation(
   });
   const fiscalOffset = add(...fiscal.statements);
   const taxSnapshots = fiscal.taxSnapshots
-    ? {
-        before: fiscalOffset,
-        after: fiscalOffset + fiscal.taxSnapshots.after,
-      }
+    ? { before: fiscalOffset, after: fiscalOffset + fiscal.taxSnapshots.after }
     : null;
 
   if (
-    observation.source === "trading" &&
-    (ownsFields ||
-      (!observation.provisional && matched!.ebay_order_id === observation.externalOrderId))
+    observation.source === "trading"
+    && (ownsFields
+      || (!observation.provisional && matched!.ebay_order_id === observation.externalOrderId))
   ) {
     add(
       db
@@ -833,8 +831,8 @@ export async function recordOrderObservation(
     outcome: !matched ? "created" : orderChanges > 0 ? "updated" : "unchanged",
     orderId,
     taxChanges:
-      [...beforeTax].filter((key) => !afterTax.has(key)).length +
-      [...afterTax].filter((key) => !beforeTax.has(key)).length,
+      [...beforeTax].filter((key) => !afterTax.has(key)).length
+      + [...afterTax].filter((key) => !beforeTax.has(key)).length,
     issue: related[0]?.[1] ?? null,
   };
 }

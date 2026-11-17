@@ -1,4 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
+
+import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
+import {
+  buildCreationDateFilter,
+  buildLastModifiedFilter,
+  fulfillmentObservation,
+  fulfillmentTaxIdentifiers,
+  readFulfillmentOrder,
+  readFulfillmentOrders,
+} from "../app/integrations/ebay/fulfillment.server";
 import { escapeMarkup } from "../app/markup";
 import {
   displayTaxValue,
@@ -8,16 +18,6 @@ import {
   taxComparisonKey,
   taxIdentifierType,
 } from "../app/tax-quality";
-
-import {
-  buildCreationDateFilter,
-  buildLastModifiedFilter,
-  fulfillmentObservation,
-  fulfillmentTaxIdentifiers,
-  readFulfillmentOrder,
-  readFulfillmentOrders,
-} from "../app/integrations/ebay/fulfillment.server";
-import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
 
 const configuration = ebayConfiguration(
   {

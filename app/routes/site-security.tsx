@@ -5,11 +5,12 @@ import { IconTile } from "~/components/icon-tile";
 import { ProductShot } from "~/components/product-shot";
 import { siteColumn } from "~/components/site-column";
 import { PageIntro, SiteLayout } from "~/components/site-layout";
+
 import { infoEmail } from "../app-copy";
-import { sitePages } from "../copy/site-pages.server";
 import { siteSecurityPath } from "../app-links";
-import { publicPage, publicPageHeaders } from "../site.server";
+import { sitePages } from "../copy/site-pages.server";
 import { siteMeta } from "../site-meta";
+import { publicPage, publicPageHeaders } from "../site.server";
 import type { Route } from "./+types/site-security";
 
 export async function loader({ request }: Route.LoaderArgs) {

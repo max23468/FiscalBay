@@ -16,8 +16,8 @@ import { fiscalSituation, type OrderView, type Plan } from "../view-models";
 export const previewSearchScope = "anteprima";
 
 /**
- * Ricerca sugli scenari sintetici con le regole dell'area reale: testo dell'ordine e soltanto
- * i valori fiscali disponibili, mai quelli da sbloccare.
+ * Ricerca sugli scenari sintetici con le regole dell'area reale: testo dell'ordine e soltanto i
+ * valori fiscali disponibili, mai quelli da sbloccare.
  */
 function matchesSearch(order: OrderView, tokens: readonly string[]) {
   if (tokens.length === 0) return true;
@@ -30,17 +30,17 @@ function matchesSearch(order: OrderView, tokens: readonly string[]) {
 }
 
 /**
- * Criteri dell'area reale, letti e validati da `orderCriteria`, applicati agli scenari
- * sintetici: l'area reale li esegue nella query D1.
+ * Criteri dell'area reale, letti e validati da `orderCriteria`, applicati agli scenari sintetici:
+ * l'area reale li esegue nella query D1.
  */
 function matchesOrder(order: OrderView, criteria: OrderCriteria) {
   return (
-    matchesSearch(order, criteria.tokens ?? []) &&
-    (!criteria.storeId || order.storeId === criteria.storeId) &&
-    (!criteria.since || Date.parse(order.createdAt) >= Date.parse(criteria.since)) &&
-    (!criteria.payment || order.payment.status === criteria.payment) &&
-    (!criteria.shipping || order.shipping.status === criteria.shipping) &&
-    (!criteria.fiscal || fiscalSituation(order.fiscal) === criteria.fiscal)
+    matchesSearch(order, criteria.tokens ?? [])
+    && (!criteria.storeId || order.storeId === criteria.storeId)
+    && (!criteria.since || Date.parse(order.createdAt) >= Date.parse(criteria.since))
+    && (!criteria.payment || order.payment.status === criteria.payment)
+    && (!criteria.shipping || order.shipping.status === criteria.shipping)
+    && (!criteria.fiscal || fiscalSituation(order.fiscal) === criteria.fiscal)
   );
 }
 
@@ -54,10 +54,10 @@ const newestFirst = (a: OrderView, b: OrderView) =>
 const arrivalDelay = 1_000;
 
 /**
- * Ordini che corrispondono ai criteri e alla ricerca, dal più recente, fino alla pagina
- * indicata da `mostra`, con le regole dell'istantanea dell'area reale: gli ordini in arrivo
- * restano fuori finché l'istantanea non li comprende e intanto si contano. `href` riceve la
- * query delle pagine successive e della nuova istantanea.
+ * Ordini che corrispondono ai criteri e alla ricerca, dal più recente, fino alla pagina indicata da
+ * `mostra`, con le regole dell'istantanea dell'area reale: gli ordini in arrivo restano fuori
+ * finché l'istantanea non li comprende e intanto si contano. `href` riceve la query delle pagine
+ * successive e della nuova istantanea.
  */
 export function previewOrderPage(
   orders: OrderView[],
@@ -116,15 +116,15 @@ export function previewListing(
   const arrival = new Date(new Date(now).getTime() + arrivalDelay);
   const snapshot = snapshotInstant(search.get(snapshotParam)) ?? new Date(now);
   const arrived = snapshot >= arrival;
-  const filtered = matching(arrived ? [...orders, ...incoming] : orders).sort(newestFirst);
+  const filtered = matching(arrived ? [...orders, ...incoming] : orders).toSorted(newestFirst);
   const waiting = arrived ? [] : matching(incoming);
   return {
     filtered,
     waiting: waiting.length,
     // Come nell'area reale: i nuovi ordini entrano da soli soltanto sopra il primo mostrato.
     incomingAtTop:
-      waiting.length > 0 &&
-      (filtered.length === 0 || waiting.every((order) => newestFirst(order, filtered[0]!) < 0)),
+      waiting.length > 0
+      && (filtered.length === 0 || waiting.every((order) => newestFirst(order, filtered[0]!) < 0)),
     snapshot,
     arrival,
   };
@@ -142,5 +142,5 @@ export function previewTally(orders: OrderView[]): OrderTally {
 /** Ordini della ricerca della barra superiore, dal più recente, come «Vedi tutti». */
 export function previewSearchMatches(orders: OrderView[], query: string) {
   const tokens = searchTokens(query);
-  return orders.filter((order) => matchesSearch(order, tokens)).sort(newestFirst);
+  return orders.filter((order) => matchesSearch(order, tokens)).toSorted(newestFirst);
 }

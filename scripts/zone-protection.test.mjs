@@ -104,10 +104,7 @@ const configured = () => {
       missing: { status: 404, headers: secured() },
       probe: { status: 403, headers: {} },
       webhook: { status: 412, headers: secured() },
-      http: {
-        status: 301,
-        headers: { location: "https://test.fiscalbay.it/percorso?q=1" },
-      },
+      http: { status: 301, headers: { location: "https://test.fiscalbay.it/percorso?q=1" } },
     },
   };
 };
@@ -192,9 +189,9 @@ describe("protezioni della zona", () => {
     });
     assert.equal(
       shared.expression,
-      'http.host in {"test.fiscalbay.it"} and (starts_with(http.request.uri.path, "/og/") or ' +
-        'starts_with(http.request.uri.path, "/icon-") or http.request.uri.path in ' +
-        '{"/favicon.ico" "/favicon.svg" "/apple-touch-icon.png"})',
+      'http.host in {"test.fiscalbay.it"} and (starts_with(http.request.uri.path, "/og/") or '
+        + 'starts_with(http.request.uri.path, "/icon-") or http.request.uri.path in '
+        + '{"/favicon.ico" "/favicon.svg" "/apple-touch-icon.png"})',
     );
   });
 
@@ -231,9 +228,9 @@ describe("protezioni della zona", () => {
     const rule = authRule();
     assert.equal(
       rule.expression,
-      'starts_with(http.request.uri.path, "/api/auth/") or http.request.uri.path in ' +
-        '{"/accesso" "/accesso.data" "/en/accesso" "/en/accesso.data" ' +
-        '"/supporto" "/supporto.data" "/en/supporto" "/en/supporto.data"}',
+      'starts_with(http.request.uri.path, "/api/auth/") or http.request.uri.path in '
+        + '{"/accesso" "/accesso.data" "/en/accesso" "/en/accesso.data" '
+        + '"/supporto" "/supporto.data" "/en/supporto" "/en/supporto.data"}',
     );
     assert.deepEqual(rule.ratelimit, {
       characteristics: ["cf.colo.id", "ip.src"],

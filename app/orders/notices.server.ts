@@ -4,8 +4,9 @@ import type { EbayEnvironment, OrdersNotice } from "../view-models";
 
 /**
  * Avvisi in cima agli Ordini, dai negozi dell'ambiente mostrato e dalla quota: eBay che non
- * risponde o chiamate sospese per manutenzione, collegamenti scaduti o in scadenza, letture ferme di un negozio nella vista, lista
- * d'attesa o sblocchi esauriti e importazione dello storico in corso.
+ * risponde o chiamate sospese per manutenzione, collegamenti scaduti o in scadenza, letture ferme
+ * di un negozio nella vista, lista d'attesa o sblocchi esauriti e importazione dello storico in
+ * corso.
  */
 export function ordersNotices({
   stores,
@@ -29,7 +30,7 @@ export function ordersNotices({
   const synced = stores.flatMap((store) => (store.lastSyncAt ? [store.lastSyncAt] : []));
   const outage =
     !ebayCalls && stores.some((store) => store.connection === "active")
-      ? { lastSyncAt: synced.sort().at(-1) ?? null, maintenance: true }
+      ? { lastSyncAt: synced.toSorted().at(-1) ?? null, maintenance: true }
       : ebayOutage(stores);
   const cycle = allowance?.cycle ?? null;
   return [
@@ -47,7 +48,7 @@ export function ordersNotices({
       .flatMap((store) =>
         store.reminder ? [{ id: store.id, name: store.name, ...store.reminder }] : [],
       )
-      .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1))
+      .toSorted((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1))
       .map((store): OrdersNotice =>
         store.kind === "expired"
           ? { kind: "store-issue", storeId: store.id, storeName: store.name }
@@ -66,9 +67,9 @@ export function ordersNotices({
       : stores
           .filter(
             (store) =>
-              readsFailing(store) &&
-              store.lastSyncAt !== null &&
-              (!storeId || storeId === store.id),
+              readsFailing(store)
+              && store.lastSyncAt !== null
+              && (!storeId || storeId === store.id),
           )
           .map((store): OrdersNotice => ({
             kind: "store-read-failed",

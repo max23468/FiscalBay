@@ -12,9 +12,9 @@ declare global {
 const requested = new Set<string>();
 
 /**
- * Precarica il codice di una pagina dell'area quando il puntatore o il focus arrivano sul suo
- * link. I dati restano fuori: la risposta è `no-store`, quindi il browser non potrebbe riusarla
- * e il loader lavorerebbe due volte.
+ * Precarica il codice di una pagina dell'area quando il puntatore o il focus arrivano sul suo link.
+ * I dati restano fuori: la risposta è `no-store`, quindi il browser non potrebbe riusarla e il
+ * loader lavorerebbe due volte.
  */
 export function prefetchRouteModules(href: string) {
   const { __reactRouterManifest: manifest, __reactRouterDataRouter: router } = window;

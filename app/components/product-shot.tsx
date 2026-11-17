@@ -1,8 +1,8 @@
 import { cn } from "cn";
 import { Fragment } from "react";
 
-import shots from "../site-shots.json";
 import type { Language } from "../i18n";
+import shots from "../site-shots.json";
 
 type AnyShot = keyof typeof shots;
 export type ShotName = Exclude<AnyShot, `${string}-mobile`>;
@@ -20,8 +20,8 @@ const source = (
 const priorityWidths = [640, 960] as const;
 
 /**
- * Larghezza mostrata della schermata del primo schermo: tutta la colonna fino a 1024 px, poi
- * sette dodicesimi della colonna di 72 rem.
+ * Larghezza mostrata della schermata del primo schermo: tutta la colonna fino a 1024 px, poi sette
+ * dodicesimi della colonna di 72 rem.
  */
 const prioritySizes = "(max-width: 1023px) calc(100vw - 2rem), 42rem";
 
@@ -39,11 +39,12 @@ const sourceSet = (
   ].join(", ");
 
 /**
- * Schermata reale dell'app presa dall'anteprima con i dati di esempio (`scripts/site-screenshots.mjs`),
- * nel tema del sistema. Sotto i 640 px usa la variante per smartphone, se esiste, perché una
- * schermata larga rimpicciolita sarebbe illeggibile; le dimensioni riservano lo spazio.
- * L'immagine del primo schermo arriva per prima, in AVIF con il WebP per i browser che non lo
- * leggono, e alla larghezza adatta allo schermo fra 640, 960 px e l'originale.
+ * Schermata reale dell'app presa dall'anteprima con i dati di esempio
+ * (`scripts/site-screenshots.mjs`), nel tema del sistema. Sotto i 640 px usa la variante per
+ * smartphone, se esiste, perché una schermata larga rimpicciolita sarebbe illeggibile; le
+ * dimensioni riservano lo spazio. L'immagine del primo schermo arriva per prima, in AVIF con il
+ * WebP per i browser che non lo leggono, e alla larghezza adatta allo schermo fra 640, 960 px e
+ * l'originale.
  */
 export function ProductShot({
   name,
@@ -125,8 +126,8 @@ export function ProductShot({
 }
 
 /**
- * Funzione con la sua schermata: testo e immagine affiancati da 768 px, con l'immagine più
- * larga perché resti leggibile; `reverse` mette l'immagine a sinistra per alternare le righe.
+ * Funzione con la sua schermata: testo e immagine affiancati da 768 px, con l'immagine più larga
+ * perché resti leggibile; `reverse` mette l'immagine a sinistra per alternare le righe.
  */
 export function ShotRow({
   id,

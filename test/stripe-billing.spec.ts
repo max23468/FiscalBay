@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { openSubscriptionSql } from "../app/domain/billing-subscriptions.server";
 import {
   applyStripeEvent,
   changeSubscriptionPeriod,
@@ -9,10 +11,10 @@ import {
   reconcileBilling,
   subscriptionRenews,
 } from "../app/domain/billing.server";
-import { subscriptionOffers } from "../app/domain/subscription-offers";
 import { checkoutConfigured, purchaseState } from "../app/domain/checkout.server";
-import { openSubscriptionSql } from "../app/domain/billing-subscriptions.server";
 import { orderAllowance, startTrial } from "../app/domain/grants.server";
+import { subscriptionView } from "../app/domain/plan-view.server";
+import { subscriptionOffers } from "../app/domain/subscription-offers";
 import {
   createBoundedStripeClient,
   isMissingObject,
@@ -21,7 +23,6 @@ import {
 } from "../app/integrations/stripe.server";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { verifiedSession } from "./fixtures/account-fixtures";
-import { subscriptionView } from "../app/domain/plan-view.server";
 import {
   insertEntitlement,
   insertSubscription,
@@ -798,7 +799,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(kinds.filter((kind) => kind === "in-attesa")).toHaveLength(5);
     // Delle riletture giornaliere restano i posti del turno, prima le più vecchie.
     expect(results.filter(({ id }) => id.startsWith("giornaliero")).map(({ id }) => id)).toEqual(
-      Array.from({ length: 17 }, (_, index) => `giornaliero-${index + 7}`).sort(),
+      Array.from({ length: 17 }, (_, index) => `giornaliero-${index + 7}`).toSorted(),
     );
   });
 
@@ -1142,10 +1143,7 @@ describe("Webhook e riconciliazione Stripe", () => {
 
   it("legge la periodicità dal prezzo ricorrente o, senza, dai metadati", () => {
     const subscription = (status: string, recurring: { interval: string } | null) =>
-      ({
-        status,
-        items: { data: [{ price: { recurring } }] },
-      }) as unknown as Stripe.Subscription;
+      ({ status, items: { data: [{ price: { recurring } }] } }) as unknown as Stripe.Subscription;
     expect(subscriptionOffers(subscription("active", { interval: "month" }), "annual")).toEqual({
       offer: "monthly",
       renewal: "monthly",

@@ -4,10 +4,10 @@ import { Link } from "react-router";
 import { languageNames, languages, type Language } from "../i18n";
 
 /**
- * Scelta della lingua nel sito e nelle pagine di accesso: ogni lingua
- * con il proprio nome. Il cambio ricarica la pagina. `compact`, dove lo spazio è
- * poco, mostra soltanto il codice dell'altra lingua, seguito dal nome in quello accessibile: un
- * collegamento alto quanto un bottone `sm`, con l'area di tocco estesa come nei bottoni.
+ * Scelta della lingua nel sito e nelle pagine di accesso: ogni lingua con il proprio nome. Il
+ * cambio ricarica la pagina. `compact`, dove lo spazio è poco, mostra soltanto il codice dell'altra
+ * lingua, seguito dal nome in quello accessibile: un collegamento alto quanto un bottone `sm`, con
+ * l'area di tocco estesa come nei bottoni.
  */
 export function LanguageSwitch({
   label,
@@ -36,7 +36,7 @@ export function LanguageSwitch({
           // Il nome accessibile inizia con il codice visibile, così il comando vocale lo trova.
           aria-label={compact ? `${code.toUpperCase()} ${languageNames[code]}` : undefined}
           className={cn(
-            "inline-flex items-center rounded-md text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-secondary aria-[current=page]:font-medium aria-[current=page]:text-foreground",
+            "inline-flex items-center rounded-md text-muted-foreground transition-colors duration-(--duration-quick) outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:bg-secondary aria-[current=page]:font-medium aria-[current=page]:text-foreground",
             compact
               ? "relative px-2 pointer-coarse:after:absolute pointer-coarse:after:top-1/2 pointer-coarse:after:left-1/2 pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 pointer-coarse:after:-translate-1/2"
               : "px-2.5 py-1.5 pointer-coarse:min-h-11",

@@ -1,31 +1,17 @@
 import { env } from "cloudflare:workers";
-
 import ExcelJS from "exceljs";
-
 import { strFromU8, unzipSync } from "fflate";
-
 import { afterEach, beforeEach, expect, vi } from "vitest";
 
 import { appCopy } from "../../app/app-copy";
-
-import { type VisibleOrder } from "../../app/domain/orders.server";
-
-import { action as exportAction } from "../../app/routes/order-export";
-
-import { loader as exportFileLoader } from "../../app/routes/export-file";
-
-import { action as settingsAction, loader as loadSettings } from "../../app/routes/settings";
-
 import { exportRevision } from "../../app/domain/export-files.server";
-
 import { queueOrderFile, type OrderFileRequest } from "../../app/domain/export-jobs.server";
-
 import { listNotifications } from "../../app/domain/notifications.server";
-
+import { type VisibleOrder } from "../../app/domain/orders.server";
+import { loader as exportFileLoader } from "../../app/routes/export-file";
+import { action as exportAction } from "../../app/routes/order-export";
+import { action as settingsAction, loader as loadSettings } from "../../app/routes/settings";
 import { verifiedSession } from "./account-fixtures";
-
-import { queued } from "./queue-fixture";
-
 import {
   insertEntitlement,
   insertTaxIdentifiers,
@@ -33,7 +19,7 @@ import {
   resetDatabase,
   seed,
 } from "./database-fixtures";
-
+import { queued } from "./queue-fixture";
 import { callRoute, routePage, routeResponse } from "./route-fixtures";
 
 export const it_ = appCopy.it;
@@ -190,10 +176,7 @@ export async function settingsIntent(fields: Record<string, string>, as = cookie
     fields,
   });
   if (result && typeof result === "object" && "init" in result && "data" in result)
-    return {
-      status: (result.init as ResponseInit | null)?.status ?? 200,
-      body: result.data,
-    };
+    return { status: (result.init as ResponseInit | null)?.status ?? 200, body: result.data };
   return { status: 200, body: result };
 }
 

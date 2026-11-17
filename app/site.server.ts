@@ -1,5 +1,5 @@
-import { env } from "cloudflare:workers";
 import { getSessionCookie } from "better-auth/cookies";
+import { env } from "cloudflare:workers";
 
 import { appCopy } from "./app-copy";
 import {
@@ -20,16 +20,16 @@ import {
   priceGeneration,
   type PremiumOffer,
 } from "./catalog";
+import type { FaqItem } from "./components/faq-list";
+import { guides } from "./copy/guides.server";
+import { sitePages } from "./copy/site-pages.server";
 import { readPurchasesOpen } from "./domain/admission-state.server";
 import { currentFreePromotion, freeQuotaSettings } from "./domain/grants.server";
 import { lifetimeSlotsLeft } from "./domain/lifetime.server";
-import { skipPageCache } from "./page-cache.server";
 import { logFailure, tracePhase } from "./errors";
 import { formatDate } from "./format";
-import { guides } from "./copy/guides.server";
-import { sitePages } from "./copy/site-pages.server";
 import { languageFromPath, languages, localizedPath, type Language } from "./i18n";
-import type { FaqItem } from "./components/faq-list";
+import { skipPageCache } from "./page-cache.server";
 
 /** Domande del sito con la guida collegata, portata nella lingua della pagina. */
 export function faqItems(
@@ -44,10 +44,10 @@ export function faqItems(
 }
 
 /**
- * Cache del browser delle pagine pubbliche senza dati dell'account: nessuna copia condivisa e
- * una nuova richiesta a ogni visita, ma la pagina resta nella cache Indietro/Avanti, che
- * `no-store` escluderebbe. Home, area dell'account, accesso, console, API e ogni risposta con
- * dati dell'account restano `no-store`.
+ * Cache del browser delle pagine pubbliche senza dati dell'account: nessuna copia condivisa e una
+ * nuova richiesta a ogni visita, ma la pagina resta nella cache Indietro/Avanti, che `no-store`
+ * escluderebbe. Home, area dell'account, accesso, console, API e ogni risposta con dati
+ * dell'account restano `no-store`.
  */
 export const publicPageCache = "private, no-cache";
 
@@ -57,12 +57,12 @@ export function publicPageHeaders(): HeadersInit {
 }
 
 /**
- * Dati comuni delle pagine pubbliche: lingua, origine per canonical e Open Graph e sessione,
- * che porta `Apri l'app` nella barra al posto di `Accedi`. La pagina dipende quindi dalla
- * sessione e il browser la riconvalida a ogni visita (`publicPageCache`): soltanto Home e
- * Prezzi, per chi non ha cookie, passano dalla cache breve di `page-cache.server.ts`. Con Auth o
- * database non disponibili la pagina resta consultabile come per chi non ha una sessione: non
- * contiene dati dell'account e l'app, raggiunta da `Accedi`, dice che non è disponibile.
+ * Dati comuni delle pagine pubbliche: lingua, origine per canonical e Open Graph e sessione, che
+ * porta `Apri l'app` nella barra al posto di `Accedi`. La pagina dipende quindi dalla sessione e il
+ * browser la riconvalida a ogni visita (`publicPageCache`): soltanto Home e Prezzi, per chi non ha
+ * cookie, passano dalla cache breve di `page-cache.server.ts`. Con Auth o database non disponibili
+ * la pagina resta consultabile come per chi non ha una sessione: non contiene dati dell'account e
+ * l'app, raggiunta da `Accedi`, dice che non è disponibile.
  */
 export async function publicPage(request: Request) {
   // Senza il cookie di sessione non c'è nulla da leggere: niente Auth né database.
@@ -142,8 +142,8 @@ const sectionTitles: Record<Language, string> = { it: "Pagine", en: "English pag
 
 /**
  * Guida per gli assistenti AI nel formato llms.txt (llmstxt.org): cosa fa FiscalBay e le pagine
- * della sitemap con la loro descrizione, in italiano e in inglese. Titoli e descrizioni sono
- * gli stessi dei metadati delle pagine, così restano allineati.
+ * della sitemap con la loro descrizione, in italiano e in inglese. Titoli e descrizioni sono gli
+ * stessi dei metadati delle pagine, così restano allineati.
  */
 export function llms(origin: string) {
   const intro = sitePages.it.home;
@@ -170,8 +170,8 @@ export function llms(origin: string) {
 }
 
 /**
- * Giorno dell'ultima modifica sostanziale del contenuto di ogni pagina, per `lastmod`: si
- * aggiorna con il testo della pagina, non a ogni rilascio. Le guide portano la propria data.
+ * Giorno dell'ultima modifica sostanziale del contenuto di ogni pagina, per `lastmod`: si aggiorna
+ * con il testo della pagina, non a ogni rilascio. Le guide portano la propria data.
  */
 const pageUpdates: Record<(typeof sitemapPages)[number], string> = {
   "/": "2026-11-06",
@@ -185,9 +185,9 @@ const pageUpdates: Record<(typeof sitemapPages)[number], string> = {
 } as Record<(typeof sitemapPages)[number], string>;
 
 /**
- * Sitemap delle sole pagine pubbliche canoniche, in ogni lingua con le alternate: Termini e
- * Privacy restano fuori perché `noindex` (D204). Fuori dalla produzione le pagine elencate
- * rispondono comunque `noindex` e robots.txt chiude il dominio.
+ * Sitemap delle sole pagine pubbliche canoniche, in ogni lingua con le alternate: Termini e Privacy
+ * restano fuori perché `noindex` (D204). Fuori dalla produzione le pagine elencate rispondono
+ * comunque `noindex` e robots.txt chiude il dominio.
  */
 export function sitemap(origin: string) {
   const alternates = (path: string) =>

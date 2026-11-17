@@ -1,14 +1,15 @@
 import { Outlet, useMatches, type ShouldRevalidateFunctionArgs } from "react-router";
 
 import { AccountShell } from "~/components/account-shell";
+
 import { areaPage, requireAccountArea, shellData } from "../account-area.server";
 import { revalidateUnlessSnapshot } from "../orders/order-list";
 import type { Route } from "./+types/account";
 
 /**
- * Shell dell'area reale, condivisa da Ordini, Negozi e Impostazioni: resta montata fra le
- * sezioni. Prima della conferma dell'email mostra soltanto gli Ordini; le altre pagine
- * rimandano lì dal proprio loader.
+ * Shell dell'area reale, condivisa da Ordini, Negozi e Impostazioni: resta montata fra le sezioni.
+ * Prima della conferma dell'email mostra soltanto gli Ordini; le altre pagine rimandano lì dal
+ * proprio loader.
  */
 export function loader({ request }: Route.LoaderArgs) {
   return areaPage(request, async () => {

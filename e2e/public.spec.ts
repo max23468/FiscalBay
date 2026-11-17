@@ -23,9 +23,7 @@ test(
       ]) {
         const response = await request.get(
           `${pagePath(prefix, path)}?redirectTo=https://example.invalid`,
-          {
-            maxRedirects: 0,
-          },
+          { maxRedirects: 0 },
         );
         expect(response.status()).toBe(302);
         expect(response.headers().location).toMatch(

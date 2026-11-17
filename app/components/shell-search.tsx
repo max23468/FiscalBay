@@ -3,11 +3,12 @@ import { Search } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, NavigationType, useLocation, useNavigate } from "react-router";
 
+import { useCopy, useLinks } from "~/components/copy-context";
 import { useHydrated } from "~/components/hydrated";
 import { useNavigationGuard } from "~/components/navigation-guard";
 import { Button } from "~/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "~/components/ui/sheet";
-import { useCopy, useLinks } from "~/components/copy-context";
+
 import { ordersPath } from "../app-links";
 import { localizedPath, type Language } from "../i18n";
 import { listFilters } from "../orders/order-list";
@@ -30,8 +31,8 @@ export interface SearchResults {
 }
 
 /**
- * Ricerca ordini della shell: route che riceve la query nel corpo e ricerca attiva, con il
- * testo della pagina Ordini o null nelle altre pagine.
+ * Ricerca ordini della shell: route che riceve la query nel corpo e ricerca attiva, con il testo
+ * della pagina Ordini o null nelle altre pagine.
  */
 export interface ShellSearch {
   action: string;
@@ -148,9 +149,9 @@ function SearchPanel({ found, onSelect }: { found: SearchResults | null; onSelec
 }
 
 /**
- * Ricerca ordini della top bar: suggerimenti dallo stesso motore della pagina Ordini e
- * «Vedi tutti» per aprire l'elenco filtrato. La query resta nel corpo delle richieste;
- * l'elenco riceve dal server l'indirizzo con la ricerca cifrata.
+ * Ricerca ordini della top bar: suggerimenti dallo stesso motore della pagina Ordini e «Vedi tutti»
+ * per aprire l'elenco filtrato. La query resta nel corpo delle richieste; l'elenco riceve dal
+ * server l'indirizzo con la ricerca cifrata.
  */
 export function GlobalSearch({
   search,

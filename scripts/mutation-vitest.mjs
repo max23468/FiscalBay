@@ -1,6 +1,8 @@
 /** Il pool Cloudflare richiede un runner nuovo per ricaricare i mutanti statici. */
-import { strykerPlugins as nativePlugins } from "@stryker-mutator/vitest-runner";
+
 import { writeFileSync } from "node:fs";
+
+import { strykerPlugins as nativePlugins } from "@stryker-mutator/vitest-runner";
 export { strykerValidationSchema } from "@stryker-mutator/vitest-runner";
 
 const native = nativePlugins.find((plugin) => plugin.name === "vitest");

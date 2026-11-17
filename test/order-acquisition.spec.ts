@@ -1,21 +1,13 @@
 import { env } from "cloudflare:workers";
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { acquireOrders } from "../app/domain/order-acquisition.server";
-
 import { checkBuyerNames } from "../app/domain/buyer-check.server";
-
 import { NotWritable } from "../app/domain/order-acquisition-context.server";
-
-import { setSwitch } from "../app/domain/service-settings.server";
-
+import { acquireOrders } from "../app/domain/order-acquisition.server";
 import { listVisibleOrders } from "../app/domain/orders.server";
-
+import { setSwitch } from "../app/domain/service-settings.server";
 import { listStores } from "../app/domain/stores.server";
-
 import { access, openBudget, order } from "./fixtures/ebay-client-fixtures";
-
 import {
   grantedAt,
   image,
@@ -95,9 +87,7 @@ it("legge il CF Fulfillment italiano con header e conserva lo storico quando man
 it.each([
   { tax: undefined },
   { tax: { taxpayerId: "SINTETICO", taxIdentifierType: "VATIN", issuingCountry: "IT" } },
-  {
-    tax: { taxpayerId: "SINTETICO", taxIdentifierType: "CODICE_FISCALE", issuingCountry: "ES" },
-  },
+  { tax: { taxpayerId: "SINTETICO", taxIdentifierType: "CODICE_FISCALE", issuingCountry: "ES" } },
   { tax: { taxpayerId: "", taxIdentifierType: "CODICE_FISCALE" } },
 ])("usa Trading per un dato fiscale assente o non qualificato: $tax", async ({ tax }) => {
   const source = order();
@@ -178,9 +168,7 @@ it("mantiene Trading come fonte fiscale in Sandbox", async () => {
 
 it.each([
   { orderId: "ALTRO-ORDINE" },
-  {
-    lineItems: order().lineItems.map((line) => ({ ...line, listingMarketplaceId: "EBAY_ES" })),
-  },
+  { lineItems: order().lineItems.map((line) => ({ ...line, listingMarketplaceId: "EBAY_ES" })) },
 ])(
   "rifiuta un dettaglio con identità o marketplace discordante: $orderId $lineItems",
   async (detail) => {
@@ -205,10 +193,7 @@ it("conclude un dettaglio fiscale qualificato con una sola chiamata disponibile"
       order({
         buyer: {
           ...source.buyer,
-          taxIdentifier: {
-            taxpayerId: "SINTETICO",
-            taxIdentifierType: "CODICE_FISCALE",
-          },
+          taxIdentifier: { taxpayerId: "SINTETICO", taxIdentifierType: "CODICE_FISCALE" },
         },
       }),
     ],
@@ -465,11 +450,11 @@ it("con le chiamate eBay spente durante la lettura Trading la riprende dalla pag
       const page = /<PageNumber>(\d+)<\/PageNumber>/u.exec(body)![1]!;
       requested.push(page);
       return new Response(
-        `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>2</TotalNumberOfEntries></PaginationResult>` +
-          `<HasMoreOrders>${page === "1"}</HasMoreOrders><OrderArray><Order><OrderID>P-${page}</OrderID><OrderStatus>Active</OrderStatus>` +
-          `<CreatedTime>2026-09-01T10:00:00Z</CreatedTime><CheckoutStatus><LastModifiedTime>2026-09-01T11:00:00Z</LastModifiedTime></CheckoutStatus>` +
-          `<Total currencyID="EUR">1.00</Total><TransactionArray><Transaction><Item><ItemID>123</ItemID><Title>Sintetico</Title></Item>` +
-          `<TransactionID>${page}</TransactionID><QuantityPurchased>1</QuantityPurchased></Transaction></TransactionArray></Order></OrderArray></GetOrdersResponse>`,
+        `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>2</TotalNumberOfEntries></PaginationResult>`
+          + `<HasMoreOrders>${page === "1"}</HasMoreOrders><OrderArray><Order><OrderID>P-${page}</OrderID><OrderStatus>Active</OrderStatus>`
+          + `<CreatedTime>2026-09-01T10:00:00Z</CreatedTime><CheckoutStatus><LastModifiedTime>2026-09-01T11:00:00Z</LastModifiedTime></CheckoutStatus>`
+          + `<Total currencyID="EUR">1.00</Total><TransactionArray><Transaction><Item><ItemID>123</ItemID><Title>Sintetico</Title></Item>`
+          + `<TransactionID>${page}</TransactionID><QuantityPurchased>1</QuantityPurchased></Transaction></TransactionArray></Order></OrderArray></GetOrdersResponse>`,
       );
     },
   });
@@ -756,9 +741,7 @@ it("una rilettura con dati mascherati non cancella quelli già acquisiti", async
     fulfillmentStartInstructions: [
       {
         shippingStep: {
-          shipTo: {
-            contactAddress: { city: "Bolzano", postalCode: "39100", countryCode: "IT" },
-          },
+          shipTo: { contactAddress: { city: "Bolzano", postalCode: "39100", countryCode: "IT" } },
         },
       },
     ],
@@ -855,9 +838,7 @@ it("una rilettura con dati mascherati non cancella quelli già acquisiti", async
 
 it("classifica gli ordini non pagati senza rappresentarli come incassati", async () => {
   await acquire(
-    ebay({
-      orders: [order({ orderPaymentStatus: "PENDING", orderFulfillmentStatus: undefined })],
-    }),
+    ebay({ orders: [order({ orderPaymentStatus: "PENDING", orderFulfillmentStatus: undefined })] }),
   );
   const [visible] = await listVisibleOrders(env.DB, "u-a");
   expect(visible!.summary).toMatchObject({
@@ -932,11 +913,7 @@ describe("username degli acquirenti senza token eIAS", () => {
     expect(await checkedAt()).toBe("2026-09-02T00:00:00.000Z");
     expect(byIds(fetcher)).toEqual([]);
     const renamed = ebay({
-      orders: [
-        order({
-          buyer: { ...order().buyer, username: "acquirente-rinominato" },
-        }),
-      ],
+      orders: [order({ buyer: { ...order().buyer, username: "acquirente-rinominato" } })],
     });
     await acquire(renamed, after(6));
     expect(byIds(renamed)).toEqual([]);

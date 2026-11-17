@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+
+import { assertCandidateReports } from "./browser-evidence.mjs";
 import {
   browserOutcome,
   browserProof,
@@ -10,7 +12,6 @@ import {
   listedTestIds,
   browserShards,
 } from "./browser-tests.mjs";
-import { assertCandidateReports } from "./browser-evidence.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
   it("certifica tutte le partizioni browser solo con prove coerenti e complete", () => {
@@ -134,7 +135,7 @@ describe("prove browser divise fra macchine", () => {
     visit(JSON.parse(result.stdout));
     assert.ok(scenarios.size > 0);
     for (const [scenario, projects] of scenarios)
-      assert.deepEqual([...projects].sort(), ["chromium", "webkit"], scenario);
+      assert.deepEqual([...projects].toSorted(), ["chromium", "webkit"], scenario);
   });
 
   it("motiva come non applicabili le esclusioni possibili nella qualifica locale", () => {
@@ -158,12 +159,7 @@ describe("prove browser divise fra macchine", () => {
       {
         file: "lente.spec.ts",
         specs: ["a", "b", "c"].map((title) => ({ title, tests: [{ projectName: "chromium" }] })),
-        suites: [
-          {
-            title: "gruppo",
-            specs: [{ title: "d", tests: [{ projectName: "webkit" }] }],
-          },
-        ],
+        suites: [{ title: "gruppo", specs: [{ title: "d", tests: [{ projectName: "webkit" }] }] }],
       },
       {
         file: "rapide.spec.ts",

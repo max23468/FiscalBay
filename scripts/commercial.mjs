@@ -5,17 +5,16 @@
  * `preflight` si esegue al go-live, prima di aprire le iscrizioni: account Stripe allineato al
  * codice, una sola promozione globale del Free in corso con quota 10, senza fine o con la fine
  * decisa dall'owner, seguita dalla quota base, acquisti aperti e posti lifetime. `verify --since
- * <ISO>` rilegge le vendite reali: ogni fattura pagata e ogni lifetime pagato hanno il loro
- * diritto in D1, ogni abbonamento in D1 coincide con Stripe (stato, periodicità del periodo
- * pagato e del rinnovo, fine del periodo, disdetta, generazione del listino) e le commissioni
- * effettive di ogni offerta si confrontano con le stime di D193.
+ * <ISO>` rilegge le vendite reali: ogni fattura pagata e ogni lifetime pagato hanno il loro diritto
+ * in D1, ogni abbonamento in D1 coincide con Stripe (stato, periodicità del periodo pagato e del
+ * rinnovo, fine del periodo, disdetta, generazione del listino) e le commissioni effettive di ogni
+ * offerta si confrontano con le stime di D193.
  *
- * Il resoconto riporta esiti, conteggi e percentuali, mai importi, clienti o riferimenti.
- * Le richieste a Stripe passano dal profilo della CLI, la D1 dalla CLI `cf`.
+ * Il resoconto riporta esiti, conteggi e percentuali, mai importi, clienti o riferimenti. Le
+ * richieste a Stripe passano dal profilo della CLI, la D1 dalla CLI `cf`.
  *
- * Uso:
- *   node scripts/commercial.mjs preflight [--mode live] [--project-name <profilo>]
- *   node scripts/commercial.mjs verify --since <ISO> [--mode live] [--project-name <profilo>]
+ * Uso: node scripts/commercial.mjs preflight [--mode live] [--project-name <profilo>] node
+ * scripts/commercial.mjs verify --since <ISO> [--mode live] [--project-name <profilo>]
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,8 +38,8 @@ const feeTolerance = 1.1;
 
 /**
  * Controlli della configurazione commerciale in D1. `promotions` sono le promozioni non ancora
- * concluse, `quotas` le modifiche della quota base, `admission` la riga degli interruttori,
- * `seats` i posti lifetime occupati.
+ * concluse, `quotas` le modifiche della quota base, `admission` la riga degli interruttori, `seats`
+ * i posti lifetime occupati.
  */
 export function configurationChecks({ promotions, quotas, admission, seats, now = new Date() }) {
   const results = [];
@@ -66,7 +65,7 @@ export function configurationChecks({ promotions, quotas, admission, seats, now 
     const base =
       quotas
         .filter(({ effective_at }) => Date.parse(effective_at) <= until)
-        .sort((a, b) => Date.parse(a.effective_at) - Date.parse(b.effective_at) || a.id - b.id)
+        .toSorted((a, b) => Date.parse(a.effective_at) - Date.parse(b.effective_at) || a.id - b.id)
         .at(-1)?.quota ?? baseFreeQuota;
     record("quota base dopo la promozione", base === baseFreeQuota ? [] : ["quota"]);
   }
@@ -108,12 +107,12 @@ const subscriptionLines = (invoice) =>
 
 /** Pagamento riuscito di una fattura, per collegarla all'addebito. */
 const invoicePayment = (invoice) =>
-  invoice.payments?.data.find((payment) => payment.status === "paid")?.payment?.payment_intent ??
-  null;
+  invoice.payments?.data.find((payment) => payment.status === "paid")?.payment?.payment_intent
+  ?? null;
 
 /**
- * Offerta di ogni pagamento: le sessioni lifetime pagate, poi le fatture degli abbonamenti con
- * la periodicità del prezzo della riga. `priceOffer` risolve un prezzo nella sua periodicità.
+ * Offerta di ogni pagamento: le sessioni lifetime pagate, poi le fatture degli abbonamenti con la
+ * periodicità del prezzo della riga. `priceOffer` risolve un prezzo nella sua periodicità.
  */
 export function paymentOffers({ invoices, sessions, priceOffer }) {
   const offers = new Map();
@@ -189,12 +188,7 @@ export function feeSummary({ charges, offers, fees }) {
       estimate: feeEstimates[offer] ?? null,
     };
   }
-  return {
-    offers: offersSummary,
-    managedEntries,
-    disputes: kinds.disputes,
-    other: kinds.other,
-  };
+  return { offers: offersSummary, managedEntries, disputes: kinds.disputes, other: kinds.other };
 }
 
 /** Controlli delle commissioni: una per offerta venduta, oltre la stima con tolleranza. */
@@ -265,7 +259,7 @@ export function methodChanges(subscriptions, invoices, charges) {
           (line) => line.parent.subscription_item_details?.subscription === subscription.id,
         ),
       )
-      .sort((a, b) => a.status_transitions.paid_at - b.status_transitions.paid_at)
+      .toSorted((a, b) => a.status_transitions.paid_at - b.status_transitions.paid_at)
       .map((invoice) => methodOf.get(invoicePayment(invoice)))
       .filter(Boolean);
     if (!paid.length || paid[0] === method) continue;
@@ -313,12 +307,7 @@ async function preflight({ account, database, request }) {
     { ci: true },
   );
   results.push(
-    ...configurationChecks({
-      promotions,
-      quotas,
-      admission: admission[0],
-      seats: seats[0].taken,
-    }),
+    ...configurationChecks({ promotions, quotas, admission: admission[0], seats: seats[0].taken }),
   );
   return results;
 }
@@ -335,9 +324,9 @@ async function verify({ account, database, request, since, environment }) {
     "created[gte]": from,
   }).filter(
     (session) =>
-      session.mode === "payment" &&
-      session.metadata?.offer === "lifetime" &&
-      session.payment_status === "paid",
+      session.mode === "payment"
+      && session.metadata?.offer === "lifetime"
+      && session.payment_status === "paid",
   );
   const charges = listAll(request, "/v1/charges", {
     "created[gte]": from,

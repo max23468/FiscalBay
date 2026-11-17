@@ -19,13 +19,13 @@ type NoticeRow = {
 };
 
 /**
- * Email operativa del negozio da ricollegare (§14), a tutti i piani: una sola per interruzione
- * del consenso e per negozio. L'interruzione è il rifiuto o la revoca di eBay oppure la scadenza
- * nota, lo stesso istante del promemoria della campanella; l'email va al titolare dello spazio
- * nella lingua scelta, altrimenti in quella dei Termini. Restano fuori i negozi scollegati, in
- * pausa o di uno spazio in attesa, che comunque non leggono, gli account in cancellazione e le
- * interruzioni oltre i trenta giorni. L'invio riuscito, o verso un indirizzo soppresso, si
- * registra sul consenso; gli altri li riprova l'esecuzione seguente.
+ * Email operativa del negozio da ricollegare (§14), a tutti i piani: una sola per interruzione del
+ * consenso e per negozio. L'interruzione è il rifiuto o la revoca di eBay oppure la scadenza nota,
+ * lo stesso istante del promemoria della campanella; l'email va al titolare dello spazio nella
+ * lingua scelta, altrimenti in quella dei Termini. Restano fuori i negozi scollegati, in pausa o di
+ * uno spazio in attesa, che comunque non leggono, gli account in cancellazione e le interruzioni
+ * oltre i trenta giorni. L'invio riuscito, o verso un indirizzo soppresso, si registra sul
+ * consenso; gli altri li riprova l'esecuzione seguente.
  */
 export async function sendReconnectNotices(env: Env, now = new Date()): Promise<void> {
   const at = now.toISOString();

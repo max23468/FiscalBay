@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
+
 import {
   browserNarrowing,
   certificationLineage,
@@ -351,9 +352,7 @@ describe("dipendenze per tipo", () => {
   });
 
   it("gli strumenti di sviluppo non aprono browser né deploy, il gate resta completo", () => {
-    const selected = plan(["package.json", "pnpm-lock.yaml"], [], false, {
-      "package.json": tools,
-    });
+    const selected = plan(["package.json", "pnpm-lock.yaml"], [], false, { "package.json": tools });
     assert.deepEqual([selected.gate, selected.e2e, selected.deploy], ["full", false, false]);
   });
 

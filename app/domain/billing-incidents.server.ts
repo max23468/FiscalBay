@@ -1,8 +1,8 @@
 import type Stripe from "stripe";
 
 import { logFailure } from "../errors";
-import { inSequence } from "../sequence";
 import { stripeCall, stripeEnvironment } from "../integrations/stripe.server";
+import { inSequence } from "../sequence";
 import { erasedCustomerSql, paymentReversal } from "./refunds.server";
 
 /** Incasso senza diritto, deduplicato per Checkout e limitato a uno spazio ancora esistente. */
@@ -68,9 +68,9 @@ export async function reconcileBillingIncidents(env: Env, stripe: Stripe, now: D
       const charge = typeof intent?.latest_charge === "object" ? intent.latest_charge : null;
       if (session.livemode !== (stripeEnvironment(env) === "live")) return;
       if (
-        session.mode !== "payment" ||
-        session.metadata?.offer !== "lifetime" ||
-        session.metadata.workspace_id !== row.workspace_id
+        session.mode !== "payment"
+        || session.metadata?.offer !== "lifetime"
+        || session.metadata.workspace_id !== row.workspace_id
       )
         return;
       if (charge && (await paymentReversal(stripe, charge)).revocation)

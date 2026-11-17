@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Riporta l'account di collaudo del dominio di test a uno stato noto, prima dei controlli
- * dopo il deploy. Lavora soltanto sulla D1 `fiscalbay-test` e soltanto sulle righe con gli
- * identificativi fissi di `e2e/test-account.ts`: utente, credenziale e spazio vengono riscritti, non creati
- * a ogni esecuzione. L'indirizzo `example.invalid` non riceve email e il recupero password
- * non parte mai da qui.
+ * Riporta l'account di collaudo del dominio di test a uno stato noto, prima dei controlli dopo il
+ * deploy. Lavora soltanto sulla D1 `fiscalbay-test` e soltanto sulle righe con gli identificativi
+ * fissi di `e2e/test-account.ts`: utente, credenziale e spazio vengono riscritti, non creati a ogni
+ * esecuzione. L'indirizzo `example.invalid` non riceve email e il recupero password non parte mai
+ * da qui.
  *
  * Uso: E2E_ACCOUNT_PASSWORD=... node scripts/reset-test-account.mjs [--local [--sessions]]
  * `--local` lavora sulla D1 locale; `--sessions`, soltanto in locale, aggiunge le sessioni
@@ -12,9 +12,8 @@
  */
 import { fileURLToPath } from "node:url";
 
-import { hashPassword } from "../app/password.server.ts";
-
 import { legalVersions } from "../app/domain/registration.server.ts";
+import { hashPassword } from "../app/password.server.ts";
 import { databases } from "../cloudflare.config.ts";
 import { testAccount } from "../e2e/test-account.ts";
 import { cf } from "./lib/provider.mjs";
@@ -345,13 +344,7 @@ export function sessionStatements() {
     lapsed: { status: "past_due", start: -2 * day, cancel: 0, paid: false },
     scheduled: { status: "trialing", start: -day, cancel: 0, paid: false, trial: true },
     refunded: { status: "active", start: -day, cancel: 0, paid: true, refunded: true },
-    "scheduled-cancelled": {
-      status: "trialing",
-      start: -day,
-      cancel: 1,
-      paid: false,
-      trial: true,
-    },
+    "scheduled-cancelled": { status: "trialing", start: -day, cancel: 1, paid: false, trial: true },
   };
   for (const [state, subscription] of Object.entries(subscriptions)) {
     const id = `subscription-${state}`;

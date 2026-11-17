@@ -1,9 +1,8 @@
 import { z } from "zod";
 
 import { seal, unseal } from "../../sealed.server";
-import { UpstreamError } from "../http.server";
-
 import type { EbayEnvironment } from "../../view-models";
+import { UpstreamError } from "../http.server";
 import { ebayConfiguration, requestToken } from "./environment.server";
 
 export type SellerTokens = {
@@ -17,9 +16,9 @@ type TokenKind = "access" | "refresh";
 
 /**
  * Segreti delle versioni della chiave, indicate dal prefisso del valore salvato: `v1` deriva da
- * `BETTER_AUTH_SECRET` e resta soltanto in lettura, `v2` da `EBAY_TOKEN_SECRET`, separato da
- * quello di Auth. Ogni nuova cifratura usa `v2`; il rinnovo ricifra i token ancora in `v1`, così
- * quando nessun token in `v1` resta il segreto di Auth si ruota senza ricollegare i negozi.
+ * `BETTER_AUTH_SECRET` e resta soltanto in lettura, `v2` da `EBAY_TOKEN_SECRET`, separato da quello
+ * di Auth. Ogni nuova cifratura usa `v2`; il rinnovo ricifra i token ancora in `v1`, così quando
+ * nessun token in `v1` resta il segreto di Auth si ruota senza ricollegare i negozi.
  */
 export type TokenKeys = Pick<Env, "BETTER_AUTH_SECRET" | "EBAY_TOKEN_SECRET">;
 
@@ -31,9 +30,9 @@ const keyVersions = {
 const currentVersion = "v2.";
 
 /**
- * Scopo della chiave derivata e dati autenticati: negozio e tipo, così un token copiato su
- * un'altra riga non si apre. Calcolati a ogni uso, come lo schema del rinnovo, perché il
- * mutation test provi soltanto le prove che li coprono.
+ * Scopo della chiave derivata e dati autenticati: negozio e tipo, così un token copiato su un'altra
+ * riga non si apre. Calcolati a ogni uso, come lo schema del rinnovo, perché il mutation test provi
+ * soltanto le prove che li coprono.
  */
 const sealContext = (storeId: string, kind: TokenKind) =>
   ["fiscalbay/ebay-seller-token/v1", `${storeId}:${kind}`] as const;
@@ -49,9 +48,9 @@ export async function sealToken(
 }
 
 /**
- * Decifra un token salvato con la chiave della sua versione. Fallisce soltanto per un token che
- * non si apre (versione, formato, cifratura o segreto diversi, per esempio dopo una rotazione):
- * il consenso non è più utilizzabile e il negozio va ricollegato.
+ * Decifra un token salvato con la chiave della sua versione. Fallisce soltanto per un token che non
+ * si apre (versione, formato, cifratura o segreto diversi, per esempio dopo una rotazione): il
+ * consenso non è più utilizzabile e il negozio va ricollegato.
  */
 export async function openToken(
   keys: TokenKeys,

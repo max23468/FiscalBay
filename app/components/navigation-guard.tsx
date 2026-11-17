@@ -22,7 +22,7 @@ export function NavigationGuardProvider({ children }: { children: React.ReactNod
   const [guards] = useState(() => new Map<string, BlockerFunction>());
   const [selected, setSelected] = useState<string | null>(null);
   const blocker = useBlocker((navigation) => {
-    const guard = [...guards.entries()].reverse().find(([, blocks]) => blocks(navigation));
+    const guard = [...guards.entries()].toReversed().find(([, blocks]) => blocks(navigation));
     setSelected(guard?.[0] ?? null);
     return guard !== undefined;
   });

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   authLimitWait,
   forwardToAuth,
@@ -848,9 +850,7 @@ describe("cancellazione dell'account", () => {
     await check(link, { method: "POST" });
     await check(
       `${link.replace("/cancellazione-account", "/en/account-deletion")}`,
-      {
-        method: "POST",
-      },
+      { method: "POST" },
       "/en",
     );
     services.session.mockResolvedValue(null);

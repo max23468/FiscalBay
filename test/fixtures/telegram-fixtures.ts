@@ -41,8 +41,8 @@ export function fakeBot(reply?: (call: BotCall) => Response | undefined) {
     }[call.method];
     if (profileField) return Response.json({ ok: true, result: { [profileField]: "" } });
     if (
-      ["answerCallbackQuery", "setMyCommands", "deleteMyCommands"].includes(call.method) ||
-      /^setMy(Name|ShortDescription|Description)$/u.test(call.method)
+      ["answerCallbackQuery", "setMyCommands", "deleteMyCommands"].includes(call.method)
+      || /^setMy(Name|ShortDescription|Description)$/u.test(call.method)
     )
       return Response.json({ ok: true, result: true });
     return Response.json({ ok: true, result: { message_id: calls.length } });

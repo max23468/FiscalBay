@@ -1,15 +1,9 @@
 import { env } from "cloudflare:workers";
-
 import { strFromU8, unzipSync } from "fflate";
-
 import { expect, it } from "vitest";
 
 import { action as settingsAction } from "../app/routes/settings";
-
 import { insertEntitlement, insertSubscription, now } from "./fixtures/database-fixtures";
-
-import { callRoute } from "./fixtures/route-fixtures";
-
 import {
   cookie,
   userId,
@@ -20,6 +14,7 @@ import {
   hours,
   setupScenarios,
 } from "./fixtures/order-export-scenarios";
+import { callRoute } from "./fixtures/route-fixtures";
 
 setupScenarios();
 
@@ -55,7 +50,7 @@ it("lo ZIP dell'account in inglese scrive le date nel fuso dell'utente, senza cl
     'attachment; filename="fiscalbay-account-data-2026-09-13.zip"',
   );
   const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
-  expect(Object.keys(files).sort()).toEqual([
+  expect(Object.keys(files).toSorted()).toEqual([
     "export-configurations.csv",
     "fiscalbay-account.json",
     "plan.csv",
@@ -136,7 +131,7 @@ it("i dati dell'account si scaricano in uno ZIP senza segreti né ordini", async
     'attachment; filename="fiscalbay-dati-account-2026-09-13.zip"',
   );
   const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
-  expect(Object.keys(files).sort()).toEqual([
+  expect(Object.keys(files).toSorted()).toEqual([
     "accessi.csv",
     "configurazioni-esportazione.csv",
     "fiscalbay-account.json",

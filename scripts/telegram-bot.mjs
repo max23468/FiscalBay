@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * Rilegge il bot Telegram di un ambiente e lo confronta con il codice: webhook su `APP_ORIGIN`
- * più `/webhooks/telegram` con messaggi e pulsanti, menu dei venditori nelle due lingue e menu
- * della sola chat dell'owner (D198), nome e descrizioni del bot nelle due lingue. Con `--apply`
- * registra webhook, menu dell'owner e profilo, poi rilegge; il menu dei venditori lo riallinea
- * il compito giornaliero del Worker, che riallinea anche il profilo.
+ * Rilegge il bot Telegram di un ambiente e lo confronta con il codice: webhook su `APP_ORIGIN` più
+ * `/webhooks/telegram` con messaggi e pulsanti, menu dei venditori nelle due lingue e menu della
+ * sola chat dell'owner (D198), nome e descrizioni del bot nelle due lingue. Con `--apply` registra
+ * webhook, menu dell'owner e profilo, poi rilegge; il menu dei venditori lo riallinea il compito
+ * giornaliero del Worker, che riallinea anche il profilo.
  *
  * Token, segreto del webhook e ID dell'owner arrivano dalle variabili `TELEGRAM_BOT_TOKEN`,
- * `TELEGRAM_WEBHOOK_SECRET` e `TELEGRAM_OWNER_ID` del processo, letti per esempio dal
- * Portachiavi dentro il comando: non entrano mai nel resoconto, che riporta soltanto l'esito di
- * ogni controllo.
+ * `TELEGRAM_WEBHOOK_SECRET` e `TELEGRAM_OWNER_ID` del processo, letti per esempio dal Portachiavi
+ * dentro il comando: non entrano mai nel resoconto, che riporta soltanto l'esito di ogni
+ * controllo.
  *
- * Uso: TELEGRAM_BOT_TOKEN=… TELEGRAM_WEBHOOK_SECRET=… TELEGRAM_OWNER_ID=… node scripts/telegram-bot.mjs
- *        [--mode live] [--apply]
+ * Uso: TELEGRAM_BOT_TOKEN=… TELEGRAM_WEBHOOK_SECRET=… TELEGRAM_OWNER_ID=… node
+ * scripts/telegram-bot.mjs [--mode live] [--apply]
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,8 +27,8 @@ import { workerOf } from "./lib/worker.mjs";
 const allowedUpdates = ["message", "callback_query"];
 
 /**
- * Ambiente letto da `cloudflare.config.ts` con la stessa modalità della build; l'ID dell'owner è
- * il segreto `TELEGRAM_OWNER_ID` del Worker, passato al comando come il token.
+ * Ambiente letto da `cloudflare.config.ts` con la stessa modalità della build; l'ID dell'owner è il
+ * segreto `TELEGRAM_OWNER_ID` del Worker, passato al comando come il token.
  */
 export function targetOf(mode, ownerId) {
   const { env } = workerOf(mode);
@@ -116,9 +116,9 @@ async function sameProfile(request, language) {
 
 /** Stesso menu, nell'ordine: Telegram restituisce soltanto nome e descrizione dei comandi. */
 const sameMenu = (expected, actual) =>
-  Array.isArray(actual) &&
-  JSON.stringify(expected) ===
-    JSON.stringify(actual.map(({ command, description }) => ({ command, description })));
+  Array.isArray(actual)
+  && JSON.stringify(expected)
+    === JSON.stringify(actual.map(({ command, description }) => ({ command, description })));
 
 /** Esito di ogni controllo, senza valori del bot. */
 export async function checkBot(request, target) {
@@ -135,8 +135,8 @@ export async function checkBot(request, target) {
     {
       item: "webhook: messaggi e pulsanti",
       ok:
-        JSON.stringify([...allowedUpdates].sort()) ===
-        JSON.stringify([...(webhook?.allowed_updates ?? [])].sort()),
+        JSON.stringify([...allowedUpdates].toSorted())
+        === JSON.stringify([...(webhook?.allowed_updates ?? [])].toSorted()),
     },
     {
       item: "webhook: nessun errore recente",

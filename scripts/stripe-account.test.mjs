@@ -58,7 +58,7 @@ function account(change = (state) => state) {
         id: "we_live",
         url: `${origin}/webhooks/stripe`,
         status: "enabled",
-        enabled_events: [...stripeWebhookEvents].reverse(),
+        enabled_events: [...stripeWebhookEvents].toReversed(),
       },
       { id: "we_other", url: "https://example.invalid/hook", status: "enabled" },
     ],
@@ -157,21 +157,14 @@ describe("account Stripe dell'ambiente", () => {
         price_annual: { ...state.prices.price_annual, unit_amount: 5900 },
       },
       endpoints: [
-        {
-          ...state.endpoints[0],
-          status: "disabled",
-          enabled_events: stripeWebhookEvents.slice(1),
-        },
+        { ...state.endpoints[0], status: "disabled", enabled_events: stripeWebhookEvents.slice(1) },
         { id: "we_test", url: "https://test.fiscalbay.it/webhooks/stripe", status: "enabled" },
       ],
       portals: [
         {
           ...state.portals[0],
           default_return_url: "https://test.fiscalbay.it/app/impostazioni/piano",
-          features: {
-            ...state.portals[0].features,
-            subscription_update: { enabled: true },
-          },
+          features: { ...state.portals[0].features, subscription_update: { enabled: true } },
         },
       ],
     }));

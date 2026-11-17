@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import features from "../app/components/orders/motion-features";
+
 import { appCopy } from "../app/app-copy";
+import features from "../app/components/orders/motion-features";
 import { areaSection, shellMenu } from "../app/components/shell-links";
 import {
   exportHref,

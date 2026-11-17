@@ -3,17 +3,26 @@ import { data, redirect } from "react-router";
 
 import { NotFoundState } from "~/components/not-found";
 import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
+
 import { accessNotice } from "../access-notice";
-import { unconfirmedOnFailure } from "../client-action";
 import { areaPage, assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
+import { areaAction, limitedAction, tooManyRequests, runAreaAction } from "../area-actions.server";
+import { isSettingsSection, mergedSectionUrl, settingsSections } from "../area-sections";
+import { authLimitWait } from "../auth-route.server";
 import { checkoutReturn, purchaseStateFrom } from "../catalog";
-import { checkoutConfigured, checkoutOffers, purchaseState } from "../domain/checkout.server";
+import { unconfirmedOnFailure } from "../client-action";
+import { deletionReauthenticated } from "../domain/account-deletion.server";
 import { admission } from "../domain/admission.server";
+import { checkoutConfigured, checkoutOffers, purchaseState } from "../domain/checkout.server";
 import { pendingEmailChange } from "../domain/email-change.server";
-import { lifetimeContext } from "../domain/lifetime.server";
+import { listExportConfigurations } from "../domain/export-configurations.server";
+import { listExportFiles } from "../domain/export-jobs.server";
 import { freeStoreState } from "../domain/free-store.server";
 import { orderAllowance, unlockConfirmation } from "../domain/grants.server";
+import { lifetimeContext } from "../domain/lifetime.server";
+import { passkeySignals } from "../domain/passkey-user.server";
+import { planView } from "../domain/plan-view.server";
 import { marketingConsent, messageTemplates } from "../domain/preferences.server";
 import {
   listActiveSessions,
@@ -22,29 +31,21 @@ import {
   type AuthSession,
 } from "../domain/sessions.server";
 import { listSignInMethods } from "../domain/sign-in-methods.server";
-import { passkeySignals } from "../domain/passkey-user.server";
 import { telegramSettings } from "../domain/telegram.server";
+import { languageFromPath, settingsSectionParam } from "../i18n";
 import { stripeSecretKey } from "../integrations/stripe.server";
 import { botUrl, telegramConfigured } from "../integrations/telegram.server";
-import { deletionReauthenticated } from "../domain/account-deletion.server";
-import { hasWhatsNew } from "../whats-new.server";
-import { languageFromPath, settingsSectionParam } from "../i18n";
 import { measure } from "../observability.server";
-import { securityAction, securityAuthPath } from "../security-actions.server";
-import { isSettingsSection, mergedSectionUrl, settingsSections } from "../area-sections";
-import { listExportConfigurations } from "../domain/export-configurations.server";
-import { listExportFiles } from "../domain/export-jobs.server";
-import type { Route } from "./+types/settings";
-import { planView } from "../domain/plan-view.server";
-import { areaAction, limitedAction, tooManyRequests, runAreaAction } from "../area-actions.server";
 import { pageHeaders } from "../request-limits.server";
-import { authLimitWait } from "../auth-route.server";
+import { securityAction, securityAuthPath } from "../security-actions.server";
 import {
   exportSection,
   readDiagnostics,
   settingsActions,
   subscriptionState,
 } from "../settings-actions.server";
+import { hasWhatsNew } from "../whats-new.server";
+import type { Route } from "./+types/settings";
 
 /**
  * Servizi reali delle categorie. L'acquisto compare con la configurazione Stripe, la gestione
@@ -78,8 +79,8 @@ export function loader(args: Route.LoaderArgs) {
 }
 
 /**
- * Impostazioni dell'account, per chi ha confermato l'email: ogni preferenza viene dalla sua
- * fonte salvata, Sicurezza dai metodi di accesso e dalle sessioni reali.
+ * Impostazioni dell'account, per chi ha confermato l'email: ogni preferenza viene dalla sua fonte
+ * salvata, Sicurezza dai metodi di accesso e dalle sessioni reali.
  */
 async function readSettings({ request, params }: Route.LoaderArgs) {
   const sezione = settingsSectionParam(params.sezione);
@@ -151,8 +152,8 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     purchase: {
       // Senza spazio nessun negozio è collegato: l'acquisto attende la prima lettura.
       state:
-        purchase?.state ??
-        purchaseStateFrom({ covered: false, open: admissionState.purchasesOpen, synced: false }),
+        purchase?.state
+        ?? purchaseStateFrom({ covered: false, open: admissionState.purchasesOpen, synced: false }),
       offers: checkoutOffers,
       lifetime: lifetime?.offer ?? null,
       checkout: checkoutReturn(new URL(request.url).searchParams),

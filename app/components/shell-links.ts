@@ -15,8 +15,8 @@ import { appHref, visitParam, type AppLinks } from "../app-links";
 import { canonicalPath, languageNames, localizedPath, type Language } from "../i18n";
 
 /**
- * Voce del menu dell'avatar; `reloadDocument` per le pagine fuori dalle route dell'app,
- * `onSelect` per una voce che invia una scelta invece di aprire una pagina.
+ * Voce del menu dell'avatar; `reloadDocument` per le pagine fuori dalle route dell'app, `onSelect`
+ * per una voce che invia una scelta invece di aprire una pagina.
  */
 export interface AccountMenuItem {
   href: string;
@@ -45,8 +45,8 @@ export function shellDestinations(links: AppLinks, t: AppCopy): NavDestination[]
 }
 
 /**
- * Voci dell'account nel menu dell'avatar: Account, Piano e pagamenti, le Impostazioni e le
- * Novità, soltanto quando la pagina ha voci (D203).
+ * Voci dell'account nel menu dell'avatar: Account, Piano e pagamenti, le Impostazioni e le Novità,
+ * soltanto quando la pagina ha voci (D203).
  */
 function accountMenu(links: AppLinks, t: AppCopy, whatsNew = false): AccountMenuItem[] {
   return [

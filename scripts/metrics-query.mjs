@@ -3,13 +3,13 @@
  * Query riproducibili delle metriche tecniche su Workers Analytics Engine, con le stesse query
  * della console (`app/metrics-queries.ts`), e prova del campione controllato: invia al test un
  * numero noto di richieste anonime riconoscibili e confronta il conteggio stimato, pesato con
- * `_sample_interval`, con quello atteso. `cpu` legge dai Workers Logs il tempo CPU delle pagine.
- * Le query passano dal profilo della CLI `cf`, quindi nessun token passa da qui.
+ * `_sample_interval`, con quello atteso. `cpu` legge dai Workers Logs il tempo CPU delle pagine. Le
+ * query passano dal profilo della CLI `cf`, quindi nessun token passa da qui.
  *
- * Uso: node scripts/metrics-query.mjs <invocations|phases|pages> [--mode live] [--hours 24]
- *      node scripts/metrics-query.mjs cpu [--mode live] [--hours 24]
- *      node scripts/metrics-query.mjs sample [--count 40] [--wait 120]
- * Il campione si invia soltanto al test: la Production non riceve richieste sintetiche.
+ * Uso: node scripts/metrics-query.mjs <invocations|phases|pages> [--mode live] [--hours 24] node
+ * scripts/metrics-query.mjs cpu [--mode live] [--hours 24] node scripts/metrics-query.mjs sample
+ * [--count 40] [--wait 120] Il campione si invia soltanto al test: la Production non riceve
+ * richieste sintetiche.
  */
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -46,8 +46,8 @@ export function targetOf(mode) {
 const sqlTime = (date) => date.toISOString().slice(0, 19).replace("T", " ");
 
 /**
- * Query del campione: soltanto le invocazioni della finestra di invio con la classe `sample`,
- * che il Worker dà alla sola richiesta del campione, con conteggio pesato e righe conservate.
+ * Query del campione: soltanto le invocazioni della finestra di invio con la classe `sample`, che
+ * il Worker dà alla sola richiesta del campione, con conteggio pesato e righe conservate.
  */
 export function sampleSql(dataset, from, to) {
   if (!/^[a-z][a-z0-9_]{0,62}$/u.test(dataset)) throw new Error("INVALID_DATASET");

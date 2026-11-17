@@ -6,20 +6,8 @@ import { useCopy } from "~/components/copy-context";
 import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersPage } from "~/components/orders/page";
-import {
-  marketingIntent,
-  readMarketingForm,
-  readRetryForm,
-  readUnlockForm,
-  retryIntent,
-  unlockFailure,
-  unlockIntent,
-  type OrdersPageData,
-} from "../orders/page-data";
+
 import { accessNotice, isStoreNotice } from "../access-notice";
-import { deletionAccess } from "../account-page.server";
-import { issueTimingTicket } from "../domain/page-timing.server";
-import { unconfirmedOnFailure } from "../client-action";
 import {
   areaPage,
   areaStores,
@@ -27,8 +15,21 @@ import {
   requestedEbayEnvironment,
   requireAccountArea,
 } from "../account-area.server";
+import { deletionAccess } from "../account-page.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { ordersPath, storeLinkPath, storeNoticeParam, withEnvironment } from "../app-links";
+import {
+  actionFailure,
+  areaAction,
+  limitedAction,
+  runAreaAction,
+  suspendedEbayRead,
+  trialAction,
+  type AreaAction,
+  type AreaActionContext,
+} from "../area-actions.server";
+import { unconfirmedOnFailure } from "../client-action";
+import { checkoutConfigured } from "../domain/checkout.server";
 import {
   orderAllowance,
   restoreUnlockConfirmation,
@@ -36,18 +37,22 @@ import {
   UnlockError,
   unlockOrders,
 } from "../domain/grants.server";
-import { checkoutConfigured } from "../domain/checkout.server";
 import { historyWindowDays } from "../domain/history-window.server";
 import { requestOrderRead } from "../domain/order-sync.server";
+import { orderView } from "../domain/order-view.server";
+import { countVisibleOrders, listVisibleOrders, visibleOrderFacets } from "../domain/orders.server";
+import { issueTimingTicket } from "../domain/page-timing.server";
+import { planView } from "../domain/plan-view.server";
 import {
   marketingProposal,
   messageTemplates,
   recordMarketingConsent,
 } from "../domain/preferences.server";
-import { countVisibleOrders, listVisibleOrders, visibleOrderFacets } from "../domain/orders.server";
+import { serviceSetting } from "../domain/service-settings.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
+import { ordersNotices } from "../orders/notices.server";
 import {
   listCriteria,
   maxListedOrders,
@@ -61,25 +66,21 @@ import {
   rememberedStoreHref,
   revalidateUnlessSnapshot,
 } from "../orders/order-list";
-import { ordersNotices } from "../orders/notices.server";
-import { serviceSetting } from "../domain/service-settings.server";
 import { accountSearchScope, openSearch } from "../orders/order-search.server";
+import {
+  marketingIntent,
+  readMarketingForm,
+  readRetryForm,
+  readUnlockForm,
+  retryIntent,
+  unlockFailure,
+  unlockIntent,
+  type OrdersPageData,
+} from "../orders/page-data";
+import { pageHeaders } from "../request-limits.server";
 import { settleList } from "../settle.server";
 import type { ActionResult, EbayEnvironment, OrderView } from "../view-models";
 import type { Route } from "./+types/orders";
-import { orderView } from "../domain/order-view.server";
-import { planView } from "../domain/plan-view.server";
-import {
-  actionFailure,
-  areaAction,
-  limitedAction,
-  runAreaAction,
-  suspendedEbayRead,
-  trialAction,
-  type AreaAction,
-  type AreaActionContext,
-} from "../area-actions.server";
-import { pageHeaders } from "../request-limits.server";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
@@ -92,9 +93,9 @@ export const headers = pageHeaders;
 function verifying(order: OrderView) {
   const { fiscal } = order;
   return (
-    fiscal.state === "checking" ||
-    (fiscal.state === "locked" && fiscal.hold === "checking") ||
-    (fiscal.state === "available" && fiscal.notice === "checking")
+    fiscal.state === "checking"
+    || (fiscal.state === "locked" && fiscal.hold === "checking")
+    || (fiscal.state === "available" && fiscal.notice === "checking")
   );
 }
 
@@ -104,9 +105,9 @@ export function loader(args: Route.LoaderArgs) {
 
 /**
  * Ordini persistiti e autorizzati dello spazio, senza attendere eBay: sessione, diritti e
- * conservazione sono verificati qui, prima della risposta. Gli ordini ancora in verifica
- * compaiono con l'ultimo stato salvato e lo sblocco sospeso; il loro stato confermato arriva
- * nella stessa risposta, entro l'attesa dello streaming.
+ * conservazione sono verificati qui, prima della risposta. Gli ordini ancora in verifica compaiono
+ * con l'ultimo stato salvato e lo sblocco sospeso; il loro stato confermato arriva nella stessa
+ * risposta, entro l'attesa dello streaming.
  */
 async function readOrders({ request, params }: Route.LoaderArgs) {
   const area = await requireAccountArea(request, { unverified: true });
@@ -181,7 +182,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
   const latest =
     linked
       .filter((store) => store.lastSyncAt !== null)
-      .sort((a, b) => a.lastSyncAt!.localeCompare(b.lastSyncAt!))
+      .toSorted((a, b) => a.lastSyncAt!.localeCompare(b.lastSyncAt!))
       .at(-1) ?? linked[0];
   const lastSync = latest?.lastSyncAt ?? undefined;
   const [orders, total, incoming, facets, detailOrders, marketing] = await Promise.all([
@@ -199,22 +200,15 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
   // recuperato dallo storico si inserirebbe fra quelli già letti e resta all'indicatore.
   const top = orders[0];
   const incomingAtTop =
-    incoming > 0 &&
-    (!top ||
-      (await count({ ...arrived, after: { creationTime: top.createdAt, id: top.id } })) === 0);
+    incoming > 0
+    && (!top
+      || (await count({ ...arrived, after: { creationTime: top.createdAt, id: top.id } })) === 0);
   const notice = accessNotice(search, language);
   const detail = detailOrders[0] ?? null;
   // Un ordine inesistente, scaduto o di un altro spazio risponde allo stesso modo.
   if (params.ordine && !detail) {
     return data(
-      {
-        notFound: true as const,
-        language,
-        account,
-        notice,
-        verified,
-        ebayEnvironment,
-      },
+      { notFound: true as const, language, account, notice, verified, ebayEnvironment },
       { status: 404 },
     );
   }

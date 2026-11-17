@@ -3,12 +3,13 @@ import { Link } from "react-router";
 
 import { useAction } from "~/components/action";
 import { useConfirmed } from "~/components/confirmation";
+import { useCopy } from "~/components/copy-context";
 import { EmptyState } from "~/components/empty-state";
 import { PageTitle } from "~/components/icon-tile";
 import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
-import { useCopy } from "~/components/copy-context";
+
 import { usePageTiming } from "../../page-timing";
 import type { StoreView } from "../../view-models";
 import { StoreSheet } from "./detail";
@@ -34,8 +35,8 @@ export function StoresPage({
   /** Esito del collegamento eBay appena concluso, sotto il titolo. */
   notice?: React.ReactNode;
   /**
-   * Stato confermato dei negozi in lettura, nella stessa risposta: fino ad allora restano
-   * l'ultimo stato salvato e le letture a richiesta sospese.
+   * Stato confermato dei negozi in lettura, nella stessa risposta: fino ad allora restano l'ultimo
+   * stato salvato e le letture a richiesta sospese.
    */
   confirmation?: Promise<StoreView[]>;
 }) {
@@ -95,8 +96,8 @@ function FreeNotes({ stores }: { stores: StoreView[] }) {
 }
 
 /**
- * Letture del Free in pausa per inattività: la ripresa di un negozio è la conferma dell'utente
- * e riprende tutti quelli dello spazio.
+ * Letture del Free in pausa per inattività: la ripresa di un negozio è la conferma dell'utente e
+ * riprende tutti quelli dello spazio.
  */
 function InactivityNotice({ stores }: { stores: StoreView[] }) {
   const { t } = useCopy();

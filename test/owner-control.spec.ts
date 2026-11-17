@@ -1,11 +1,13 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { infoEmail } from "../app/app-copy";
+import { ownerCommands } from "../app/bot-commands";
 import { consoleSummary } from "../app/domain/admin-directory.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
 import { recordBulkDataThreshold } from "../app/domain/ebay-quotas.server";
 import { recordCancellationFeedback } from "../app/domain/exit-feedback.server";
-import { productMetrics } from "../app/domain/product-metrics.server";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import {
   configureOwnerCommands,
   ownerPanel,
@@ -16,13 +18,11 @@ import {
   recordDisputeOpened,
   runOwnerNotifications,
 } from "../app/domain/owner-notifications.server";
-import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { duration, plainText, type Panel } from "../app/domain/owner-panels.server";
+import { productMetrics } from "../app/domain/product-metrics.server";
 import { consumeTask, taskSlot } from "../app/domain/scheduled-work.server";
 import { setSwitch } from "../app/domain/service-settings.server";
 import { taskPeriods, type ScheduledTask } from "../app/domain/work-timing";
-import { infoEmail } from "../app/app-copy";
-import { ownerCommands } from "../app/bot-commands";
 import {
   editRichMessage,
   ownerChatId,
@@ -1475,8 +1475,8 @@ describe("compiti periodici", () => {
 
   it("riallineano il menu dell'owner anche quando quello dei venditori non riesce", async () => {
     const api = bot((call) =>
-      call.method === "setMyCommands" &&
-      (call.params.scope as { type: string }).type === "all_private_chats"
+      call.method === "setMyCommands"
+      && (call.params.scope as { type: string }).type === "all_private_chats"
         ? new Response("", { status: 502 })
         : undefined,
     );
@@ -1491,8 +1491,8 @@ describe("compiti periodici", () => {
     expect(
       api.calls.some(
         (call) =>
-          call.method === "setMyCommands" &&
-          (call.params.scope as { type: string }).type === "chat",
+          call.method === "setMyCommands"
+          && (call.params.scope as { type: string }).type === "chat",
       ),
     ).toBe(true);
     // L'errore del menu dei venditori fa ripetere il compito.

@@ -1,38 +1,28 @@
 import { env } from "cloudflare:workers";
-import { insertOrder } from "./fixtures/database-fixtures";
-
 import { describe, expect, it, vi } from "vitest";
 
 import { pendingVisitWrites } from "../app/domain/admission.server";
-import { listVisibleOrders } from "../app/domain/orders.server";
-
-import { disconnectStore, listStores } from "../app/domain/stores.server";
-
 import {
   applyFreePlan,
   applyFreePlans,
   chooseFreeStore,
   freeStoreState,
 } from "../app/domain/free-store.server";
-
-import type { ActionResult } from "../app/view-models";
-
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-
+import { listVisibleOrders } from "../app/domain/orders.server";
+import { disconnectStore, listStores } from "../app/domain/stores.server";
 import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
-
+import type { ActionResult } from "../app/view-models";
+import { verifiedSession } from "./fixtures/account-fixtures";
 import {
+  insertOrder,
   insertEntitlement,
   insertStore,
   insertWorkspace,
   resetOrderFixtures,
   type EntitlementSource,
 } from "./fixtures/database-fixtures";
-
 import { syntheticEbay } from "./fixtures/ebay-fixtures";
-
-import { verifiedSession } from "./fixtures/account-fixtures";
-
 import {
   day,
   linkThroughEbay,
@@ -81,12 +71,7 @@ describe("negozio attivo del Free e downgrade", () => {
     from: number,
     until: number,
   ) {
-    await insertEntitlement({
-      workspaceId,
-      source,
-      startsAt: iso(from),
-      endsAt: iso(until),
-    }).run();
+    await insertEntitlement({ workspaceId, source, startsAt: iso(from), endsAt: iso(until) }).run();
   }
 
   const pauses = async (userId: string, at?: Date) =>
@@ -96,7 +81,7 @@ describe("negozio attivo del Free e downgrade", () => {
   const visible = async (userId: string, at: number) =>
     (await listVisibleOrders(env.DB, userId, 50, "production", new Date(at)))
       .map((order) => order.id)
-      .sort();
+      .toSorted();
   const changes = async () =>
     (
       await env.DB.prepare(
@@ -157,10 +142,7 @@ describe("negozio attivo del Free e downgrade", () => {
 
     const after = new Date(start + 2 * day);
     await applyFreePlans(env.DB, after);
-    expect(await pauses(seller.userId, after)).toEqual({
-      [seller.storeId]: ["plan"],
-      secondo: [],
-    });
+    expect(await pauses(seller.userId, after)).toEqual({ [seller.storeId]: ["plan"], secondo: [] });
     expect(
       (await listStores(env.DB, seller.userId, after)).map((store) => store.targetMinutes),
     ).toEqual([30, 30]);
@@ -258,10 +240,7 @@ describe("negozio attivo del Free e downgrade", () => {
     ).rejects.toThrow("immutable_free_store_change");
     const after = new Date(Date.now() + 2000);
     await applyFreePlan(env.DB, seller.userId, after);
-    expect(await pauses(seller.userId, after)).toEqual({
-      [seller.storeId]: [],
-      secondo: ["plan"],
-    });
+    expect(await pauses(seller.userId, after)).toEqual({ [seller.storeId]: [], secondo: ["plan"] });
     expect(await quotaUsed()).toBe(1);
     expect(await count("free_cycles")).toBe(1);
     expect(await count("workspace_entitlements")).toBe(0);
@@ -560,11 +539,7 @@ describe("negozio attivo del Free e downgrade", () => {
         retention_until: iso(yearAfter(recent)),
         purge_after: iso(yearAfter(recent)),
       },
-      {
-        id: "esteso",
-        retention_until: iso(months(extended, 12)),
-        purge_after: iso(at + 30 * day),
-      },
+      { id: "esteso", retention_until: iso(months(extended, 12)), purge_after: iso(at + 30 * day) },
     ];
     // Il cron rivede lo spazio per la revoca recente; ripetere non sposta i termini.
     await applyFreePlans(env.DB, new Date(at));

@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   applyStripeEvent,
   recordSupportErasure,
@@ -11,9 +12,9 @@ import {
 import { purchaseState } from "../app/domain/checkout.server";
 import { orderAllowance } from "../app/domain/grants.server";
 import { lifetimeContext } from "../app/domain/lifetime.server";
+import { subscriptionView } from "../app/domain/plan-view.server";
 import { loader as settingsLoader } from "../app/routes/settings";
 import { verifiedSession } from "./fixtures/account-fixtures";
-import { subscriptionView } from "../app/domain/plan-view.server";
 import {
   insertEntitlement,
   insertSubscription,

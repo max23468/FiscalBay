@@ -1,7 +1,7 @@
-import { activeEntitlementSql, orderAccessSql } from "./grants.server";
-import { consultableStore, listedOrder, storeNameSql } from "./store-state.server";
 import { buyerTaxKey, shownTaxType, taxIdentifierType, taxQuality } from "../tax-quality";
 import type { SuggestionView, EbayEnvironment } from "../view-models";
+import { activeEntitlementSql, orderAccessSql } from "./grants.server";
+import { consultableStore, listedOrder, storeNameSql } from "./store-state.server";
 
 type Suggestions = {
   suggestions: SuggestionView[];
@@ -86,8 +86,8 @@ export async function orderSuggestions(
           value: row.value,
         });
       if (
-        new Set(latest.map((row) => row.source_id)).size > 1 ||
-        new Set(latest.map(normalized)).size > 1
+        new Set(latest.map((row) => row.source_id)).size > 1
+        || new Set(latest.map(normalized)).size > 1
       ) {
         result.suggestionStatus = "ambiguous";
         continue;

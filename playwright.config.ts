@@ -1,5 +1,7 @@
 import { totalmem } from "node:os";
+
 import { defineConfig } from "@playwright/test";
+
 import { localOrigin, localPort } from "./e2e/local-account";
 
 export default defineConfig({

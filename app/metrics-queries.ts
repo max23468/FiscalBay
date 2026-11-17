@@ -1,18 +1,18 @@
 /**
- * Query delle metriche tecniche per la SQL API di Workers Analytics Engine, comuni alla console
- * e a `scripts/metrics-query.mjs`. Analytics Engine campiona in scrittura e in lettura: ogni
- * conteggio, somma, media e quantile è pesato con `_sample_interval`, e il risultato è una stima
- * con finestra dichiarata, mai una base per quote, billing o controlli di accesso. La disposizione
- * dei campi è descritta in `metrics.server.ts`.
+ * Query delle metriche tecniche per la SQL API di Workers Analytics Engine, comuni alla console e a
+ * `scripts/metrics-query.mjs`. Analytics Engine campiona in scrittura e in lettura: ogni conteggio,
+ * somma, media e quantile è pesato con `_sample_interval`, e il risultato è una stima con finestra
+ * dichiarata, mai una base per quote, billing o controlli di accesso. La disposizione dei campi è
+ * descritta in `metrics.server.ts`.
  */
 import { localizedPath } from "./i18n.ts";
 
 export const metricQueries = ["invocations", "phases", "pages"] as const;
 
 /**
- * Richiesta del campione controllato di `scripts/metrics-query.mjs`: `HEAD` sul percorso dei
- * report del browser, che risponde 405 senza effetti. Nessuna pagina la usa: il Worker la
- * registra con la classe `sample`, così il conteggio del campione non include altro traffico.
+ * Richiesta del campione controllato di `scripts/metrics-query.mjs`: `HEAD` sul percorso dei report
+ * del browser, che risponde 405 senza effetti. Nessuna pagina la usa: il Worker la registra con la
+ * classe `sample`, così il conteggio del campione non include altro traffico.
  */
 export const samplePath = "/api/v1/page-timing";
 export type MetricQuery = (typeof metricQueries)[number];
@@ -33,8 +33,8 @@ const quantiles = (value: string) =>
     .join(",\n  ");
 
 /**
- * Misura facoltativa di un report del browser: -1 quando assente, con peso nullo nei quantili e
- * nel numero stimato di report che la portano.
+ * Misura facoltativa di un report del browser: -1 quando assente, con peso nullo nei quantili e nel
+ * numero stimato di report che la portano.
  */
 const present = (column: string) => `if(${column} >= 0, _sample_interval, 0)`;
 
@@ -56,16 +56,17 @@ const pageMeasures = [
 
 /**
  * Testo SQL di una query sulla finestra delle ultime `hours` ore.
+ *
  * - `invocations`: richieste HTTP per classe di route, metodo ed esito, invocazioni della coda per
  *   tipo di messaggio e del cron. L'unità è l'invocazione: numero stimato, durata media e quantili
- *   valgono per invocazione, anche quando un gruppo della coda porta più messaggi, contati a
- *   parte in `messages`;
- * - `phases`: per invocazione, fase, operazione ed esito il numero stimato di misure, di
- *   invocazioni che le contengono e il tempo per invocazione speso nella fase;
- * - `pages`: per pagina il numero stimato di report e, per ogni misura del browser e fase del
- *   server letta da `Server-Timing`, i report che la portano e i quantili 75 e 95.
- * Il rendering non è una fase: l'orologio del Worker resta fermo durante il calcolo, quindi la sua
- * durata si legge come tempo CPU dai Workers Logs (`pageCpuQuery`).
+ *   valgono per invocazione, anche quando un gruppo della coda porta più messaggi, contati a parte
+ *   in `messages`;
+ * - `phases`: per invocazione, fase, operazione ed esito il numero stimato di misure, di invocazioni
+ *   che le contengono e il tempo per invocazione speso nella fase;
+ * - `pages`: per pagina il numero stimato di report e, per ogni misura del browser e fase del server
+ *   letta da `Server-Timing`, i report che la portano e i quantili 75 e 95. Il rendering non è una
+ *   fase: l'orologio del Worker resta fermo durante il calcolo, quindi la sua durata si legge come
+ *   tempo CPU dai Workers Logs (`pageCpuQuery`).
  */
 export function metricSql(query: MetricQuery, dataset: string, hours: number): string {
   if (!datasetPattern.test(dataset)) throw new Error("INVALID_DATASET");
@@ -144,8 +145,8 @@ const servicePattern = /^[a-z][a-z0-9-]{0,62}$/u;
 const segmentChar = "[^/?.]";
 
 /**
- * Segmento del dettaglio diverso da `word`, senza lookahead: la regex dei Workers Logs (RE2) non
- * li ammette. Un segmento diverso è un prefisso proprio di `word`, diverge da `word` in un punto
+ * Segmento del dettaglio diverso da `word`, senza lookahead: la regex dei Workers Logs (RE2) non li
+ * ammette. Un segmento diverso è un prefisso proprio di `word`, diverge da `word` in un punto
  * oppure la prolunga.
  */
 function segmentOtherThan(word: string) {
@@ -211,8 +212,8 @@ export function pageCpuQuery(
 
 /**
  * Valori di una risposta di `pageCpuQuery` (`result.calculations`), null quando la forma non è
- * quella attesa: una lettura non riuscita, mai zero. Senza invocazioni i quantili non hanno
- * righe: nessun valore, non zero.
+ * quella attesa: una lettura non riuscita, mai zero. Senza invocazioni i quantili non hanno righe:
+ * nessun valore, non zero.
  */
 export function cpuValues(calculations: unknown) {
   if (!Array.isArray(calculations)) return null;

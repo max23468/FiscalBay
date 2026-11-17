@@ -39,8 +39,8 @@ export const openSubscriptionFilterSql = `s.unavailable_at IS NULL
   AND s.status IN (${sqlList(openSubscriptionStatuses)})`;
 
 /**
- * Abbonamento dello spazio che può ancora incassare, come un pagamento da confermare o un
- * rinnovo da regolarizzare: un nuovo acquisto o la prova lo sovrapporrebbero.
+ * Abbonamento dello spazio che può ancora incassare, come un pagamento da confermare o un rinnovo
+ * da regolarizzare: un nuovo acquisto o la prova lo sovrapporrebbero.
  */
 export function openSubscriptionSql(workspace: string, environment?: string) {
   return `EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.workspace_id = ${workspace}
@@ -53,9 +53,9 @@ export function openCheckoutSql(alias: string, at: string) {
 }
 
 /**
- * Chiude subito un abbonamento su Stripe, senza conguaglio né rimborso, e ne registra lo stato.
- * Uno già chiuso non si chiude una seconda volta; uno che Stripe non restituisce più non può
- * addebitare e resta indisponibile.
+ * Chiude subito un abbonamento su Stripe, senza conguaglio né rimborso, e ne registra lo stato. Uno
+ * già chiuso non si chiude una seconda volta; uno che Stripe non restituisce più non può addebitare
+ * e resta indisponibile.
  */
 export async function cancelSubscription(env: Env, stripe: Stripe, id: string, now: Date) {
   const at = now.toISOString();
@@ -82,11 +82,11 @@ export async function cancelSubscription(env: Env, stripe: Stripe, id: string, n
 
 /**
  * Nessun nuovo addebito per mensile o annuale: la sessione ancora aperta scade, così non può più
- * incassare, e se è stata completata nel frattempo il suo abbonamento si chiude con gli altri.
- * Gli abbonamenti che possono ancora incassare si chiudono subito, senza conguagli né rimborsi
- * automatici. Una chiamata a Stripe alla volta: il turno resta entro i limiti. Il riferimento
- * della sessione si toglie soltanto dopo la chiusura dei suoi abbonamenti: se una chiusura non
- * riesce, il tentativo successivo ritrova la sessione e l'abbonamento che ha creato.
+ * incassare, e se è stata completata nel frattempo il suo abbonamento si chiude con gli altri. Gli
+ * abbonamenti che possono ancora incassare si chiudono subito, senza conguagli né rimborsi
+ * automatici. Una chiamata a Stripe alla volta: il turno resta entro i limiti. Il riferimento della
+ * sessione si toglie soltanto dopo la chiusura dei suoi abbonamenti: se una chiusura non riesce, il
+ * tentativo successivo ritrova la sessione e l'abbonamento che ha creato.
  */
 export async function endOpenSubscriptions(
   env: Env,

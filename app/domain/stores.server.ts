@@ -1,16 +1,16 @@
-import { syncMinutes } from "./order-sync.server";
 import { dayMilliseconds } from "../time";
+import type { EbayEnvironment } from "../view-models";
 import { resumeAfterInactivity } from "./admission.server";
 import { deleteOrders, requestOrderBudget, storeDataTables } from "./deletion-steps.server";
 import { activeEntitlementSql } from "./grants.server";
 import { historyStartSql } from "./history-window.server";
+import { syncMinutes } from "./order-sync.server";
 import { clearedStoreProfileSql, listedOrder, storeNameSql } from "./store-state.server";
-import type { EbayEnvironment } from "../view-models";
 
 /**
  * Collegamento dei negozi: stato derivato da scollegamento, consenso e pause, separato
- * dall'attività di sincronizzazione. Ogni operazione verifica che il negozio appartenga allo
- * spazio dell'utente.
+ * dall'attività di sincronizzazione. Ogni operazione verifica che il negozio appartenga allo spazio
+ * dell'utente.
  */
 
 /** Username dell'account eBay del negozio. */
@@ -18,8 +18,8 @@ const usernameSql = "COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id)
 
 export type StoreConnection = "active" | "paused" | "reconnect_required" | "disconnected";
 /**
- * Ragioni di pausa: «abuse» è la pausa dell'assistenza messa dalla sospensione antiabuso del
- * Free, distinta da quella manuale della console («admin»); il venditore le vede uguali.
+ * Ragioni di pausa: «abuse» è la pausa dell'assistenza messa dalla sospensione antiabuso del Free,
+ * distinta da quella manuale della console («admin»); il venditore le vede uguali.
  */
 export type PauseReason = "manual" | "plan" | "inactivity" | "admin" | "abuse";
 
@@ -61,8 +61,8 @@ export type StoreStatus = {
   /** Finestra dello storico e completamento della sua importazione; null prima del primo avvio. */
   history: { days: number; done: boolean } | null;
   /**
-   * Invito a ricollegare: prima che il consenso scada e, dopo, per al massimo trenta giorni.
-   * Mai per i negozi in pausa, che non leggono eBay.
+   * Invito a ricollegare: prima che il consenso scada e, dopo, per al massimo trenta giorni. Mai
+   * per i negozi in pausa, che non leggono eBay.
    */
   reminder: { kind: "expiring" | "expired"; at: string } | null;
   /**
@@ -86,14 +86,14 @@ export function readsFailing(store: StoreStatus) {
 }
 
 /**
- * eBay non risponde: le letture di tutti i negozi attivi non riescono. Riporta l'ultima lettura
+ * EBay non risponde: le letture di tutti i negozi attivi non riescono. Riporta l'ultima lettura
  * riuscita fra quei negozi, null se nessuno è mai stato letto; null senza indisponibilità.
  */
 export function ebayOutage(stores: StoreStatus[]): { lastSyncAt: string | null } | null {
   const active = stores.filter((store) => store.connection === "active");
   if (active.length === 0 || !active.every(readsFailing)) return null;
   const synced = active.flatMap((store) => (store.lastSyncAt ? [store.lastSyncAt] : []));
-  return { lastSyncAt: synced.sort().at(-1) ?? null };
+  return { lastSyncAt: synced.toSorted().at(-1) ?? null };
 }
 
 /** Indisponibilità di eBay per ambiente: Production e Sandbox rispondono ciascuno per sé. */
@@ -164,10 +164,10 @@ type RunRow = { store_id: string; started_at: string; ok: number; new_orders: nu
 /**
  * Storico di un negozio avviato: i giorni consultabili sono quelli della finestra attuale dello
  * spazio, perché i recenti coprono il tempo dopo il primo avvio. Un'importazione estesa
- * all'attivazione di una copertura conta quindi un anno pieno, e dopo il ritorno al Free valgono
- * i trenta giorni del Free. L'importazione è conclusa soltanto se parte dall'inizio della
- * finestra o prima: una finestra più ampia, come prima della lettura che segue l'attivazione,
- * resta da importare.
+ * all'attivazione di una copertura conta quindi un anno pieno, e dopo il ritorno al Free valgono i
+ * trenta giorni del Free. L'importazione è conclusa soltanto se parte dall'inizio della finestra o
+ * prima: una finestra più ampia, come prima della lettura che segue l'attivazione, resta da
+ * importare.
  */
 function history(row: StoreRow, at: number): NonNullable<StoreStatus["history"]> {
   const windowFrom = Date.parse(row.window_from);
@@ -216,7 +216,7 @@ export async function listStoreScopes(
 
 /** Ragioni di pausa di un negozio dall'elenco concatenato della sua riga, in ordine alfabetico. */
 const pauseReasonsOf = (pauses: string | null) =>
-  (pauses?.split(",").sort() ?? []) as PauseReason[];
+  (pauses?.split(",").toSorted() ?? []) as PauseReason[];
 
 /** Negozi di uno spazio per la console amministrativa, con lo stesso stato mostrato al venditore. */
 export function listWorkspaceStores(db: D1Database, workspaceId: string, now = new Date()) {
@@ -300,8 +300,8 @@ async function readStores(
         reminder = { kind: "expired", at: since };
       }
     } else if (
-      connection === "active" &&
-      Date.parse(expiresAt!) - at <= expiringNoticeMilliseconds
+      connection === "active"
+      && Date.parse(expiresAt!) - at <= expiringNoticeMilliseconds
     ) {
       reminder = { kind: "expiring", at: expiresAt! };
     }
@@ -399,8 +399,8 @@ export async function resumeStore(
 /**
  * Pausa operativa dell'assistenza (§15): ferma le letture del negozio finché la console non la
  * toglie. Il venditore la vede e non può toglierla; piano, consenso e dati restano. Messa su un
- * negozio già fermo per la sospensione antiabuso diventa manuale e resta anche dopo l'esito
- * «nessun abuso»; toglierla non tocca la sospensione.
+ * negozio già fermo per la sospensione antiabuso diventa manuale e resta anche dopo l'esito «nessun
+ * abuso»; toglierla non tocca la sospensione.
  */
 export async function setAdminPause(
   db: D1Database,
@@ -467,10 +467,10 @@ export async function disconnectStore(
 }
 
 /**
- * Rimuove il negozio dall'elenco ed elimina i dati, senza ripensamento. La conferma riporta
- * il nome. Con gli ordini vanno letture, ricevute webhook, consegne e preferenze Telegram del
- * negozio. Il riferimento allo spazio resta per riconoscere l'identità al nuovo collegamento
- * e preservare quota e diritti commerciali già registrati.
+ * Rimuove il negozio dall'elenco ed elimina i dati, senza ripensamento. La conferma riporta il
+ * nome. Con gli ordini vanno letture, ricevute webhook, consegne e preferenze Telegram del negozio.
+ * Il riferimento allo spazio resta per riconoscere l'identità al nuovo collegamento e preservare
+ * quota e diritti commerciali già registrati.
  */
 export async function deleteStoreData(
   db: D1Database,

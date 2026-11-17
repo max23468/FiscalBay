@@ -17,6 +17,8 @@ import {
   stripeListLimit,
   stripeSecretKey,
 } from "../integrations/stripe.server";
+import { inSequence } from "../sequence";
+import { dayMilliseconds } from "../time";
 import {
   endOpenSubscriptions,
   isRenewingSubscription,
@@ -27,13 +29,13 @@ import {
   renewingSubscriptionStatuses,
 } from "./billing-subscriptions.server";
 import { recordCancellationFeedback } from "./exit-feedback.server";
-import { recordDisputeOpened } from "./owner-notifications.server";
 import { entitlementInForce, lifetimeInForceSql } from "./grants.server";
 import {
   isLifetimeSession,
   reconcileLifetime,
   reconcileLifetimeReservations,
 } from "./lifetime.server";
+import { recordDisputeOpened } from "./owner-notifications.server";
 import {
   customerCharges,
   erasedCustomerSql,
@@ -44,19 +46,17 @@ import {
   reversalStatements,
   type Reversal,
 } from "./refunds.server";
-import { inSequence } from "../sequence";
 import { sqlList } from "./sql.server";
 import { subscriptionOffers } from "./subscription-offers";
-import { dayMilliseconds } from "../time";
 
 /**
  * Effetti commerciali di Stripe. Webhook e riconciliazione periodica arrivano qui con un solo
  * riferimento verificato e rileggono sempre lo stato corrente da Stripe: un evento duplicato,
- * tardivo o fuori ordine produce la stessa rilettura, mai un diritto in più. Ogni fattura
- * pagata attribuisce una sola copertura, per il periodo che ha pagato; un rinnovo non pagato
- * non ne crea una e lo spazio torna subito al Free. Un rimborso totale o una disputa persa
- * revocano soltanto la copertura di quel pagamento. Un errore o un oggetto non più disponibile
- * non inventano diritti, rimborsi o revoche.
+ * tardivo o fuori ordine produce la stessa rilettura, mai un diritto in più. Ogni fattura pagata
+ * attribuisce una sola copertura, per il periodo che ha pagato; un rinnovo non pagato non ne crea
+ * una e lo spazio torna subito al Free. Un rimborso totale o una disputa persa revocano soltanto la
+ * copertura di quel pagamento. Un errore o un oggetto non più disponibile non inventano diritti,
+ * rimborsi o revoche.
  */
 
 /** Rinnovo rifiutato in modo autorevole: Free subito, prezzo protetto per sette giorni. */
@@ -151,8 +151,8 @@ async function eventTarget(
 }
 
 /**
- * Effetto di una ricevuta Stripe verificata. Senza chiave la ricevuta resta in coda; un
- * oggetto non più disponibile si segnala e non ha effetti.
+ * Effetto di una ricevuta Stripe verificata. Senza chiave la ricevuta resta in coda; un oggetto non
+ * più disponibile si segnala e non ha effetti.
  */
 export async function applyStripeEvent(
   env: Env,
@@ -184,11 +184,11 @@ export async function applyStripeEvent(
 }
 
 /**
- * Rilegge l'abbonamento, le sue fatture pagate e i loro addebiti, poi aggiorna stato e
- * coperture: una fattura rimborsata per intero o con la disputa persa ha la copertura revocata,
- * anche se Stripe la segnala prima che la copertura esista. Ripetuta produce lo stesso
- * risultato. Scaduta la tutela del prezzo, un rinnovo ancora non pagato
- * viene chiuso su Stripe: un incasso tardivo non riapplica in silenzio il vecchio listino.
+ * Rilegge l'abbonamento, le sue fatture pagate e i loro addebiti, poi aggiorna stato e coperture:
+ * una fattura rimborsata per intero o con la disputa persa ha la copertura revocata, anche se
+ * Stripe la segnala prima che la copertura esista. Ripetuta produce lo stesso risultato. Scaduta la
+ * tutela del prezzo, un rinnovo ancora non pagato viene chiuso su Stripe: un incasso tardivo non
+ * riapplica in silenzio il vecchio listino.
  */
 export async function reconcileSubscription(
   env: Env,
@@ -311,10 +311,10 @@ const protectionEnd = (item: Stripe.SubscriptionItem) =>
   item.current_period_start + pricePromiseMs / 1000;
 
 /**
- * Un rinnovo non pagato si chiude su Stripe all'istante esatto in cui finisce la tutela del
- * prezzo: alla chiusura Stripe sospende i tentativi sulla fattura aperta, così nessun incasso
- * arriva dopo e applica in silenzio il vecchio listino. Un pagamento riuscito entro la tutela
- * toglie la chiusura programmata da FiscalBay; una disdetta che arriva prima resta.
+ * Un rinnovo non pagato si chiude su Stripe all'istante esatto in cui finisce la tutela del prezzo:
+ * alla chiusura Stripe sospende i tentativi sulla fattura aperta, così nessun incasso arriva dopo e
+ * applica in silenzio il vecchio listino. Un pagamento riuscito entro la tutela toglie la chiusura
+ * programmata da FiscalBay; una disdetta che arriva prima resta.
  */
 async function scheduleProtectionEnd(
   stripe: Stripe,
@@ -327,9 +327,9 @@ async function scheduleProtectionEnd(
   const update = (params: Stripe.SubscriptionUpdateParams) =>
     stripeCall(() => stripe.subscriptions.update(subscription.id, params));
   if (
-    lapsed &&
-    now.getTime() < end * 1000 &&
-    !(subscription.cancel_at && subscription.cancel_at <= end)
+    lapsed
+    && now.getTime() < end * 1000
+    && !(subscription.cancel_at && subscription.cancel_at <= end)
   )
     return update({ cancel_at: end, proration_behavior: "none" });
   if (subscription.status === "active" && subscription.cancel_at === end)
@@ -345,18 +345,17 @@ const batchSize = 25;
 const sessionScanLimit = 1000;
 
 /**
- * Rete di sicurezza del cron per i webhook mancati o tardivi, anche con il browser chiuso.
- * Prima le sessioni completate degli ultimi due giorni senza abbonamento locale o senza posto
- * lifetime attivo, poi le prenotazioni dei posti, poi gli abbonamenti dovuti: rinnovo scaduto
- * o tutela del prezzo finita e non ancora riletti, poi attivazioni in attesa da oltre un'ora,
- * infine una rilettura al giorno. Un abbonamento cancellato non si rinnova più ma resta nella
- * rilettura giornaliera finché il suo ultimo periodo non è finito: fino ad allora un rimborso
- * o una disputa persa arrivati senza webhook revocano una copertura ancora in corso. Ogni
- * tentativo, riuscito o no, aggiorna `checked_at`: un abbonamento che fallisce non torna in
- * testa a ogni turno. Con 25 abbonamenti e due richieste ciascuno, più al massimo venti posti,
- * per turno orario il carico resta molto sotto i limiti di Stripe. Ogni passo registra il
- * proprio errore senza fermare gli altri e il turno si conclude: quanto non riuscito torna al
- * turno seguente.
+ * Rete di sicurezza del cron per i webhook mancati o tardivi, anche con il browser chiuso. Prima le
+ * sessioni completate degli ultimi due giorni senza abbonamento locale o senza posto lifetime
+ * attivo, poi le prenotazioni dei posti, poi gli abbonamenti dovuti: rinnovo scaduto o tutela del
+ * prezzo finita e non ancora riletti, poi attivazioni in attesa da oltre un'ora, infine una
+ * rilettura al giorno. Un abbonamento cancellato non si rinnova più ma resta nella rilettura
+ * giornaliera finché il suo ultimo periodo non è finito: fino ad allora un rimborso o una disputa
+ * persa arrivati senza webhook revocano una copertura ancora in corso. Ogni tentativo, riuscito o
+ * no, aggiorna `checked_at`: un abbonamento che fallisce non torna in testa a ogni turno. Con 25
+ * abbonamenti e due richieste ciascuno, più al massimo venti posti, per turno orario il carico
+ * resta molto sotto i limiti di Stripe. Ogni passo registra il proprio errore senza fermare gli
+ * altri e il turno si conclude: quanto non riuscito torna al turno seguente.
  */
 export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, now = new Date()) {
   const key = stripeSecretKey(env);
@@ -445,8 +444,8 @@ const dueSql = `(julianday(s.current_period_end) <= julianday(?1)
     AND julianday(s.checked_at) < julianday(s.current_period_start) + ${pricePromiseDays})`;
 
 /**
- * Abbonamento senza una copertura in corso: pagamento o rinnovo ancora da confermare. Una
- * copertura revocata dopo un rimborso non è un pagamento da confermare.
+ * Abbonamento senza una copertura in corso: pagamento o rinnovo ancora da confermare. Una copertura
+ * revocata dopo un rimborso non è un pagamento da confermare.
  */
 const pendingSql = `NOT EXISTS (SELECT 1 FROM workspace_entitlements e
   WHERE e.workspace_id = s.workspace_id AND julianday(e.starts_at) <= julianday(?1)
@@ -459,8 +458,8 @@ const renewableSubscriptionSql = `stripe_subscriptions s
         AND s.status IN (${sqlList(renewingSubscriptionStatuses)}) AND s.cancel_at_period_end = 0`;
 
 /**
- * Abbonamento rinnovabile dello spazio: periodo pagato in corso, o concessione che ne ha
- * rinviato il rinnovo, e nessuna disdetta.
+ * Abbonamento rinnovabile dello spazio: periodo pagato in corso, o concessione che ne ha rinviato
+ * il rinnovo, e nessuna disdetta.
  */
 async function renewingSubscription(db: D1Database, env: Env, userId: string, now: Date) {
   return db
@@ -473,9 +472,9 @@ async function renewingSubscription(db: D1Database, env: Env, userId: string, no
 }
 
 /**
- * Lo spazio ha un abbonamento che addebiterà ancora: un periodo pagato che si rinnova oppure
- * quello scelto durante la prova, con il primo addebito alla sua fine. Scollegare l'ultimo
- * negozio non lo ferma.
+ * Lo spazio ha un abbonamento che addebiterà ancora: un periodo pagato che si rinnova oppure quello
+ * scelto durante la prova, con il primo addebito alla sua fine. Scollegare l'ultimo negozio non lo
+ * ferma.
  */
 export async function subscriptionRenews(db: D1Database, env: Env, userId: string) {
   const row = await db
@@ -501,9 +500,9 @@ async function generationPrice(
   );
   const price = prices.data.find(
     (candidate) =>
-      candidate.metadata.price_generation === generation &&
-      candidate.metadata.offer === offer &&
-      !candidate.metadata.role,
+      candidate.metadata.price_generation === generation
+      && candidate.metadata.offer === offer
+      && !candidate.metadata.role,
   );
   if (!price) return null;
   // L'importo si confronta con il listino corrente; quello di una generazione precedente è
@@ -519,11 +518,11 @@ async function generationPrice(
 export type PeriodChange = "done" | "unchanged" | "not_allowed" | "unavailable";
 
 /**
- * Cambio di periodicità alla fine del periodo pagato, senza conguaglio (§6.2). Il prezzo
- * dell'altra periodicità della stessa generazione parte al rinnovo: fino ad allora Stripe
- * registra l'abbonamento come `trialing` e non addebita nulla, e i metadati conservano la
- * periodicità del periodo pagato. Lo stesso percorso annulla un cambio programmato. Dopo la
- * modifica l'abbonamento si rilegge, come per un evento del webhook.
+ * Cambio di periodicità alla fine del periodo pagato, senza conguaglio (§6.2). Il prezzo dell'altra
+ * periodicità della stessa generazione parte al rinnovo: fino ad allora Stripe registra
+ * l'abbonamento come `trialing` e non addebita nulla, e i metadati conservano la periodicità del
+ * periodo pagato. Lo stesso percorso annulla un cambio programmato. Dopo la modifica l'abbonamento
+ * si rilegge, come per un evento del webhook.
  */
 export async function changeSubscriptionPeriod(
   env: Env,
@@ -541,13 +540,13 @@ export async function changeSubscriptionPeriod(
     const owner = ownerSchema.safeParse(subscription.metadata);
     const item = subscription.items.data[0];
     if (
-      !owner.success ||
-      owner.data.workspace_id !== local.workspace_id ||
-      !item ||
-      !isRenewingSubscription(subscription.status) ||
-      subscription.cancel_at_period_end ||
-      subscription.cancel_at ||
-      subscription.schedule
+      !owner.success
+      || owner.data.workspace_id !== local.workspace_id
+      || !item
+      || !isRenewingSubscription(subscription.status)
+      || subscription.cancel_at_period_end
+      || subscription.cancel_at
+      || subscription.schedule
     )
       return "not_allowed";
     const offers = subscriptionOffers(subscription, owner.data.offer);
@@ -586,11 +585,10 @@ export async function changeSubscriptionPeriod(
 const notErasedSql = (alias: string) => `NOT ${erasedCustomerSql(`${alias}.customer_id`)}`;
 
 /**
- * Cliente Stripe dello spazio, espressione SQL: quello dell'abbonamento che può ancora
- * incassare, poi del lifetime in vigore, poi dell'abbonamento più recente e infine del lifetime
- * rimborsato. Il portale lo apre e un nuovo abbonamento lo riusa, così disdetta, metodo di
- * pagamento e documenti restano su un solo cliente. Un cliente con i dati finanziari cancellati
- * non si riapre.
+ * Cliente Stripe dello spazio, espressione SQL: quello dell'abbonamento che può ancora incassare,
+ * poi del lifetime in vigore, poi dell'abbonamento più recente e infine del lifetime rimborsato. Il
+ * portale lo apre e un nuovo abbonamento lo riusa, così disdetta, metodo di pagamento e documenti
+ * restano su un solo cliente. Un cliente con i dati finanziari cancellati non si riapre.
  */
 export function workspaceCustomerSql(workspace: string, environment: string) {
   const subscription = (open: boolean) => `(SELECT s.customer_id FROM stripe_subscriptions s
@@ -605,8 +603,8 @@ export function workspaceCustomerSql(workspace: string, environment: string) {
 }
 
 /**
- * Portale clienti di Stripe per disdetta, metodo di pagamento e documenti, con il ritorno al
- * piano. Null senza un cliente Stripe dello spazio nell'ambiente corrente.
+ * Portale clienti di Stripe per disdetta, metodo di pagamento e documenti, con il ritorno al piano.
+ * Null senza un cliente Stripe dello spazio nell'ambiente corrente.
  */
 export async function openBillingPortal(
   env: Env,
@@ -624,21 +622,17 @@ export async function openBillingPortal(
   if (!customer) return null;
   const stripe = await createStripeClient(key);
   const session = await stripeCall(() =>
-    stripe.billingPortal.sessions.create({
-      customer,
-      return_url: returnUrl,
-      locale: language,
-    }),
+    stripe.billingPortal.sessions.create({ customer, return_url: returnUrl, locale: language }),
   );
   return session.url;
 }
 
 /**
- * Cancellazione dell'account (§30): dopo la conferma nessun nuovo addebito. Gli abbonamenti
- * dello spazio che possono ancora incassare si chiudono subito su Stripe, senza conguaglio né
- * rimborso automatico, e le sessioni lifetime ancora aperte scadono. True quando nulla può più
- * addebitare; false senza chiave, con un errore di Stripe o con un pagamento lifetime ancora in
- * conferma, che non si può fermare: il job conserva i riferimenti minimi, ripete e avvisa.
+ * Cancellazione dell'account (§30): dopo la conferma nessun nuovo addebito. Gli abbonamenti dello
+ * spazio che possono ancora incassare si chiudono subito su Stripe, senza conguaglio né rimborso
+ * automatico, e le sessioni lifetime ancora aperte scadono. True quando nulla può più addebitare;
+ * false senza chiave, con un errore di Stripe o con un pagamento lifetime ancora in conferma, che
+ * non si può fermare: il job conserva i riferimenti minimi, ripete e avvisa.
  */
 export async function stopRenewals(
   env: Env,
@@ -680,10 +674,10 @@ export async function stopRenewals(
 export type SupportErasure = "done" | "already" | "not_deleted" | "not_found" | "unavailable";
 
 /**
- * Cancellazione tramite Link segnalata all'assistenza fuori dal webhook (§6.6): vale per un
- * cliente dello spazio indicato e soltanto se Stripe lo conferma ancora cancellato. Si registra
- * con autore e motivo, poi gli abbonamenti ancora aperti in locale si rileggono come dopo il
- * webhook. Ripetuta trova la cancellazione già registrata.
+ * Cancellazione tramite Link segnalata all'assistenza fuori dal webhook (§6.6): vale per un cliente
+ * dello spazio indicato e soltanto se Stripe lo conferma ancora cancellato. Si registra con autore
+ * e motivo, poi gli abbonamenti ancora aperti in locale si rileggono come dopo il webhook. Ripetuta
+ * trova la cancellazione già registrata.
  */
 export async function recordSupportErasure(
   env: Env,

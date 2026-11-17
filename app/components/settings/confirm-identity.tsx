@@ -16,16 +16,16 @@ import {
 import { Button } from "~/components/ui/button";
 import { FieldError, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
-import type { SignInMethods } from "../../domain/sign-in-methods.server";
-import type { ConfirmResult } from "../../security-actions.server";
+
 import { loadPasskeyClient } from "../../account/passkey";
 import { passkeyFailure, type PasskeyFailure } from "../../account/passkey-error";
+import type { SignInMethods } from "../../domain/sign-in-methods.server";
+import type { ConfirmResult } from "../../security-actions.server";
 
 /**
- * Conferma dell'identità sul posto, quando l'ultimo accesso è più vecchio di 24 ore: password
- * o passkey aprono una sessione nuova senza lasciare la pagina, poi la modifica prosegue. Chi
- * accede soltanto con Google o eBay esce e rientra. Per le passkey di un admin vale solo la
- * passkey.
+ * Conferma dell'identità sul posto, quando l'ultimo accesso è più vecchio di 24 ore: password o
+ * passkey aprono una sessione nuova senza lasciare la pagina, poi la modifica prosegue. Chi accede
+ * soltanto con Google o eBay esce e rientra. Per le passkey di un admin vale solo la passkey.
  */
 export function ConfirmIdentity({
   methods,

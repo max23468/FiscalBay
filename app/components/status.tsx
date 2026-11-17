@@ -1,7 +1,6 @@
+import { cn } from "cn";
 import { CircleAlert, CircleCheck, CircleMinus, Crown, Info, TriangleAlert } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-
-import { cn } from "cn";
 
 import { UnlockIcon } from "~/components/icons";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -60,8 +59,8 @@ export function StatusIcon({
 }
 
 /**
- * Superficie colorata per gli stati che chiedono un'azione; con `filled` anche
- * per gli altri, negli elenchi in cui lo stato va letto a colpo d'occhio.
+ * Superficie colorata per gli stati che chiedono un'azione; con `filled` anche per gli altri, negli
+ * elenchi in cui lo stato va letto a colpo d'occhio.
  */
 export function StatusBadge({
   tone,
@@ -114,8 +113,8 @@ export function StatusAlert({
 }
 
 /**
- * Funzione del piano Premium non inclusa nel piano attuale: la corona la
- * segnala una volta, accanto alla spiegazione, invece che su ogni riga.
+ * Funzione del piano Premium non inclusa nel piano attuale: la corona la segnala una volta, accanto
+ * alla spiegazione, invece che su ogni riga.
  */
 export function PremiumNote({ children }: { children: React.ReactNode }) {
   return (

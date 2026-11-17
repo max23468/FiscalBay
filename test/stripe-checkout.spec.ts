@@ -1,9 +1,12 @@
 import { env } from "cloudflare:workers";
 import Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import { supportEmail } from "../app/app-copy";
 import { annualPaidMonths, firstChargeAt, formatPrice, priceGeneration } from "../app/catalog";
 import { purchaseState, startCheckout } from "../app/domain/checkout.server";
+import { setSwitch } from "../app/domain/service-settings.server";
+import { localizedPath } from "../app/i18n";
 import {
   catalogMismatch,
   stripeAccountProfile,
@@ -19,10 +22,8 @@ import {
   stripeApiVersion,
   verifyStripeEvent,
 } from "../app/integrations/stripe.server";
-import { receiveWebhook } from "../app/webhooks.server";
-import { setSwitch } from "../app/domain/service-settings.server";
-import { localizedPath } from "../app/i18n";
 import { loader as settingsLoader } from "../app/routes/settings";
+import { receiveWebhook } from "../app/webhooks.server";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { insertEntitlement, now, resetDatabase } from "./fixtures/database-fixtures";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
@@ -123,9 +124,7 @@ describe("Stripe Managed Payments", () => {
       priceId: "price_test_lifetime",
     });
     expect(lifetime.mode).toBe("payment");
-    expect(lifetime.payment_intent_data).toEqual({
-      metadata: { ...metadata, offer: "lifetime" },
-    });
+    expect(lifetime.payment_intent_data).toEqual({ metadata: { ...metadata, offer: "lifetime" } });
     expect(lifetime).not.toHaveProperty("subscription_data");
   });
 
@@ -546,10 +545,7 @@ describe("Stripe Managed Payments", () => {
       line_items: [{ price: "price_test_annual", quantity: 1 }],
       managed_payments: { enabled: true },
       metadata,
-      subscription_data: {
-        metadata,
-        trial_end: Date.parse("2026-10-30T09:00:01.000Z") / 1000,
-      },
+      subscription_data: { metadata, trial_end: Date.parse("2026-10-30T09:00:01.000Z") / 1000 },
     });
     // Una sola riga: nessun incasso anticipato e nessun rinvio presentato come prova gratuita.
     expect(params.line_items).toHaveLength(1);

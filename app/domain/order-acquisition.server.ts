@@ -1,7 +1,22 @@
+import { logFailure } from "../errors";
+import { ebayConfiguration, type EbayAccess } from "../integrations/ebay/environment.server";
+import {
+  buildCreationDateFilter,
+  buildLastModifiedFilter,
+  fulfillmentObservation,
+  readFulfillmentOrder,
+  readFulfillmentOrders,
+  type FulfillmentPage,
+} from "../integrations/ebay/fulfillment.server";
+import { openToken, rejectCredentials } from "../integrations/ebay/seller-credentials.server";
+import { readTradingOrders, tradingReachDays } from "../integrations/ebay/trading.server";
+import { UpstreamError } from "../integrations/http.server";
+import { inSequence } from "../sequence";
+import { dayMilliseconds } from "../time";
+import type { EbayEnvironment } from "../view-models";
 import { servedSql } from "./admission.server";
-import { DuplicateLineIdentity } from "./order-import.server";
+import { checkBuyerNames } from "./buyer-check.server";
 import { historyStartSql, storeWorkspaceSql } from "./history-window.server";
-import { activeStore, dormantWorkspaceSql, writableStore } from "./store-state.server";
 import {
   limitKey,
   rateLimitWait,
@@ -21,57 +36,41 @@ import {
   recordFulfillmentOrders,
   stopsReads,
 } from "./order-acquisition-details.server";
-import { checkBuyerNames } from "./buyer-check.server";
+import { DuplicateLineIdentity } from "./order-import.server";
 import { serviceSetting } from "./service-settings.server";
 import { refreshStoreProfile } from "./store-profile.server";
-import { logFailure } from "../errors";
-import { dayMilliseconds } from "../time";
-import { UpstreamError } from "../integrations/http.server";
-import { ebayConfiguration, type EbayAccess } from "../integrations/ebay/environment.server";
-import type { EbayEnvironment } from "../view-models";
-import {
-  buildCreationDateFilter,
-  buildLastModifiedFilter,
-  fulfillmentObservation,
-  readFulfillmentOrder,
-  readFulfillmentOrders,
-  type FulfillmentPage,
-} from "../integrations/ebay/fulfillment.server";
-import { openToken, rejectCredentials } from "../integrations/ebay/seller-credentials.server";
-import { readTradingOrders, tradingReachDays } from "../integrations/ebay/trading.server";
-import { inSequence } from "../sequence";
+import { activeStore, dormantWorkspaceSql, writableStore } from "./store-state.server";
 import { workLockUntil } from "./work-timing";
 
 /**
  * Acquisizione degli ordini di un negozio, condivisa da collegamento e lavoro periodico:
  *
- * 1. recenti: ordini modificati dopo l'ultimo limite applicato, con una sovrapposizione;
- * 2. Trading: acquisti modificati, compresi quelli prima del checkout che Fulfillment non
- *    espone, con pagina e limite propri, con la cadenza del negozio salvo collegamento e richieste
- *    manuali; un suo errore, anche il limite della sua quota, non ferma i passi successivi;
- * 3. storico: ordini creati nella finestra dello spazio fissata al primo avvio, dal più recente,
+ * 1. Recenti: ordini modificati dopo l'ultimo limite applicato, con una sovrapposizione;
+ * 2. Trading: acquisti modificati, compresi quelli prima del checkout che Fulfillment non espone, con
+ *    pagina e limite propri, con la cadenza del negozio salvo collegamento e richieste manuali; un
+ *    suo errore, anche il limite della sua quota, non ferma i passi successivi;
+ * 3. Storico: ordini creati nella finestra dello spazio fissata al primo avvio, dal più recente,
  *    estesa al periodo più vecchio quando la finestra si allarga;
- * 4. dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta,
- *    in `order-acquisition-details.server.ts`.
+ * 4. Dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta, in
+ *    `order-acquisition-details.server.ts`.
  *
- * Dopo i recenti, al massimo una volta a settimana, si rileggono nome e logo del negozio eBay.
- * Dopo il dettaglio, gli ordini senza token eIAS letti da più di una settimana rileggono lo
- * username dell'acquirente, in `buyer-check.server.ts`.
+ * Dopo i recenti, al massimo una volta a settimana, si rileggono nome e logo del negozio eBay. Dopo
+ * il dettaglio, gli ordini senza token eIAS letti da più di una settimana rileggono lo username
+ * dell'acquirente, in `buyer-check.server.ts`.
  *
- * Recenti e storico si leggono per tratti di tempo, ciascuno con una sola pagina: una pagina
- * è una fotografia coerente, quindi un ordine che cambia o compare durante la lettura non
- * sposta la paginazione e non fa saltare ordini. Un tratto con più ordini di una pagina si
- * restringe in proporzione e si rilegge. Ogni tratto si applica prima di salvarne il limite:
- * un'interruzione riprende dal primo tratto non applicato. I recenti precedono sempre lo
- * storico, che non ne ritarda l'acquisizione; il dettaglio è un passo separato che un errore
- * non estende all'ordine.
+ * Recenti e storico si leggono per tratti di tempo, ciascuno con una sola pagina: una pagina è una
+ * fotografia coerente, quindi un ordine che cambia o compare durante la lettura non sposta la
+ * paginazione e non fa saltare ordini. Un tratto con più ordini di una pagina si restringe in
+ * proporzione e si rilegge. Ogni tratto si applica prima di salvarne il limite: un'interruzione
+ * riprende dal primo tratto non applicato. I recenti precedono sempre lo storico, che non ne
+ * ritarda l'acquisizione; il dettaglio è un passo separato che un errore non estende all'ordine.
  */
 
 /** Massimo di `getOrders` per pagina. */
 const pageSize = 200;
 /**
- * Tratto più stretto: oltre una pagina di ordini nello stesso secondo si seguono le pagine di
- * eBay, senza ripartire se il totale cambia.
+ * Tratto più stretto: oltre una pagina di ordini nello stesso secondo si seguono le pagine di eBay,
+ * senza ripartire se il totale cambia.
  */
 const minimumSliceMilliseconds = 1_000;
 const overlapMilliseconds = 15 * 60_000;
@@ -162,7 +161,7 @@ async function runPass(ctx: Context, pass: Pass): Promise<boolean> {
       const sample = page.orders
         .map((order) => Math.abs(Date.parse(String(pass.key(order))) - near))
         .filter((distance) => Number.isFinite(distance))
-        .sort((a, b) => a - b);
+        .toSorted((a, b) => a - b);
       const bound = sample[Math.floor((sample.length * capacity * 0.8) / page.total)];
       width = Math.max(
         minimumSliceMilliseconds,
@@ -323,7 +322,7 @@ function recentPass(ctx: Context, state: SyncRow): Pass {
   const resumed = state.recent_end !== null;
   const end = resumed ? state.recent_end! : ctx.at;
   // Un orologio indietro rispetto al limite già applicato non produce un intervallo vuoto.
-  const [checkpoint] = [state.cursor, end].sort();
+  const [checkpoint] = [state.cursor, end].toSorted();
   const from = resumed ? checkpoint! : instant(Date.parse(checkpoint!) - overlapMilliseconds);
   return {
     from,
@@ -382,15 +381,15 @@ async function recordPoll(ctx: Context, ok: boolean, served: boolean) {
 }
 
 /**
- * Esegue l'acquisizione di un negozio entro il budget. Le esecuzioni dello stesso negozio non
- * si sovrappongono: chi trova il negozio occupato rinuncia. Al primo avvio fissa il limite dei
- * recenti all'istante corrente e lo storico alla finestra dello spazio: trenta giorni nel Free,
- * un anno o l'estensione concessa con una copertura. Lo storico attende i recenti; il dettaglio
- * usa anche le chiamate rimaste quando le pagine finiscono.
+ * Esegue l'acquisizione di un negozio entro il budget. Le esecuzioni dello stesso negozio non si
+ * sovrappongono: chi trova il negozio occupato rinuncia. Al primo avvio fissa il limite dei recenti
+ * all'istante corrente e lo storico alla finestra dello spazio: trenta giorni nel Free, un anno o
+ * l'estensione concessa con una copertura. Lo storico attende i recenti; il dettaglio usa anche le
+ * chiamate rimaste quando le pagine finiscono.
  *
- * Mentre eBay chiede di attendere non parte nessuna chiamata, e un nuovo limite vale per tutti
- * i negozi della stessa origine API. Una lettura dei recenti (tutto tranne un evento) segna il
- * turno del negozio e resta fra le ultime letture, anche quando fallisce.
+ * Mentre eBay chiede di attendere non parte nessuna chiamata, e un nuovo limite vale per tutti i
+ * negozi della stessa origine API. Una lettura dei recenti (tutto tranne un evento) segna il turno
+ * del negozio e resta fra le ultime letture, anche quando fallisce.
  */
 export async function acquireOrders(input: {
   db: D1Database;
@@ -485,8 +484,8 @@ export async function acquireOrders(input: {
     // riprendere senza fermare storico e dettaglio. Le credenziali fermano tutto; la quota
     // Trading esaurita sospende soltanto Trading.
     const trading =
-      recent &&
-      (await runTradingPass(ctx, state).catch((error: unknown) => tradingFailure(ctx, error)));
+      recent
+      && (await runTradingPass(ctx, state).catch((error: unknown) => tradingFailure(ctx, error)));
     const history =
       recent && (!!state.history_done_at || (await runPass(ctx, historyPass(ctx, state))));
     const details = !(await callsOff(ctx)) && (await readDetails(ctx));
@@ -510,8 +509,8 @@ export async function acquireOrders(input: {
 }
 
 /**
- * Lettura chiesta per il negozio, registrata soltanto con il consenso `grantedAt` ancora valido
- * e senza pausa; una richiesta già in attesa conserva il proprio istante.
+ * Lettura chiesta per il negozio, registrata soltanto con il consenso `grantedAt` ancora valido e
+ * senza pausa; una richiesta già in attesa conserva il proprio istante.
  */
 export function requestStoreRead(
   db: D1Database,
@@ -538,9 +537,9 @@ export type ActiveStore = {
 };
 
 /**
- * Accesso seller di un negozio attivo, con il token di accesso decifrato. Un token che non si
- * apre più chiude il consenso, come un rifiuto di eBay: il negozio va ricollegato e il lavoro
- * periodico non lo ritenta a ogni turno.
+ * Accesso seller di un negozio attivo, con il token di accesso decifrato. Un token che non si apre
+ * più chiude il consenso, come un rifiuto di eBay: il negozio va ricollegato e il lavoro periodico
+ * non lo ritenta a ogni turno.
  */
 export async function storeAccess(
   env: Env,
@@ -562,11 +561,11 @@ export async function storeAccess(
 }
 
 /**
- * Rilegge consenso, pausa, ammissione e token prima di eseguire un evento già accettato.
- * L'evento non dipende dal piano e non aspetta la cadenza della lettura periodica, ma uno spazio
- * in lista d'attesa non legge eBay dopo la prima lettura: l'evento si chiude senza chiamate.
- * Con le chiamate eBay spente dalla console l'evento diventa una richiesta di lettura del
- * negozio, servita alla riaccensione.
+ * Rilegge consenso, pausa, ammissione e token prima di eseguire un evento già accettato. L'evento
+ * non dipende dal piano e non aspetta la cadenza della lettura periodica, ma uno spazio in lista
+ * d'attesa non legge eBay dopo la prima lettura: l'evento si chiude senza chiamate. Con le chiamate
+ * eBay spente dalla console l'evento diventa una richiesta di lettura del negozio, servita alla
+ * riaccensione.
  */
 export async function consumeOrderConfirmation(
   env: Env,

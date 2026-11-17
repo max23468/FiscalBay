@@ -1,7 +1,13 @@
-import { passwordSession } from "./fixtures/account-fixtures";
 import { env } from "cloudflare:workers";
-
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  passwordSession,
+  emailLink,
+  emailSender,
+  mailEnv,
+  sessionCookie,
+} from "./fixtures/account-fixtures";
 
 const background = vi.hoisted(() => {
   vi.resetModules();
@@ -19,33 +25,18 @@ async function drainBackground() {
 
 afterEach(drainBackground);
 
-import { handleAuthRequest } from "../app/auth-route.server";
-
-import { createAuth, gmailDomain } from "../app/auth.server";
-
-import { turnstileField } from "../app/turnstile";
-
-import { siteverify, testingKeyResult } from "./fixtures/turnstile-fixtures";
-
-import { completeRegistration } from "../app/domain/registration.server";
-
-import { action as securityRouteAction } from "../app/routes/settings";
-
-import { action as signInAction } from "../app/routes/sign-in";
-
-import { pendingEmailChange } from "../app/domain/email-change.server";
-
-import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-
 import { accountEmailBody } from "../app/account-email.server";
-
-import { emailVerificationSeconds } from "../app/domain/email-change.server";
-
 import { supportEmail } from "../app/app-copy";
-
-import { emailLink, emailSender, mailEnv, sessionCookie } from "./fixtures/account-fixtures";
-
+import { handleAuthRequest } from "../app/auth-route.server";
+import { createAuth, gmailDomain } from "../app/auth.server";
+import { pendingEmailChange, emailVerificationSeconds } from "../app/domain/email-change.server";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
+import { completeRegistration } from "../app/domain/registration.server";
+import { action as securityRouteAction } from "../app/routes/settings";
+import { action as signInAction } from "../app/routes/sign-in";
+import { turnstileField } from "../app/turnstile";
 import { routeResponse } from "./fixtures/route-fixtures";
+import { siteverify, testingKeyResult } from "./fixtures/turnstile-fixtures";
 
 describe("Collegamento e modifica dell'identità", () => {
   const origin = "http://localhost:5173";

@@ -2,14 +2,13 @@ import type { AreaPath } from "./area-sections";
 import { dayMilliseconds } from "./time";
 
 /**
- * Dati che le schermate dell'app ricevono dal server. Un Codice Fiscale da
- * sbloccare non arriva mai al browser: la vista conosce soltanto quanti
- * identificativi attendono lo sblocco.
+ * Dati che le schermate dell'app ricevono dal server. Un Codice Fiscale da sbloccare non arriva mai
+ * al browser: la vista conosce soltanto quanti identificativi attendono lo sblocco.
  */
 
 /**
- * Semantica degli stati: il colore accompagna sempre icona e testo.
- * `neutral` indica un dato assente per natura, da non confondere con `danger`.
+ * Semantica degli stati: il colore accompagna sempre icona e testo. `neutral` indica un dato
+ * assente per natura, da non confondere con `danger`.
  */
 export type StatusTone =
   | "success"
@@ -65,28 +64,28 @@ export interface TaxIdentifierView {
   typeLabel?: string;
   value: string;
   quality: TaxQuality;
-  /** eBay ha modificato il valore dopo la prima lettura. */
+  /** EBay ha modificato il valore dopo la prima lettura. */
   updated?: boolean;
 }
 
 /**
- * Condizione dell'ultima lettura quando resta mostrato un valore letto prima:
- * lettura non riuscita, in corso, senza il dato o con il dato nascosto da eBay.
+ * Condizione dell'ultima lettura quando resta mostrato un valore letto prima: lettura non riuscita,
+ * in corso, senza il dato o con il dato nascosto da eBay.
  */
 export type FiscalNotice = "lastKnown" | "checking" | "notReturned" | "masked";
 
 export type FiscalView =
   | { state: "available"; identifiers: TaxIdentifierView[]; notice?: FiscalNotice }
   /**
-   * Prima dello sblocco arriva solo il nome del dato: Codice Fiscale, oppure
-   * Partita IVA quando l'ordine riporta soltanto quella.
+   * Prima dello sblocco arriva solo il nome del dato: Codice Fiscale, oppure Partita IVA quando
+   * l'ordine riporta soltanto quella.
    */
   | {
       state: "locked";
       shownAs: "CF" | "PIVA";
       /**
-       * Sblocco sospeso mentre è in corso una nuova verifica eBay, oppure finché l'acquisto non
-       * è pagato (D174).
+       * Sblocco sospeso mentre è in corso una nuova verifica eBay, oppure finché l'acquisto non è
+       * pagato (D174).
        */
       hold?: "checking" | "unpaid";
     }
@@ -102,8 +101,8 @@ export type FiscalView =
 export type FiscalState = FiscalView["state"];
 
 /**
- * Situazione fiscale dei filtri: lo stato, con l'acquirente dalla fatturazione estera distinto
- * dal dato non riportato da eBay.
+ * Situazione fiscale dei filtri: lo stato, con l'acquirente dalla fatturazione estera distinto dal
+ * dato non riportato da eBay.
  */
 export type FiscalSituation = FiscalState | "foreign";
 
@@ -121,9 +120,8 @@ export function fiscalSituation(fiscal: FiscalView): FiscalSituation {
 }
 
 /**
- * Vocabolario normalizzato unico per area reale, anteprima e filtri. Uno stato eBay non
- * previsto non ha una forma normalizzata: si mostra con il codice originale e resta fuori dai
- * filtri.
+ * Vocabolario normalizzato unico per area reale, anteprima e filtri. Uno stato eBay non previsto
+ * non ha una forma normalizzata: si mostra con il codice originale e resta fuori dai filtri.
  */
 export type PaymentStatus = "paid" | "unpaid" | "partially_refunded" | "refunded";
 
@@ -135,8 +133,8 @@ export const paymentStatuses: PaymentStatus[] = [
 ];
 
 /**
- * Periodi del filtro Ordini, dal più breve: giorni, oppure mesi di calendario con il suffisso
- * `m`. Oltre i 30 giorni del Free sono soltanto Premium.
+ * Periodi del filtro Ordini, dal più breve: giorni, oppure mesi di calendario con il suffisso `m`.
+ * Oltre i 30 giorni del Free sono soltanto Premium.
  */
 export const orderPeriods = ["7", "30", "90", "6m", "12m"] as const;
 export type OrderPeriod = (typeof orderPeriods)[number];
@@ -291,8 +289,8 @@ export interface StoreView {
   sandbox?: boolean;
   connection: ConnectionState;
   /**
-   * Pausa manuale, per piano, per inattività del Free o dell'assistenza: soltanto quella per
-   * piano non lascia consultare i dati, soltanto l'assistenza toglie la propria.
+   * Pausa manuale, per piano, per inattività del Free o dell'assistenza: soltanto quella per piano
+   * non lascia consultare i dati, soltanto l'assistenza toglie la propria.
    */
   pauseReason?: "manual" | "plan" | "inactivity" | "admin";
   issue?: "reconnect" | "permissions" | "unverifiable";
@@ -383,14 +381,14 @@ export interface AccountView {
   trial?: { endsAt: string };
   /**
    * Sblocchi del ciclo Free in corso; senza ciclo avviato nessuno sblocco è disponibile.
-   * `nextLimit` compare quando il ciclo seguente avrà una quota diversa, per una promozione
-   * che inizia o finisce.
+   * `nextLimit` compare quando il ciclo seguente avrà una quota diversa, per una promozione che
+   * inizia o finisce.
    */
   quota?: { used: number; limit: number; cycleEndsAt: string | null; nextLimit?: number };
   /**
-   * `endsAt` compare dopo la disdetta: la copertura pagata finisce senza rinnovo. `nextPeriod`
-   * è la periodicità di un cambio programmato, che vale dal rinnovo. `granted` segna un
-   * lifetime in omaggio, senza acquisto né documenti su Stripe.
+   * `endsAt` compare dopo la disdetta: la copertura pagata finisce senza rinnovo. `nextPeriod` è la
+   * periodicità di un cambio programmato, che vale dal rinnovo. `granted` segna un lifetime in
+   * omaggio, senza acquisto né documenti su Stripe.
    */
   premium?: {
     period: "monthly" | "annual" | "lifetime";
@@ -402,11 +400,11 @@ export interface AccountView {
   /** Premium concesso senza abbonamento: finisce all'istante `endsAt`. */
   grant?: { endsAt: string };
   /**
-   * Pagamento senza copertura in corso: in attesa della conferma di Stripe, anche per il
-   * lifetime (`lifetime`), abbonamento scelto durante la prova con il primo addebito alla sua
-   * fine (`chargeAt`), che dopo la disdetta (`cancelled`) non arriva più, rinnovo non
-   * riuscito con il prezzo protetto fino a `protectedUntil`, oppure pagamento rimborsato del
-   * lifetime o del periodo in corso, con il rinnovo se l'abbonamento continua.
+   * Pagamento senza copertura in corso: in attesa della conferma di Stripe, anche per il lifetime
+   * (`lifetime`), abbonamento scelto durante la prova con il primo addebito alla sua fine
+   * (`chargeAt`), che dopo la disdetta (`cancelled`) non arriva più, rinnovo non riuscito con il
+   * prezzo protetto fino a `protectedUntil`, oppure pagamento rimborsato del lifetime o del periodo
+   * in corso, con il rinnovo se l'abbonamento continua.
    */
   payment?:
     | { state: "pending"; lifetime?: true }
@@ -440,8 +438,8 @@ export function marketplaceLabel(id: string) {
 const trialEndingMilliseconds = 3 * dayMilliseconds;
 
 /**
- * Giorni interi di prova rimasti, come li conta il Checkout di Stripe: zero nell'ultimo giorno,
- * che i testi indicano come «meno di un giorno».
+ * Giorni interi di prova rimasti, come li conta il Checkout di Stripe: zero nell'ultimo giorno, che
+ * i testi indicano come «meno di un giorno».
  */
 export function trialDaysLeft(endsAt: string, now: string) {
   return Math.max(Math.floor((Date.parse(endsAt) - Date.parse(now)) / dayMilliseconds), 0);

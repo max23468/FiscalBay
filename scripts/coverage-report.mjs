@@ -1,21 +1,21 @@
 import { appendFileSync, readFileSync, readdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export function coverageSummary(summary, expectedFiles = []) {
   const metrics = ["lines", "branches", "functions", "statements"];
   for (const metric of metrics) {
     const value = summary.total?.[metric];
     if (
-      !value ||
-      !Number.isFinite(value.total) ||
-      value.total <= 0 ||
-      !Number.isFinite(value.covered) ||
-      value.covered < 0 ||
-      value.covered > value.total ||
-      !Number.isFinite(value.pct) ||
-      value.pct < 0 ||
-      value.pct > 100
+      !value
+      || !Number.isFinite(value.total)
+      || value.total <= 0
+      || !Number.isFinite(value.covered)
+      || value.covered < 0
+      || value.covered > value.total
+      || !Number.isFinite(value.pct)
+      || value.pct < 0
+      || value.pct > 100
     )
       throw new Error(`Copertura incompleta: ${metric}.`);
   }

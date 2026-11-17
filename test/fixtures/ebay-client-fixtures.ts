@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
 import { vi } from "vitest";
-import { UpstreamError } from "../../app/integrations/http.server";
+
 import type { CallBudget } from "../../app/domain/order-acquisition-context.server";
 import { ebayConfiguration } from "../../app/integrations/ebay/environment.server";
+import { UpstreamError } from "../../app/integrations/http.server";
 
 export const configuration = ebayConfiguration(env, "production");
 export const access = (fetcher: typeof fetch) => ({
@@ -22,8 +23,8 @@ export const ack = (inner: string) =>
   `<?xml version="1.0" encoding="UTF-8"?><GetItemResponse xmlns="urn:ebay:apis:eBLBaseComponents">${inner}</GetItemResponse>`;
 export const tradingError = (code: string, classification = "RequestError", severity = "Error") =>
   ack(
-    `<Ack>Failure</Ack><Errors><ShortMessage>NON-ESPORRE</ShortMessage><ErrorCode>${code}</ErrorCode>` +
-      `<SeverityCode>${severity}</SeverityCode><ErrorClassification>${classification}</ErrorClassification></Errors>`,
+    `<Ack>Failure</Ack><Errors><ShortMessage>NON-ESPORRE</ShortMessage><ErrorCode>${code}</ErrorCode>`
+      + `<SeverityCode>${severity}</SeverityCode><ErrorClassification>${classification}</ErrorClassification></Errors>`,
   );
 
 // Ordine sintetico: acquirente registrato, destinatario diverso con `c/o`, telefono

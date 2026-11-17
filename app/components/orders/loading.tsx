@@ -1,8 +1,8 @@
 import { ClipboardList } from "lucide-react";
 
+import { useCopy } from "~/components/copy-context";
 import { PageTitle } from "~/components/icon-tile";
 import { Skeleton } from "~/components/ui/skeleton";
-import { useCopy } from "~/components/copy-context";
 
 /** Schede segnaposto con il layout dell'elenco: filtri e due colonne di ordini. */
 function LoadingGrid() {
@@ -88,8 +88,8 @@ function LoadingHeader() {
 }
 
 /**
- * Pagina Ordini durante il caricamento da un'altra sezione: intestazione e schede segnaposto,
- * senza dati né stati inventati. Modulo separato, così la shell non carica l'intera pagina.
+ * Pagina Ordini durante il caricamento da un'altra sezione: intestazione e schede segnaposto, senza
+ * dati né stati inventati. Modulo separato, così la shell non carica l'intera pagina.
  */
 export function OrdersLoading() {
   return (

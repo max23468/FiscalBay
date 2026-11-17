@@ -3,10 +3,11 @@ import { useSearchParams } from "react-router";
 
 import { StandalonePage } from "~/components/standalone-page";
 import { buttonLink } from "~/components/ui/button-variants";
-import type { Route } from "./+types/auth-error";
+
 import { appCopy, pageTitle, supportEmail } from "../app-copy";
 import { accessPath, securityReturnPath } from "../app-links";
 import { languageFromPath, localizedPath } from "../i18n";
+import type { Route } from "./+types/auth-error";
 
 type AuthErrorCopy = (typeof appCopy)["it"]["authError"];
 

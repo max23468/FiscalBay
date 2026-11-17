@@ -3,11 +3,12 @@ import { cn } from "cn";
 import { FaqList } from "~/components/faq-list";
 import { siteColumn } from "~/components/site-column";
 import { PageIntro, SiteLayout } from "~/components/site-layout";
-import { sitePages } from "../copy/site-pages.server";
+
 import { faqPath, supportPath } from "../app-links";
+import { sitePages } from "../copy/site-pages.server";
 import { localizedPath } from "../i18n";
-import { faqItems, publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
+import { faqItems, publicPage, publicPageHeaders } from "../site.server";
 import type { Route } from "./+types/faq";
 
 export async function loader({ request }: Route.LoaderArgs) {

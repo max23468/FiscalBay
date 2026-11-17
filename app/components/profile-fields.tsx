@@ -1,10 +1,11 @@
 import { useState } from "react";
 
+import { useCopy } from "~/components/copy-context";
 import type { FieldErrors } from "~/components/form-validation";
 import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
-import { useCopy } from "~/components/copy-context";
+
 import { maxCompanyName, maxPersonName } from "../limits";
 
 /** Campi del profilo con i limiti che il server applica. */

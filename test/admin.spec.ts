@@ -1,23 +1,12 @@
 import { env } from "cloudflare:workers";
-
 import { describe, expect, it, vi } from "vitest";
 
 import { localInstant } from "../app/admin-console.server";
-
 import { listAudit } from "../app/domain/admin-audit.server";
-
 import { listAnomalies } from "../app/domain/admin-operations.server";
-
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-
 import { action as adminAction, loader as adminLoader } from "../app/routes/admin";
-
 import { verifiedSession } from "./fixtures/account-fixtures";
-
-import { insertStore, insertWorkspace, now } from "./fixtures/database-fixtures";
-
-import { callRoute, routeData } from "./fixtures/route-fixtures";
-
 import {
   at,
   hour,
@@ -28,6 +17,8 @@ import {
   act,
   setupScenarios,
 } from "./fixtures/admin-scenarios";
+import { insertStore, insertWorkspace, now } from "./fixtures/database-fixtures";
+import { callRoute, routeData } from "./fixtures/route-fixtures";
 
 setupScenarios();
 
@@ -97,9 +88,7 @@ describe("accesso alla console", () => {
       ).rejects.toMatchObject({ status: 403 });
     expect(
       await act(cookie, { intent: "grant-premium", spazio: "w-a", giorni: "3" }),
-    ).toMatchObject({
-      status: 400,
-    });
+    ).toMatchObject({ status: 400 });
     expect(await act(cookie, { intent: "comando-libero" })).toMatchObject({ status: 400 });
     expect(
       await act(cookie, {
@@ -222,8 +211,8 @@ describe("accesso alla console", () => {
       bind: () => ({ run: () => Promise.reject(new Error("database_unavailable")) }),
     } as unknown as D1PreparedStatement;
     vi.spyOn(env.DB, "prepare").mockImplementation((query) =>
-      (query.includes("INSERT INTO admin_audit") && failures.insert-- > 0) ||
-      (query.includes("UPDATE admin_audit") && failures.update-- > 0)
+      (query.includes("INSERT INTO admin_audit") && failures.insert-- > 0)
+      || (query.includes("UPDATE admin_audit") && failures.update-- > 0)
         ? unavailable
         : original(query),
     );

@@ -2,8 +2,8 @@ import { dayMilliseconds } from "../time";
 
 /**
  * Limite del modulo di assistenza per account: D1 conserva soltanto l'istante di ogni richiesta
- * inviata, che la manutenzione elimina dopo 24 ore. Il modulo resta senza testi
- * dell'interfaccia, così la manutenzione lo carica senza il modulo email.
+ * inviata, che la manutenzione elimina dopo 24 ore. Il modulo resta senza testi dell'interfaccia,
+ * così la manutenzione lo carica senza il modulo email.
  */
 
 /** Richieste per account nelle ultime 24 ore. */

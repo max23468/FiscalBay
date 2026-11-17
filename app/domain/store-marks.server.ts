@@ -5,13 +5,13 @@ import { entitlementInForce, freeCycleStatement } from "./grants.server";
 
 /**
  * Segni minimi dei negozi che lasciano uno spazio, per cancellazione dell'account o per
- * trasferimento assistito: impronta dell'identità eBay, prova già usata e ciclo Free in corso.
- * Il collegamento successivo dello stesso negozio li rilegge e li applica al nuovo spazio.
+ * trasferimento assistito: impronta dell'identità eBay, prova già usata e ciclo Free in corso. Il
+ * collegamento successivo dello stesso negozio li rilegge e li applica al nuovo spazio.
  */
 
 /**
- * Il segno della prova usata dura due anni, scelta dell'owner (D220); quello
- * del ciclo Free soltanto fino alla fine del ciclo.
+ * Il segno della prova usata dura due anni, scelta dell'owner (D220); quello del ciclo Free
+ * soltanto fino alla fine del ciclo.
  */
 export const trialMarkDays = 730;
 
@@ -30,8 +30,8 @@ export const storeIdentity = (environment: EbayEnvironment, userId: string) =>
   environment === "production" ? userId : JSON.stringify([environment, userId]);
 
 /**
- * Impronta dell'identità eBay di un negozio, come la conserva `ebay_stores.ebay_user_id`: HMAC
- * con una chiave del server, quindi chi conosce soltanto l'identificativo eBay non la ricalcola.
+ * Impronta dell'identità eBay di un negozio, come la conserva `ebay_stores.ebay_user_id`: HMAC con
+ * una chiave del server, quindi chi conosce soltanto l'identificativo eBay non la ricalcola.
  */
 export async function storeIdentityHash(secret: string, ebayUserId: string): Promise<string> {
   return hex(
@@ -45,11 +45,11 @@ export function trialMarkExpiry(now: Date): string {
 }
 
 /**
- * Segno minimo di un negozio con i dati del suo spazio: prova già usata e ciclo Free in corso
- * con almeno uno sblocco. Senza nessuno dei due il negozio non lascia nulla; ripetuto, conserva
- * il valore più ampio. Argomenti: espressioni SQL dell'impronta, del negozio, dell'istante e
- * della fine del segno della prova, più una condizione che deve valere per scriverlo. Lo
- * scrivono la cancellazione dell'account e il trasferimento assistito del negozio.
+ * Segno minimo di un negozio con i dati del suo spazio: prova già usata e ciclo Free in corso con
+ * almeno uno sblocco. Senza nessuno dei due il negozio non lascia nulla; ripetuto, conserva il
+ * valore più ampio. Argomenti: espressioni SQL dell'impronta, del negozio, dell'istante e della
+ * fine del segno della prova, più una condizione che deve valere per scriverlo. Lo scrivono la
+ * cancellazione dell'account e il trasferimento assistito del negozio.
  */
 export function storeMarkSql(
   input: { hash: string; store: string; at: string; trialExpires: string },
@@ -146,13 +146,13 @@ export function markAnchorStatement(
 }
 
 /**
- * Dopo il collegamento riuscito, la stessa regola per un segno lasciato da una cancellazione o
- * da un trasferimento. Con la prova già usata lo spazio non può più averla e una prova in corso
- * termina subito: lo spazio torna al Free. Gli sblocchi del ciclo del segno si aggiungono al
- * ciclo Free in corso dello spazio, fino alla sua quota; uno spazio che ha adottato l'ancoraggio
- * del segno riprende proprio quel ciclo, con la sua quota. Gli sblocchi già arrivati dallo
- * stesso ciclo di partenza, con un altro negozio o un collegamento precedente, non si sommano di
- * nuovo: ripetuto, il collegamento non cambia nulla.
+ * Dopo il collegamento riuscito, la stessa regola per un segno lasciato da una cancellazione o da
+ * un trasferimento. Con la prova già usata lo spazio non può più averla e una prova in corso
+ * termina subito: lo spazio torna al Free. Gli sblocchi del ciclo del segno si aggiungono al ciclo
+ * Free in corso dello spazio, fino alla sua quota; uno spazio che ha adottato l'ancoraggio del
+ * segno riprende proprio quel ciclo, con la sua quota. Gli sblocchi già arrivati dallo stesso ciclo
+ * di partenza, con un altro negozio o un collegamento precedente, non si sommano di nuovo:
+ * ripetuto, il collegamento non cambia nulla.
  */
 export async function applyStoreMark(
   db: D1Database,

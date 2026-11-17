@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+
 import { noPageOverflow, open } from "./components";
 import { expect, localOnly, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
@@ -250,8 +251,8 @@ test.describe("impostazioni e profilo", () => {
         // Lo switch resta disattivato finché il salvataggio non finisce: il nuovo clic aspetta.
         const saved = page.waitForResponse(
           (response) =>
-            response.request().method() === "POST" &&
-            new URLSearchParams(response.request().postData() ?? "").get("name") === "telegram",
+            response.request().method() === "POST"
+            && new URLSearchParams(response.request().postData() ?? "").get("name") === "telegram",
         );
         await enabled.uncheck();
         await saved;
@@ -310,9 +311,7 @@ test.describe("impostazioni e profilo", () => {
           .click();
         // Senza l'indirizzo dell'account l'invio si ferma con il messaggio accanto al campo.
         await confirm
-          .getByRole("button", {
-            name: t("Invia il link di conferma", "Send confirmation link"),
-          })
+          .getByRole("button", { name: t("Invia il link di conferma", "Send confirmation link") })
           .click();
         await expect(
           confirm.getByText(
@@ -398,9 +397,9 @@ test.describe("ordini", () => {
               const panel = e.closest('[role="dialog"]')!.getBoundingClientRect();
               const bounds = e.getBoundingClientRect();
               return (
-                e.scrollWidth <= e.clientWidth &&
-                bounds.left >= panel.left &&
-                bounds.right <= panel.right
+                e.scrollWidth <= e.clientWidth
+                && bounds.left >= panel.left
+                && bounds.right <= panel.right
               );
             }),
           ).toBe(true);

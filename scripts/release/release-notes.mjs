@@ -35,22 +35,22 @@ export function releaseNotes(changelog, version) {
 
 export function assertBrowserEvidence(browser, sha) {
   if (
-    browser.status !== "passed" ||
-    browser.partial ||
-    !(browser.counts?.passed > 0) ||
-    browser.sha !== sha ||
-    browser.dirty !== false ||
-    browser.baseURL !== "https://fiscalbay.it" ||
-    browser.environment !== "production"
+    browser.status !== "passed"
+    || browser.partial
+    || !(browser.counts?.passed > 0)
+    || browser.sha !== sha
+    || browser.dirty !== false
+    || browser.baseURL !== "https://fiscalbay.it"
+    || browser.environment !== "production"
   )
     throw new Error("Collaudo incompleto o di un altro candidato/ambiente.");
 }
 
 /**
- * Passo del tag nella ripresa: «done» se tag e release pubblicata esistono già sul commit,
- * «create» se manca la release, anche con il tag già creato da un tentativo interrotto. Un tag
- * su un altro commit non si riscrive: se quel commit precede il candidato e la release è
- * pubblicata, il deploy porta soltanto modifiche interne e resta senza release («internal»).
+ * Passo del tag nella ripresa: «done» se tag e release pubblicata esistono già sul commit, «create»
+ * se manca la release, anche con il tag già creato da un tentativo interrotto. Un tag su un altro
+ * commit non si riscrive: se quel commit precede il candidato e la release è pubblicata, il deploy
+ * porta soltanto modifiche interne e resta senza release («internal»).
  */
 export function releaseStep(tagTarget, releases, tag, sha, earlier = false) {
   if (tagTarget === undefined) return "create";

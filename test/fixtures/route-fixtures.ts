@@ -1,12 +1,12 @@
+import { localizedPath } from "../../app/i18n";
 import { loader as loadArea } from "../../app/routes/account";
 import { withTurnstileToken } from "./turnstile-fixtures";
-import { localizedPath } from "../../app/i18n";
 
 export const testOrigin = "http://localhost:5173";
 
 /**
- * Indirizzo servito di una pagina: `base` è il prefisso di lingua, vuoto o `/en`, `path` il
- * seguito con i segmenti italiani, tradotti come nell'app.
+ * Indirizzo servito di una pagina: `base` è il prefisso di lingua, vuoto o `/en`, `path` il seguito
+ * con i segmenti italiani, tradotti come nell'app.
  */
 export const pagePath = (base: string, path: string) =>
   localizedPath(base.startsWith("/en") ? "en" : "it", path);
@@ -35,8 +35,8 @@ export function routeRequest(path: string, options: RouteOptions = {}) {
     headers: { ...(origin ? { origin } : {}), ...common },
     // I moduli protetti da Turnstile ricevono il token di prova, se la prova non ne indica uno.
     body:
-      body ??
-      (fields instanceof FormData ? withTurnstileToken(fields) : withTurnstileToken(fields!)),
+      body
+      ?? (fields instanceof FormData ? withTurnstileToken(fields) : withTurnstileToken(fields!)),
     signal,
   });
 }
@@ -45,9 +45,9 @@ type Unwrapped<T> = T extends { type: string; data: infer D; init: ResponseInit 
 
 function isWrapped(value: unknown): value is { data: unknown; init: ResponseInit | null } {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { type?: unknown }).type === "DataWithResponseInit"
+    typeof value === "object"
+    && value !== null
+    && (value as { type?: unknown }).type === "DataWithResponseInit"
   );
 }
 

@@ -24,8 +24,8 @@ export interface AreaActionContext {
 }
 
 /**
- * Azione dell'area scelta da `intent`, con l'avviso di un errore imprevisto. Un'azione costosa
- * o che invia un'email dichiara il filtro per IP che la precede.
+ * Azione dell'area scelta da `intent`, con l'avviso di un errore imprevisto. Un'azione costosa o
+ * che invia un'email dichiara il filtro per IP che la precede.
  */
 export interface AreaAction {
   run: (
@@ -36,8 +36,8 @@ export interface AreaAction {
 }
 
 /**
- * Rifiuto 429 del filtro per IP di un'azione, prima della sessione e di ogni dato: l'avviso
- * segue la lingua dell'indirizzo. Null se la richiesta è ammessa.
+ * Rifiuto 429 del filtro per IP di un'azione, prima della sessione e di ogni dato: l'avviso segue
+ * la lingua dell'indirizzo. Null se la richiesta è ammessa.
  */
 export async function limitedAction(request: Request, limit: RequestLimit, operation: string) {
   const wait = await requestLimitWait(env, request, limit, operation);
@@ -58,8 +58,8 @@ export function areaAction(actions: Record<string, AreaAction>, intent: string) 
 }
 
 /**
- * Un errore imprevisto diventa l'avviso dell'azione, mai la pagina d'errore; una risposta
- * lanciata, come un rifiuto dell'ambiente richiesto, passa invariata.
+ * Un errore imprevisto diventa l'avviso dell'azione, mai la pagina d'errore; una risposta lanciata,
+ * come un rifiuto dell'ambiente richiesto, passa invariata.
  */
 export async function runAreaAction(action: AreaAction, context: AreaActionContext) {
   try {
@@ -83,8 +83,8 @@ export const trialAction: AreaAction = {
 };
 
 /**
- * Una lettura richiesta da Ordini o Negozi resta sospesa con le chiamate eBay spente dalla
- * console, oppure con eBay che non risponde nell'ambiente richiesto o in quello del negozio.
+ * Una lettura richiesta da Ordini o Negozi resta sospesa con le chiamate eBay spente dalla console,
+ * oppure con eBay che non risponde nell'ambiente richiesto o in quello del negozio.
  */
 export async function suspendedEbayRead(
   userId: string,

@@ -2,6 +2,8 @@ import { cn } from "cn";
 import { useId, useRef, useState } from "react";
 
 import { useAction } from "~/components/action";
+import { useCopy } from "~/components/copy-context";
+import { useFieldErrors } from "~/components/form-validation";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -22,12 +24,11 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
-import { useCopy } from "~/components/copy-context";
-import { useFieldErrors } from "~/components/form-validation";
-import { ConfirmIdentity } from "./settings/confirm-identity";
-import { settingsRow, settingsRowText } from "./settings/security-rows";
+
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import { exitReasons, maxExitComment } from "../exit-reasons";
+import { ConfirmIdentity } from "./settings/confirm-identity";
+import { settingsRow, settingsRowText } from "./settings/security-rows";
 
 /** Conferma dell'identità per la cancellazione: metodi, sessione in uso e accesso recente. */
 export type DeletionAccess = {
@@ -39,10 +40,10 @@ export type DeletionAccess = {
 
 /**
  * Cancellazione dell'account (§30): l'indirizzo dell'account scritto per esteso e la conferma
- * dell'identità sul posto quando l'ultimo accesso non è di pochi minuti fa; poi il link via
- * email, che avvia la cancellazione. Motivo e commento sono facoltativi (D314). Le Impostazioni aggiungono l'esportazione proposta; la
- * pagina di accesso e l'avviso della verifica inviano alla pagina di accesso, e la prima, senza
- * la shell degli avvisi, mostra l'esito sotto il pulsante.
+ * dell'identità sul posto quando l'ultimo accesso non è di pochi minuti fa; poi il link via email,
+ * che avvia la cancellazione. Motivo e commento sono facoltativi (D314). Le Impostazioni aggiungono
+ * l'esportazione proposta; la pagina di accesso e l'avviso della verifica inviano alla pagina di
+ * accesso, e la prima, senza la shell degli avvisi, mostra l'esito sotto il pulsante.
  */
 export function DeleteAccount({
   email,

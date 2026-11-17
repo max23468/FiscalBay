@@ -8,9 +8,9 @@ import {
 } from "../orders/export-columns";
 
 /**
- * Configurazioni dell'esportazione salvate con Premium (§12): formato, granularità e colonne
- * nel loro ordine, con un nome unico per utente. Non contengono ambito, filtri o diritti: il
- * file si crea sempre con quelli correnti.
+ * Configurazioni dell'esportazione salvate con Premium (§12): formato, granularità e colonne nel
+ * loro ordine, con un nome unico per utente. Non contengono ambito, filtri o diritti: il file si
+ * crea sempre con quelli correnti.
  */
 
 export interface ExportConfiguration {

@@ -8,6 +8,7 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+
 import { inventoryArgs, listedTestIds } from "./browser-tests.mjs";
 import { ghJson, readRunArtifact } from "./lib/provider.mjs";
 
@@ -21,12 +22,12 @@ export function flakyTests(parts) {
           .map(({ project, page }) => `${project}: ${page}`),
       ),
     ),
-  ].sort();
+  ].toSorted();
 }
 
 /**
- * Prove instabili anche ora e in almeno `limit` qualifiche recenti: oltre due volte l'instabilità
- * è un difetto, che ferma la certificazione finché la prova non si corregge.
+ * Prove instabili anche ora e in almeno `limit` qualifiche recenti: oltre due volte l'instabilità è
+ * un difetto, che ferma la certificazione finché la prova non si corregge.
  */
 export function repeatedFlaky(current, history, limit = 2) {
   return current.filter((test) => history.filter((run) => run.includes(test)).length >= limit);
@@ -42,8 +43,8 @@ const readFlaky = (repository, run) =>
 
 /**
  * Elenchi delle prove instabili delle ultime `limit` qualifiche riuscite, dagli artefatti delle
- * run: la lettura si ferma appena ne ha abbastanza. Un artefatto non più scaricabile non conta
- * e non ferma la certificazione.
+ * run: la lettura si ferma appena ne ha abbastanza. Un artefatto non più scaricabile non conta e
+ * non ferma la certificazione.
  */
 export function flakyHistory(
   repository,
@@ -64,11 +65,11 @@ export function flakyHistory(
   for (const { expired, workflow_run: run } of artifacts) {
     if (history.length === limit) break;
     if (
-      expired ||
-      run?.repository_id !== repositoryId ||
-      run.head_repository_id !== repositoryId ||
-      String(run.id) === exclude ||
-      seen.has(run.id)
+      expired
+      || run?.repository_id !== repositoryId
+      || run.head_repository_id !== repositoryId
+      || String(run.id) === exclude
+      || seen.has(run.id)
     )
       continue;
     seen.add(run.id);
@@ -98,34 +99,34 @@ export function assertCandidateReports(parts, sha, expected) {
     for (let shard = 1; shard <= shards; shard++) {
       const part = parts
         .filter((part) => part.kind === kind && part.shard === shard)
-        .sort((a, b) => b.attempt - a.attempt)[0];
+        .toSorted((a, b) => b.attempt - a.attempt)[0];
       const report = part?.report;
       if (
-        !report ||
-        report.sha !== sha ||
-        report.status !== "passed" ||
-        report.partial !== false ||
-        report.dirty !== false ||
-        report.baseURL !== "locale" ||
-        report.environment !== (kind === "source" ? "local" : "production") ||
-        !(report.counts?.passed > 0) ||
-        !report.rows?.length
+        !report
+        || report.sha !== sha
+        || report.status !== "passed"
+        || report.partial !== false
+        || report.dirty !== false
+        || report.baseURL !== "locale"
+        || report.environment !== (kind === "source" ? "local" : "production")
+        || !(report.counts?.passed > 0)
+        || !report.rows?.length
       )
         throw new Error(`Qualifica browser incompleta o diversa: ${kind} ${shard}.`);
       for (const row of report.rows) {
         if (!row.id || ids.has(row.id))
           throw new Error("Partizione browser duplicata o priva di identità.");
         if (
-          row.status !== "passed" &&
-          !(row.status === "skipped" && row.reason?.startsWith("Non applicabile:"))
+          row.status !== "passed"
+          && !(row.status === "skipped" && row.reason?.startsWith("Non applicabile:"))
         )
           throw new Error("Partizione con prove fallite o esclusioni non motivate.");
         ids.add(row.id);
       }
       if (
-        report.counts.passed !== report.rows.filter((row) => row.status === "passed").length ||
-        (report.counts.skipped ?? 0) !==
-          report.rows.filter((row) => row.status === "skipped").length
+        report.counts.passed !== report.rows.filter((row) => row.status === "passed").length
+        || (report.counts.skipped ?? 0)
+          !== report.rows.filter((row) => row.status === "skipped").length
       )
         throw new Error("Conteggi del collaudo incoerenti con le prove.");
     }

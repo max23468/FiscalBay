@@ -1,12 +1,12 @@
 /**
- * Mutation incrementale del candidato. Sulla prova di `develop` un modulo critico non si ripete
- * se la sua ultima mutation, in una qualifica o in una campagna precedente su un commit antenato,
- * è riuscita in ogni parte e ogni sorgente cambiato da allora che il modulo importa, anche
- * indirettamente, o il modulo stesso, è un modulo critico già provato nella PR che l'ha
- * integrato, sullo stesso contenuto. Un sorgente non critico cambiato, o un commit senza
- * quella prova, ripete il modulo. Dipendenze, strumenti e prove modificate non fanno ripetere
- * nulla: li copre la campagna settimanale, che resta completa.
- * Uso: MATRIX='{"target":[...]}' REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/mutation-reuse.mjs
+ * Mutation incrementale del candidato. Sulla prova di `develop` un modulo critico non si ripete se
+ * la sua ultima mutation, in una qualifica o in una campagna precedente su un commit antenato, è
+ * riuscita in ogni parte e ogni sorgente cambiato da allora che il modulo importa, anche
+ * indirettamente, o il modulo stesso, è un modulo critico già provato nella PR che l'ha integrato,
+ * sullo stesso contenuto. Un sorgente non critico cambiato, o un commit senza quella prova, ripete
+ * il modulo. Dipendenze, strumenti e prove modificate non fanno ripetere nulla: li copre la
+ * campagna settimanale, che resta completa. Uso: MATRIX='{"target":[...]}' REPOSITORY=<owner/repo>
+ * REPOSITORY_ID=<id> node scripts/mutation-reuse.mjs
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -15,7 +15,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { criticalModule } from "./lib/critical-modules.mjs";
-import { importGraph } from "./verify-repo.mjs";
 import {
   ghApi,
   git,
@@ -24,6 +23,7 @@ import {
   readRunArtifact,
   trackedSources,
 } from "./lib/provider.mjs";
+import { importGraph } from "./verify-repo.mjs";
 
 /** Workflow le cui mutation valgono come ricevuta. */
 const mutationWorkflows = [".github/workflows/candidate.yml", ".github/workflows/mutation.yml"];
@@ -35,8 +35,8 @@ export function mutationJob(name) {
 }
 
 /**
- * Esito della mutation di un modulo in una run: `passed` solo con ogni parte riuscita. In una
- * run annullata, per esempio per avviarne una nuova, un job annullato non ha un esito.
+ * Esito della mutation di un modulo in una run: `passed` solo con ogni parte riuscita. In una run
+ * annullata, per esempio per avviarne una nuova, un job annullato non ha un esito.
  */
 export function moduleOutcomes(jobs, cancelledRun = false) {
   const modules = new Map();
@@ -94,12 +94,11 @@ export function affectingSources(changed, graph) {
 }
 
 /**
- * Divide i moduli fra da provare e riusati. `runs` sono le run precedenti su commit antenati,
- * dalla più recente, con gli esiti per modulo; `affectedSince(commit)` associa a ogni modulo i
- * sorgenti cambiati fino alla testa che lo raggiungono; `covered(source, commit)` dice se ogni
- * modifica di un modulo critico da `commit` è stata provata nella sua PR. Conta
- * soltanto l'ultima run che ha provato il modulo: un fallimento recente non si copre con un
- * successo più vecchio.
+ * Divide i moduli fra da provare e riusati. `runs` sono le run precedenti su commit antenati, dalla
+ * più recente, con gli esiti per modulo; `affectedSince(commit)` associa a ogni modulo i sorgenti
+ * cambiati fino alla testa che lo raggiungono; `covered(source, commit)` dice se ogni modifica di
+ * un modulo critico da `commit` è stata provata nella sua PR. Conta soltanto l'ultima run che ha
+ * provato il modulo: un fallimento recente non si copre con un successo più vecchio.
  */
 export async function reusePlan(targets, runs, affectedSince, covered = async () => false) {
   const run = [];
@@ -143,8 +142,8 @@ export function lineMutationJob(name) {
 export const mutationNeutral = (file) =>
   /\.md$|^docs\/|^changes\/|^e2e\/|^public\/|^scripts\/|^\.github\/|\.(?:css|svg|png|jpe?g|webp|avif|ico)$/u.test(
     file,
-  ) ||
-  /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|stryker\.config\.json|vitest.*\.config\.ts)$/u.test(
+  )
+  || /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|stryker\.config\.json|vitest.*\.config\.ts)$/u.test(
     file,
   );
 
@@ -171,19 +170,19 @@ const sharedSetup =
 
 /**
  * File di prova cambiati soltanto con prove aggiunte, dai file di un confronto dell'API di GitHub:
- * nessuna riga tolta, la patch presente e nessuna riga aggiunta che prepari tutte le prove del file.
- * Un file nuovo vale come aggiunto alle stesse condizioni.
+ * nessuna riga tolta, la patch presente e nessuna riga aggiunta che prepari tutte le prove del
+ * file. Un file nuovo vale come aggiunto alle stesse condizioni.
  */
 export function addedTests(files) {
   return new Set(
     files
       .filter(
         ({ filename, status, deletions, patch }) =>
-          /^test\/.+\.(?:spec|unit)\.ts$/u.test(filename) &&
-          ["added", "modified"].includes(status) &&
-          deletions === 0 &&
-          typeof patch === "string" &&
-          !patch
+          /^test\/.+\.(?:spec|unit)\.ts$/u.test(filename)
+          && ["added", "modified"].includes(status)
+          && deletions === 0
+          && typeof patch === "string"
+          && !patch
             .split("\n")
             .some(
               (line) => line.startsWith("+") && !line.startsWith("+++") && sharedSetup.test(line),
@@ -193,7 +192,10 @@ export function addedTests(files) {
   );
 }
 
-/** Esito del modulo nei job di una run della PR: `passed` con ogni parte riuscita, `failed`, o nulla. */
+/**
+ * Esito del modulo nei job di una run della PR: `passed` con ogni parte riuscita, `failed`, o
+ * nulla.
+ */
 export function pullRequestOutcome(jobs, target) {
   const own = jobs.filter((job) => lineMutationJob(job.name) === target);
   if (!own.length) return null;
@@ -203,8 +205,8 @@ export function pullRequestOutcome(jobs, target) {
   const parts = own.map((job) => pullRequestPart(job.name));
   const total = parts[0].parts;
   const complete =
-    parts.every((part) => part.parts === total) &&
-    new Set(parts.map((part) => part.part)).size === total;
+    parts.every((part) => part.parts === total)
+    && new Set(parts.map((part) => part.part)).size === total;
   return complete ? "passed" : null;
 }
 
@@ -216,8 +218,8 @@ function pullRequestPart(name) {
 
 /**
  * Divisione di `target` nel piano della matrice di una run della PR, l'artefatto
- * `mutation-plan-<run>`: numero di parti, impronta del sorgente e intervalli. Due piani dividono
- * il modulo allo stesso modo se hanno la stessa chiave; una parte sola copre tutto il sorgente.
+ * `mutation-plan-<run>`: numero di parti, impronta del sorgente e intervalli. Due piani dividono il
+ * modulo allo stesso modo se hanno la stessa chiave; una parte sola copre tutto il sorgente.
  */
 export function planLayout(plan, target) {
   const entry = (plan?.include ?? []).find((job) => job.target === target);
@@ -270,9 +272,9 @@ function defaultPlan(repository, run) {
 
 /**
  * Parti di `target` già provate nelle run della CI della PR sul branch `branch`, fino al commit
- * provato `head`. Il piano di riferimento è quello della run più recente che ha eseguito il
- * modulo: deve avere l'impronta `digest` del sorgente attuale. Vale ogni parte riuscita in una run
- * con lo stesso piano, impronta e intervalli, su un commit antenato di `head` e senza cambi che la
+ * provato `head`. Il piano di riferimento è quello della run più recente che ha eseguito il modulo:
+ * deve avere l'impronta `digest` del sorgente attuale. Vale ogni parte riuscita in una run con lo
+ * stesso piano, impronta e intervalli, su un commit antenato di `head` e senza cambi che la
  * invalidino da allora (`proofStands`, con `excused(source, commit)` per i sorgenti critici); per
  * ogni parte decide l'esito più recente, quindi un fallimento non si copre con un successo più
  * vecchio. Le run più vecchie di un piano diverso non contano. Una run senza piano, precedente
@@ -289,7 +291,7 @@ export async function pullRequestParts(
   );
   const ordered = runs
     .filter((run) => run.head_repository?.id === repositoryId && String(run.id) !== String(exclude))
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    .toSorted((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const verdicts = new Map();
   // Commit antenato della testa e nessun cambio che invalidi la prova del modulo da allora.
   const stands = (run) => {
@@ -353,7 +355,7 @@ export async function pullRequestParts(
     if (decided.size === layout.total) break;
   }
   if (!layout) return null;
-  const proved = [...decided.values()].filter(Boolean).sort((a, b) => a.part - b.part);
+  const proved = [...decided.values()].filter(Boolean).toSorted((a, b) => a.part - b.part);
   const missing = Array.from({ length: layout.total }, (_, index) => index + 1).filter(
     (part) => !decided.get(part),
   );
@@ -361,15 +363,15 @@ export async function pullRequestParts(
 }
 
 /**
- * Prova riusabile di `target` nelle run della CI della PR: ogni parte provata, anche in run
- * diverse (`pullRequestParts`). Restituisce la run più recente, il suo commit e tutte le run
- * usate, o null.
+ * Prova riusabile di `target` nelle run della CI della PR: ogni parte provata, anche in run diverse
+ * (`pullRequestParts`). Restituisce la run più recente, il suo commit e tutte le run usate, o
+ * null.
  */
 export async function pullRequestProof(args, api = ghApi, readPlan = defaultPlan) {
   const parts = await pullRequestParts(args, api, readPlan);
   if (!parts || parts.missing.length) return null;
   // Gli ID delle run crescono nel tempo: il più alto è la run più recente.
-  const runs = [...new Set(parts.proved.map(({ run }) => run))].sort((a, b) => b - a);
+  const runs = [...new Set(parts.proved.map(({ run }) => run))].toSorted((a, b) => b - a);
   return { run: runs[0], commit: parts.proved.find(({ run }) => run === runs[0]).commit, runs };
 }
 
@@ -395,11 +397,11 @@ export async function previousRuns(repository, repositoryId, targets, api = ghAp
   candidates.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   for (const candidate of candidates) {
     if (
-      !mutationWorkflows.includes(candidate.path) ||
-      candidate.event === "pull_request" ||
-      candidate.repository?.id !== repositoryId ||
-      candidate.head_repository?.id !== repositoryId ||
-      !isAncestor(candidate.head_sha)
+      !mutationWorkflows.includes(candidate.path)
+      || candidate.event === "pull_request"
+      || candidate.repository?.id !== repositoryId
+      || candidate.head_repository?.id !== repositoryId
+      || !isAncestor(candidate.head_sha)
     )
       continue;
     const jobs = await latestRunJobs(repository, candidate.id, api);

@@ -1,6 +1,6 @@
 /**
- * Categorie delle Impostazioni in tre gruppi: il lavoro sugli ordini, l'account e le
- * preferenze generali con l'assistenza.
+ * Categorie delle Impostazioni in tre gruppi: il lavoro sugli ordini, l'account e le preferenze
+ * generali con l'assistenza.
  */
 export const settingsGroups = [
   { id: "ordini", sections: ["notifiche", "esportazione", "messaggio"] },

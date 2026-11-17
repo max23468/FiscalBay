@@ -1,12 +1,12 @@
-import { servedSql } from "./admission.server";
-import { switchOnSql } from "./service-settings.server";
-import { unpausedStore } from "./store-state.server";
 import { logFailure } from "../errors";
-import { inSequence } from "../sequence";
 import {
   refreshStoreToken,
   type RefreshOutcome,
 } from "../integrations/ebay/seller-credentials.server";
+import { inSequence } from "../sequence";
+import { servedSql } from "./admission.server";
+import { switchOnSql } from "./service-settings.server";
+import { unpausedStore } from "./store-state.server";
 
 // Il token di accesso vale due ore: il rinnovo parte quando ne restano meno di quaranta minuti,
 // così più esecuzioni del cron, una ogni dieci minuti, cadono prima della scadenza.
@@ -17,14 +17,15 @@ const refreshLimit = 300;
 type ExpiringRow = { store_id: string; access_expires_at: string };
 
 /**
- * Lavoro in background: rinnova in anticipo i token di accesso vicini alla scadenza. I negozi
- * in pausa e quelli di uno spazio in lista d'attesa non leggono eBay e restano esclusi; quelli
- * scollegati non hanno più token. Con le chiamate eBay spente dalla console non si rinnova nulla. Il rinnovo comprende i token già scaduti: alla ripresa o
- * all'ammissione l'esecuzione seguente li rinnova prima della lettura.
+ * Lavoro in background: rinnova in anticipo i token di accesso vicini alla scadenza. I negozi in
+ * pausa e quelli di uno spazio in lista d'attesa non leggono eBay e restano esclusi; quelli
+ * scollegati non hanno più token. Con le chiamate eBay spente dalla console non si rinnova nulla.
+ * Il rinnovo comprende i token già scaduti: alla ripresa o all'ammissione l'esecuzione seguente li
+ * rinnova prima della lettura.
  *
- * Scorre i negozi a blocchi con un cursore, così un errore non fa rileggere lo stesso negozio,
- * fino a `refreshLimit` rinnovi: con un'esecuzione ogni dieci minuti e token di due ore regge
- * oltre mille negozi attivi restando entro le sottorichieste di una esecuzione.
+ * Scorre i negozi a blocchi con un cursore, così un errore non fa rileggere lo stesso negozio, fino
+ * a `refreshLimit` rinnovi: con un'esecuzione ogni dieci minuti e token di due ore regge oltre
+ * mille negozi attivi restando entro le sottorichieste di una esecuzione.
  */
 export async function refreshExpiringTokens(
   env: Env,

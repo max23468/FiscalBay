@@ -38,7 +38,7 @@ function database() {
   db.exec("PRAGMA foreign_keys = ON");
   const names = readdirSync("migrations")
     .filter((name) => name.endsWith(".sql"))
-    .sort();
+    .toSorted();
   for (const name of names) db.exec(readFileSync(`migrations/${name}`, "utf8"));
   db.exec(`CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE);
     CREATE TABLE _cf_KV (key TEXT PRIMARY KEY, value BLOB);`);

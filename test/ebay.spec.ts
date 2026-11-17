@@ -6,6 +6,12 @@ import {
   readFulfillmentOrders,
 } from "../app/integrations/ebay/fulfillment.server";
 import {
+  orderEventsDestination,
+  orderEventsEndpoint,
+  subscribeOrderEvents,
+  unsubscribeOrderEvents,
+} from "../app/integrations/ebay/order-events.server";
+import {
   parseItemImage,
   parseTradingOrders,
   qualifiedImageUrl,
@@ -16,12 +22,6 @@ import {
   tradingTaxBatch,
   tradingAck,
 } from "../app/integrations/ebay/trading.server";
-import {
-  orderEventsDestination,
-  orderEventsEndpoint,
-  subscribeOrderEvents,
-  unsubscribeOrderEvents,
-} from "../app/integrations/ebay/order-events.server";
 import { UpstreamError } from "../app/integrations/http.server";
 import {
   access,
@@ -187,10 +187,10 @@ describe("client eBay e normalizzazione", () => {
   it("legge i dati fiscali di più ordini con una sola chiamata, con l'errore del singolo ordine", async () => {
     const fetcher = trading(
       ack(
-        "<Ack>Success</Ack><HasMoreOrders>false</HasMoreOrders><OrderArray>" +
-          "<Order><OrderID>A</OrderID><BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier></Order>" +
-          "<Order><OrderID>D</OrderID></Order><Order><OrderID>D</OrderID></Order>" +
-          "</OrderArray>",
+        "<Ack>Success</Ack><HasMoreOrders>false</HasMoreOrders><OrderArray>"
+          + "<Order><OrderID>A</OrderID><BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier></Order>"
+          + "<Order><OrderID>D</OrderID></Order><Order><OrderID>D</OrderID></Order>"
+          + "</OrderArray>",
       ),
     );
     const results = await readTradingTaxObservations(access(fetcher), ["A", "B", "D"]);
@@ -275,8 +275,8 @@ describe("client eBay e normalizzazione", () => {
     expect(
       parseItemImage(
         ack(
-          "<Ack>Success</Ack><Item><PictureDetails><GalleryURL>https://esempio.invalid/a.jpg</GalleryURL>" +
-            `<PictureURL>${valid}</PictureURL></PictureDetails></Item>`,
+          "<Ack>Success</Ack><Item><PictureDetails><GalleryURL>https://esempio.invalid/a.jpg</GalleryURL>"
+            + `<PictureURL>${valid}</PictureURL></PictureDetails></Item>`,
         ),
       ),
     ).toBe(valid);
@@ -344,11 +344,7 @@ describe("acquisti Trading", () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(xml));
     await readTradingOrders(
       { configuration, fetcher, accessToken: "synthetic" },
-      {
-        from: "2026-09-01T00:00:00Z",
-        until: "2026-09-02T00:00:00Z",
-        page: 2,
-      },
+      { from: "2026-09-01T00:00:00Z", until: "2026-09-02T00:00:00Z", page: 2 },
     );
     expect(String(fetcher.mock.calls[0]![1]?.body)).toContain("<PageNumber>2</PageNumber>");
     expect(String(fetcher.mock.calls[0]![1]?.body)).toContain(
@@ -407,8 +403,8 @@ describe("acquisti Trading", () => {
       .replace("<TotalNumberOfEntries>1<", "<TotalNumberOfEntries>2<")
       .replace(
         "</OrderArray>",
-        xml.match(/<Order>[\s\S]*<\/Order>/u)![0].replace(">provvisorio<", ">valido<") +
-          "</OrderArray>",
+        xml.match(/<Order>[\s\S]*<\/Order>/u)![0].replace(">provvisorio<", ">valido<")
+          + "</OrderArray>",
       );
     expect(parseTradingOrders(page)).toMatchObject({
       skipped: 1,
@@ -422,11 +418,7 @@ describe("acquisti Trading", () => {
       await expect(
         readTradingOrders(
           { configuration, fetcher, accessToken: "synthetic" },
-          {
-            from: "2026-09-01T00:00:00Z",
-            until: "2026-09-02T00:00:00Z",
-            page,
-          },
+          { from: "2026-09-01T00:00:00Z", until: "2026-09-02T00:00:00Z", page },
         ),
       ).rejects.toMatchObject({ failure: "invalid_response" });
       expect(fetcher).not.toHaveBeenCalled();
@@ -437,11 +429,7 @@ describe("acquisti Trading", () => {
     await expect(
       readTradingOrders(
         { configuration, fetcher, accessToken: "synthetic" },
-        {
-          from: "2026-09-02T00:00:00Z",
-          until: "2026-09-01T00:00:00Z",
-          page: 1,
-        },
+        { from: "2026-09-02T00:00:00Z", until: "2026-09-01T00:00:00Z", page: 1 },
       ),
     ).rejects.toMatchObject({ failure: "invalid_response" });
     expect(fetcher).not.toHaveBeenCalled();
@@ -452,11 +440,7 @@ describe("acquisti Trading", () => {
     expect(
       await readTradingOrders(
         { configuration, fetcher, accessToken: "synthetic" },
-        {
-          from: at,
-          until: at,
-          page: 1,
-        },
+        { from: at, until: at, page: 1 },
       ),
     ).toMatchObject({
       total: 1,
@@ -613,8 +597,8 @@ describe("acquisti Trading", () => {
     // L'identificativo di un altro ordine della risposta non passa a quello richiesto.
     expect(
       await read(
-        "<Order><OrderID>ordine</OrderID></Order>" +
-          "<Order><OrderID>altro</OrderID><BuyerTaxIdentifier><ID>SINTETICO</ID><Type>VAT_ID</Type></BuyerTaxIdentifier></Order>",
+        "<Order><OrderID>ordine</OrderID></Order>"
+          + "<Order><OrderID>altro</OrderID><BuyerTaxIdentifier><ID>SINTETICO</ID><Type>VAT_ID</Type></BuyerTaxIdentifier></Order>",
       ),
     ).toEqual({ orderFound: true, values: [] });
     expect(

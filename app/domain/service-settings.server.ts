@@ -2,8 +2,8 @@ import { z } from "zod";
 
 /**
  * Interruttori e soglie dei servizi (§15, §32), configurati dalla console senza deploy. Ogni
- * impostazione ha un tipo e un predefinito sicuro, il comportamento normale del servizio: senza
- * la riga, o con un valore non valido, vale il predefinito. Una modifica vale dal momento della
+ * impostazione ha un tipo e un predefinito sicuro, il comportamento normale del servizio: senza la
+ * riga, o con un valore non valido, vale il predefinito. Una modifica vale dal momento della
  * conferma, non è retroattiva e non tocca cicli, diritti o prezzi. Lista d'attesa e acquisti
  * restano in `admission_settings`, letti dalle stesse query di diritti, letture e acquisti.
  */
@@ -11,14 +11,14 @@ import { z } from "zod";
 const settings = {
   /**
    * Chiamate a eBay per i negozi: letture, dettagli, conferme degli ordini, rinnovi dei token e
-   * collegamenti. Spente, le richieste restano registrate e partono alla riaccensione; i
-   * webhook di eBay si ricevono comunque.
+   * collegamenti. Spente, le richieste restano registrate e partono alla riaccensione; i webhook di
+   * eBay si ricevono comunque.
    */
   ebay_calls: { schema: z.boolean(), fallback: true },
   /**
-   * Invii del bot Telegram ai venditori: notifiche, riepiloghi, risposte ai comandi e menu.
-   * Spenti, le notifiche restano in attesa e i comandi ricevuti non hanno risposta. Il Control
-   * Center dell'owner, comandi e avvisi, resta attivo.
+   * Invii del bot Telegram ai venditori: notifiche, riepiloghi, risposte ai comandi e menu. Spenti,
+   * le notifiche restano in attesa e i comandi ricevuti non hanno risposta. Il Control Center
+   * dell'owner, comandi e avvisi, resta attivo.
    */
   telegram_sends: { schema: z.boolean(), fallback: true },
   /** Percentuale del consumo giornaliero di una quota eBay che apre l'anomalia (D188). */
@@ -116,8 +116,8 @@ export function isSwitchName(value: string): value is SwitchName {
 }
 
 /**
- * Accende o spegne un interruttore. Spegnere la lista d'attesa ammette subito chi era in
- * attesa, in modo definitivo come il compito dell'inattività (D201).
+ * Accende o spegne un interruttore. Spegnere la lista d'attesa ammette subito chi era in attesa, in
+ * modo definitivo come il compito dell'inattività (D201).
  */
 export async function setSwitch(
   db: D1Database,

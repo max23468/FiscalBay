@@ -6,11 +6,12 @@ import { ShotRow, type ShotName } from "~/components/product-shot";
 import { siteColumn } from "~/components/site-column";
 import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { Badge } from "~/components/ui/badge";
-import { sitePages } from "../copy/site-pages.server";
+
 import { featuresPath, siteSecurityPath } from "../app-links";
+import { sitePages } from "../copy/site-pages.server";
 import { localizedPath } from "../i18n";
-import { publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
+import { publicPage, publicPageHeaders } from "../site.server";
 import type { Route } from "./+types/features";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -44,8 +45,8 @@ const icons = [
 ] as const;
 
 /**
- * Funzionalità in una sola pagina (§23): le principali accanto alla loro schermata reale, le
- * altre in un elenco compatto. Le voci Premium portano il loro segno.
+ * Funzionalità in una sola pagina (§23): le principali accanto alla loro schermata reale, le altre
+ * in un elenco compatto. Le voci Premium portano il loro segno.
  */
 export default function Features({ loaderData }: Route.ComponentProps) {
   const { language, signedIn, copy: t } = loaderData;

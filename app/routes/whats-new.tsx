@@ -1,15 +1,16 @@
-import { data } from "react-router";
 import { Megaphone, Sparkles, TrendingUp, Wrench } from "lucide-react";
+import { data } from "react-router";
 
+import { useCopy } from "~/components/copy-context";
 import { IconTile, PageTitle } from "~/components/icon-tile";
 import { NotFoundState } from "~/components/not-found";
-import { useCopy } from "~/components/copy-context";
 import { Badge } from "~/components/ui/badge";
+
 import { areaPage, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
+import { whatsNewKinds, type WhatsNewKind } from "../changelog";
 import { formatDate } from "../format";
 import { languageFromPath } from "../i18n";
-import { whatsNewKinds, type WhatsNewKind } from "../changelog";
 import { whatsNewView } from "../whats-new.server";
 import type { Route } from "./+types/whats-new";
 
@@ -31,9 +32,7 @@ export function headers(): HeadersInit {
   return { "cache-control": "no-store" };
 }
 
-/**
- * Novità dell'app (D203): senza voci da mostrare la pagina non esiste, come la sua voce nel menu.
- */
+/** Novità dell'app (D203): senza voci da mostrare la pagina non esiste, come la sua voce nel menu. */
 export function loader({ request }: Route.LoaderArgs) {
   return areaPage(request, async () => {
     const { language } = await requireAccountArea(request);

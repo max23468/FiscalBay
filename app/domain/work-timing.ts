@@ -1,20 +1,20 @@
 /**
- * Tempi del lavoro asincrono, letti dallo smistamento del cron, dall'ingresso dei webhook e
- * dalla console: un modulo senza dipendenze, così chi li legge non dipende da chi li usa.
+ * Tempi del lavoro asincrono, letti dallo smistamento del cron, dall'ingresso dei webhook e dalla
+ * console: un modulo senza dipendenze, così chi li legge non dipende da chi li usa.
  */
 
 export const minute = 60_000;
 
 /**
- * Durata di un blocco su un lavoro in esecuzione: un consumer della coda o un compito del cron
- * non dura di più, quindi allo scadere il blocco di un'esecuzione interrotta si libera.
+ * Durata di un blocco su un lavoro in esecuzione: un consumer della coda o un compito del cron non
+ * dura di più, quindi allo scadere il blocco di un'esecuzione interrotta si libera.
  */
 export const workLockMilliseconds = 15 * minute;
 
 /**
- * Termine del blocco preso all'istante `now`. Il valore scritto è anche il segno di chi tiene
- * il blocco: rilascio e proroga lo confrontano, così chi l'ha perso allo scadere non tocca
- * quello preso dopo da un altro consumer.
+ * Termine del blocco preso all'istante `now`. Il valore scritto è anche il segno di chi tiene il
+ * blocco: rilascio e proroga lo confrontano, così chi l'ha perso allo scadere non tocca quello
+ * preso dopo da un altro consumer.
  */
 export const workLockUntil = (now: Date) =>
   new Date(now.getTime() + workLockMilliseconds).toISOString();
@@ -54,8 +54,8 @@ export function backoffMs(
 }
 
 /**
- * Attesa in secondi prima di ripetere un messaggio della coda non riuscito: raddoppia da 30
- * secondi a ogni tentativo, fino a un'ora.
+ * Attesa in secondi prima di ripetere un messaggio della coda non riuscito: raddoppia da 30 secondi
+ * a ogni tentativo, fino a un'ora.
  */
 export function queueRetryDelay(attempts: number): number {
   return backoffMs(attempts, 30_000, 60 * minute) / 1000;

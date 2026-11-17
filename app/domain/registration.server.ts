@@ -4,18 +4,15 @@ import { waitlistOnSql } from "./admission-state.server.ts";
 
 /**
  * Versioni dei testi presentati alla registrazione, come data del testo in vigore
- * (`copy/legal-documents.server.ts`): una nuova versione dei Termini si propone nell'area,
- * senza bloccare alcuna funzione (D232).
+ * (`copy/legal-documents.server.ts`): una nuova versione dei Termini si propone nell'area, senza
+ * bloccare alcuna funzione (D232).
  */
-export const legalVersions = {
-  terms: "2026-11-06",
-  privacy: "2026-11-07",
-} as const;
+export const legalVersions = { terms: "2026-11-06", privacy: "2026-11-07" } as const;
 
 /**
  * Versione del testo del consenso marketing per ogni superficie che lo mostra: registrazione,
- * proposta negli Ordini e Notifiche delle Impostazioni hanno testi diversi, quindi la prova di
- * ogni scelta dice quale testo è stato reso. Un testo modificato richiede una nuova versione.
+ * proposta negli Ordini e Notifiche delle Impostazioni hanno testi diversi, quindi la prova di ogni
+ * scelta dice quale testo è stato reso. Un testo modificato richiede una nuova versione.
  */
 export const marketingTextVersions = {
   registration: "registrazione-2026-10-31",
@@ -35,8 +32,8 @@ export type Profile = {
 
 export type RegistrationStatus = {
   /**
-   * Termini accettati in una qualunque versione: completa la registrazione. Una versione nuova
-   * non accettata non blocca alcuna funzione (D232).
+   * Termini accettati in una qualunque versione: completa la registrazione. Una versione nuova non
+   * accettata non blocca alcuna funzione (D232).
    */
   termsAccepted: boolean;
   /** Accettata la versione corrente dei Termini; altrimenti l'area ne propone l'accettazione. */
@@ -116,13 +113,12 @@ export function registeredUserExists(db: D1Database, userId: string) {
 }
 
 /**
- * Salva in una transazione ciò che la registrazione ha raccolto: il profilo, e
- * l'accettazione dei Termini con la scelta marketing, tenute in tabelle distinte. La scelta
- * marketing si registra soltanto se il modulo l'ha chiesta: chi accetta una nuova versione dei
- * Termini e ha già scelto conserva la propria scelta. Il primo
- * profilo salvato con la lista d'attesa attiva mette l'account in attesa; le modifiche
- * successive non lo cambiano. Il frammento della lista d'attesa è scritto qui perché gli script
- * Node caricano questo modulo senza risolvere altri import.
+ * Salva in una transazione ciò che la registrazione ha raccolto: il profilo, e l'accettazione dei
+ * Termini con la scelta marketing, tenute in tabelle distinte. La scelta marketing si registra
+ * soltanto se il modulo l'ha chiesta: chi accetta una nuova versione dei Termini e ha già scelto
+ * conserva la propria scelta. Il primo profilo salvato con la lista d'attesa attiva mette l'account
+ * in attesa; le modifiche successive non lo cambiano. Il frammento della lista d'attesa è scritto
+ * qui perché gli script Node caricano questo modulo senza risolvere altri import.
  */
 export async function completeRegistration(
   db: D1Database,

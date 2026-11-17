@@ -18,9 +18,9 @@ export function trustedScriptUrl(value: string, origin: string): string | null {
 }
 
 /**
- * HTML o codice scritto come stringa: React lo fa soltanto per il JSON dei dati strutturati e
- * delle regole di speculazione. È ammesso soltanto testo senza `<`, che non può creare elementi
- * né chiudere lo script che lo contiene.
+ * HTML o codice scritto come stringa: React lo fa soltanto per il JSON dei dati strutturati e delle
+ * regole di speculazione. È ammesso soltanto testo senza `<`, che non può creare elementi né
+ * chiudere lo script che lo contiene.
  */
 export function trustedText(value: string): string | null {
   return value.includes("<") ? null : value;

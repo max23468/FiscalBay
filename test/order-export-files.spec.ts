@@ -1,8 +1,5 @@
 import { env } from "cloudflare:workers";
-
 import { expect, it, vi } from "vitest";
-
-import { action as exportAction } from "../app/routes/order-export";
 
 import {
   exportPartBytes,
@@ -10,17 +7,10 @@ import {
   publishExportFile,
   purgeExportFiles,
 } from "../app/domain/export-files.server";
-
 import { consumeExportJob } from "../app/domain/export-jobs.server";
-
+import { action as exportAction } from "../app/routes/order-export";
 import { verifiedSession } from "./fixtures/account-fixtures";
-
-import { queueMessage } from "./fixtures/queue-fixture";
-
 import { insertEntitlement, now } from "./fixtures/database-fixtures";
-
-import { routeResponse } from "./fixtures/route-fixtures";
-
 import {
   it_,
   cookie,
@@ -36,6 +26,8 @@ import {
   job,
   setupScenarios,
 } from "./fixtures/order-export-scenarios";
+import { queueMessage } from "./fixtures/queue-fixture";
+import { routeResponse } from "./fixtures/route-fixtures";
 
 setupScenarios();
 
@@ -349,10 +341,7 @@ it("un errore a metà del file risponde con l'avviso senza lasciare un file", as
   try {
     const response = await request("ordini=o-a");
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      ok: false,
-      notice: it_.settings.export.exportFailed,
-    });
+    expect(await response.json()).toEqual({ ok: false, notice: it_.settings.export.exportFailed });
   } finally {
     failing.mockRestore();
     errors.mockRestore();
@@ -406,7 +395,7 @@ it("con Pro i periodi di 6 e 12 mesi seguono quelli degli Ordini", async () => {
     .bind(hours(-24 * 240), hours(24 * 125))
     .run();
   const ids = async (period: string) =>
-    (await csv(await request("", { period }))).rows.map((row) => row["Numero ordine"]).sort();
+    (await csv(await request("", { period }))).rows.map((row) => row["Numero ordine"]).toSorted();
   expect(await ids("6m")).toEqual(["ebay-a", "ebay-c", "ebay-d"]);
   expect(await ids("12m")).toEqual(["ebay-8m", "ebay-a", "ebay-c", "ebay-d"]);
 });

@@ -1,44 +1,25 @@
 import { env } from "cloudflare:workers";
-
 import { expect, it, vi } from "vitest";
 
-import { standardColumns, type ExportColumn } from "../app/orders/export-columns";
-
-import { visibleOrderTallies } from "../app/domain/orders.server";
-
-import { loader as exportLoader } from "../app/routes/order-export";
-
-import { loader as loadSettings } from "../app/routes/settings";
-
+import { revokeHistoryExtension } from "../app/domain/concessions.server";
 import {
   deleteExportConfiguration,
   listExportConfigurations,
   maxExportConfigurations,
   saveExportConfiguration,
 } from "../app/domain/export-configurations.server";
-
 import { exportRevision } from "../app/domain/export-files.server";
-
-import { revokeHistoryExtension } from "../app/domain/concessions.server";
-
-import { reversalStatements } from "../app/domain/refunds.server";
-
 import { applyFreePlan, applyFreePlans } from "../app/domain/free-store.server";
-
-import { deleteStoreData } from "../app/domain/stores.server";
-
+import { visibleOrderTallies } from "../app/domain/orders.server";
+import { reversalStatements } from "../app/domain/refunds.server";
 import { confirmStoreTransfer, prepareStoreTransfer } from "../app/domain/store-transfer.server";
-
-import { verifiedSession } from "./fixtures/account-fixtures";
-
-import { insertTaxIdentifiers, now } from "./fixtures/database-fixtures";
-
-import { callRoute, routePage } from "./fixtures/route-fixtures";
-
-import { searchOrders } from "./fixtures/order-search-fixtures";
-
+import { deleteStoreData } from "../app/domain/stores.server";
+import { standardColumns, type ExportColumn } from "../app/orders/export-columns";
 import { snapshotCursor } from "../app/orders/order-criteria";
-
+import { loader as exportLoader } from "../app/routes/order-export";
+import { loader as loadSettings } from "../app/routes/settings";
+import { verifiedSession } from "./fixtures/account-fixtures";
+import { insertTaxIdentifiers, now } from "./fixtures/database-fixtures";
 import {
   it_,
   cookie,
@@ -55,6 +36,8 @@ import {
   hours,
   setupScenarios,
 } from "./fixtures/order-export-scenarios";
+import { searchOrders } from "./fixtures/order-search-fixtures";
+import { callRoute, routePage } from "./fixtures/route-fixtures";
 
 setupScenarios();
 
@@ -192,10 +175,7 @@ it("con Pro crea l'XLSX con le colonne scelte; nel Free resta il CSV standard", 
   for (const fields of [{ format: "xlsx" }, { columns: "order" }] as Record<string, string>[]) {
     const refused = await request("ordini=o-a", fields);
     expect(refused.status).toBe(403);
-    expect(await refused.json()).toEqual({
-      ok: false,
-      notice: it_.settings.export.exportPremium,
-    });
+    expect(await refused.json()).toEqual({ ok: false, notice: it_.settings.export.exportPremium });
   }
   await premium();
   const response = await request("ordini=o-a,o-c", {
@@ -350,10 +330,7 @@ it("salva, sostituisce ed elimina le configurazioni soltanto con Pro", async () 
     expect((await save({ name: `C${index}` })).status).toBe(200);
   expect(await save({ name: "Ultima" })).toEqual({
     status: 409,
-    body: {
-      ok: false,
-      notice: it_.settings.export.exportConfigFull(maxExportConfigurations),
-    },
+    body: { ok: false, notice: it_.settings.export.exportConfigFull(maxExportConfigurations) },
   });
   expect((await save({ name: "Altro", format: "csv" })).status).toBe(200);
   expect(await configurations()).toHaveLength(maxExportConfigurations);
@@ -552,10 +529,7 @@ it("CF e Partita IVA letti da Trading e da Fulfillment compaiono una volta nel f
     },
   ).run();
   const [row] = (await csv(await request("ordini=o-a"))).rows;
-  expect(row).toMatchObject({
-    "Codice Fiscale": "RSSMRA80A01H501U",
-    "Partita IVA": "01234567890",
-  });
+  expect(row).toMatchObject({ "Codice Fiscale": "RSSMRA80A01H501U", "Partita IVA": "01234567890" });
 });
 
 it("le revoche dei percorsi reali invalidano i file, le ripetizioni non aumentano la revisione", async () => {

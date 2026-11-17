@@ -1,4 +1,7 @@
+import interLatin from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
 import { env } from "cloudflare:workers";
+import { CircleAlert, FileQuestion } from "lucide-react";
+import { useEffect } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -12,11 +15,11 @@ import {
   useRevalidator,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { useEffect } from "react";
-
-import { CircleAlert, FileQuestion } from "lucide-react";
 
 import type { Route } from "./+types/root";
+import { appCopy, copyModules, loadCopy, pageTitle } from "./app-copy";
+import { appBase, previewBase } from "./app-links";
+import { arrivalSource } from "./arrival-source.server";
 import { LinksProvider } from "./components/copy-context";
 import { UnavailablePage } from "./components/not-found";
 import { useScriptNonce } from "./components/script-nonce";
@@ -24,15 +27,12 @@ import { StandalonePage } from "./components/standalone-page";
 import { TimeZoneContext } from "./components/time-zone";
 import { buttonLink } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
-import { sharedResponse } from "./page-cache.server";
-import { appCopy, copyModules, loadCopy, pageTitle } from "./app-copy";
-import { appBase, previewBase } from "./app-links";
 import { canonicalPath, languageFromPath, localizedPath } from "./i18n";
 import { revalidateUnlessSnapshot } from "./orders/order-list";
+import { sharedResponse } from "./page-cache.server";
 import { defaultDisplay, matchedShell } from "./preferences";
-import { arrivalSource } from "./arrival-source.server";
 import { formatSource } from "./signup-source";
-import interLatin from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
+
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [

@@ -1,10 +1,11 @@
 import { KeyRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { useLastUsed } from "~/components/access/last-used";
 import { useCopy } from "~/components/copy-context";
 import { Button } from "~/components/ui/button";
 import { FieldError } from "~/components/ui/field";
-import { useLastUsed } from "~/components/access/last-used";
+
 import {
   loadPasskeyClient,
   passkeyAutofillAvailable,
@@ -17,9 +18,9 @@ import { localizedPath } from "../../i18n";
 
 /**
  * Accesso con una passkey, dal pulsante o dal suggerimento nel campo email con
- * `autocomplete="username webauthn"`: poi `target`, la Sicurezza da cui si è partiti, oppure
- * gli Ordini. La richiesta del suggerimento parte al montaggio; il pulsante la sostituisce,
- * perché il client WebAuthn annulla la cerimonia in corso prima di aprirne un'altra.
+ * `autocomplete="username webauthn"`: poi `target`, la Sicurezza da cui si è partiti, oppure gli
+ * Ordini. La richiesta del suggerimento parte al montaggio; il pulsante la sostituisce, perché il
+ * client WebAuthn annulla la cerimonia in corso prima di aprirne un'altra.
  */
 export function usePasskeySignIn(target: string | null) {
   const { language } = useCopy();

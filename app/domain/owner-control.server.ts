@@ -3,6 +3,7 @@ import { botCommands, ownerCommands, type BotCommand, type OwnerCommand } from "
 import { adminCopy } from "../copy/admin-copy";
 import { ownerTelegramCopy as copy } from "../copy/owner-telegram";
 import { telegramBotCopy } from "../copy/telegram";
+import { exitReasons } from "../exit-reasons";
 import { formatAmount } from "../i18n";
 import {
   answerCallback,
@@ -15,7 +16,6 @@ import {
   webhookInfo,
   type BotButton,
 } from "../integrations/telegram.server";
-import { exitReasons } from "../exit-reasons";
 import { checkPrices, commerceOverview } from "./admin-commerce.server";
 import { consoleSummary, listAllStores } from "./admin-directory.server";
 import { listAnomalies, receiptStates, taskStates } from "./admin-operations.server";
@@ -46,11 +46,11 @@ import {
 import { readTechnicalMetrics } from "./technical-metrics.server";
 
 /**
- * Control Center Telegram dell'owner (§15, D198). Sul bot dell'ambiente, nella sola chat
- * privata dell'owner, comandi e pulsanti di sola lettura mostrano le stesse viste della console
- * con le stesse query; i pulsanti aggiornano lo stesso messaggio e «Copia» invia la vista come
- * testo copiabile. Nessun dato dei buyer, nessuna email: soltanto aggregati, stati ed etichette
- * dei negozi. Le operazioni restano nella console, raggiungibile dal pulsante di ogni vista.
+ * Control Center Telegram dell'owner (§15, D198). Sul bot dell'ambiente, nella sola chat privata
+ * dell'owner, comandi e pulsanti di sola lettura mostrano le stesse viste della console con le
+ * stesse query; i pulsanti aggiornano lo stesso messaggio e «Copia» invia la vista come testo
+ * copiabile. Nessun dato dei buyer, nessuna email: soltanto aggregati, stati ed etichette dei
+ * negozi. Le operazioni restano nella console, raggiungibile dal pulsante di ogni vista.
  */
 
 const t = adminCopy.it;
@@ -108,9 +108,9 @@ export type OwnerReceipt = {
 
 /**
  * Effetto di un comando o di un pulsante dell'owner ricevuto dal webhook. L'identità si rilegge
- * dalla configurazione corrente: un aggiornamento accettato prima di un cambio non vale più.
- * Il comando apre la vista in un nuovo messaggio, il pulsante la scrive nello stesso, e un
- * messaggio non più modificabile lascia il posto a uno nuovo.
+ * dalla configurazione corrente: un aggiornamento accettato prima di un cambio non vale più. Il
+ * comando apre la vista in un nuovo messaggio, il pulsante la scrive nello stesso, e un messaggio
+ * non più modificabile lascia il posto a uno nuovo.
  */
 export async function consumeOwnerUpdate(
   env: Env,
@@ -493,8 +493,8 @@ async function commercePanel(env: Env, fetcher: typeof fetch, now: Date): Promis
 }
 
 /**
- * Motivi di uscita (D314): per disdette e cancellazioni, i motivi degli ultimi 30 giorni e
- * dei 12 mesi, poi i commenti dei 30 giorni, che restano soltanto in quella finestra.
+ * Motivi di uscita (D314): per disdette e cancellazioni, i motivi degli ultimi 30 giorni e dei 12
+ * mesi, poi i commenti dei 30 giorni, che restano soltanto in quella finestra.
  */
 async function exitsPanel(env: Env, now: Date): Promise<Panel> {
   const { counts, recent } = await exitOverview(env.DB, now);
@@ -689,7 +689,7 @@ async function performancePanel(env: Env, fetcher: typeof fetch): Promise<Panel>
         title: p.invocations,
         rows: capped(
           [...metrics.invocations]
-            .sort((a, b) => b.count - a.count)
+            .toSorted((a, b) => b.count - a.count)
             .map((row) => [
               `${name(row.invocation, row.detail)} · ${row.outcome}`,
               copy.performance.value(Math.round(row.count), row.p95Ms),
@@ -701,7 +701,7 @@ async function performancePanel(env: Env, fetcher: typeof fetch): Promise<Panel>
         title: `${p.phases} · ${copy.performance.slowest}`,
         rows: capped(
           [...metrics.phases]
-            .sort((a, b) => b.p95Ms - a.p95Ms)
+            .toSorted((a, b) => b.p95Ms - a.p95Ms)
             .map((row) => [
               `${p.phaseName[row.phase as keyof typeof p.phaseName] ?? row.phase} · ${row.operation}`,
               copy.performance.value(Math.round(row.calls), row.p95Ms),
@@ -763,9 +763,9 @@ async function versionPanel(env: Env): Promise<Panel> {
 }
 
 /**
- * Menu della chat dell'owner: i comandi del Control Center, poi quelli dei venditori in
- * italiano, che nella sua chat continuano a funzionare. `scripts/telegram-bot.mjs` lo compone
- * allo stesso modo per il readback.
+ * Menu della chat dell'owner: i comandi del Control Center, poi quelli dei venditori in italiano,
+ * che nella sua chat continuano a funzionare. `scripts/telegram-bot.mjs` lo compone allo stesso
+ * modo per il readback.
  */
 export function ownerMenu() {
   return [

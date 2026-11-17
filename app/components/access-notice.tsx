@@ -8,6 +8,7 @@ import { DeleteAccount, type DeletionAccess } from "~/components/delete-account"
 import { StatusAlert } from "~/components/status";
 import { useTurnstile } from "~/components/turnstile";
 import { Button } from "~/components/ui/button";
+
 import type { AccessNoticeView } from "../access-notice";
 import { supportEmail } from "../app-copy";
 import { accessPath, securityPath, storeNoticeParam } from "../app-links";
@@ -136,8 +137,8 @@ export function AccessNotice({ notice }: { notice: AccessNoticeView | null }) {
   if (!notice) return null;
   const elsewhere = notice.source === "negozio" && notice.key === "altro-spazio";
   const signInAgain =
-    notice.source === "accesso" &&
-    (notice.key === "nuovo-accesso" || notice.key === "conferma-passkey");
+    notice.source === "accesso"
+    && (notice.key === "nuovo-accesso" || notice.key === "conferma-passkey");
   return (
     <div ref={banner} tabIndex={-1} className="outline-none">
       <StatusAlert

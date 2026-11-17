@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 
 import { parseChangelog, releaseChangelog, withChanges } from "../app/changelog.ts";
-import { testAccount } from "./test-account.ts";
 import { canonicalPath, localizedPath } from "../app/i18n.ts";
+import { testAccount } from "./test-account.ts";
 
 /**
  * Indirizzo servito di una pagina: `base` è un prefisso di lingua o di area, italiano o già
@@ -35,16 +35,16 @@ export function expectedPageError(text: string, resource: string, status: number
   const location = new URL(resource);
   const dataPath = `${page.pathname.replace(/\/$/u, "")}.data`;
   return (
-    location.origin === page.origin &&
-    (location.pathname === page.pathname || location.pathname === dataPath)
+    location.origin === page.origin
+    && (location.pathname === page.pathname || location.pathname === dataPath)
   );
 }
 
 /**
- * WebKit annota come errore JavaScript una richiesta di dati interrotta da una navigazione
- * ("Fetch API cannot load … due to access control checks") e Playwright la riporta come
- * eccezione della pagina, anche se React Router ha già gestito il rifiuto. Una richiesta `.data`
- * della stessa origine non attraversa controlli di accesso: soltanto quel caso non è un errore.
+ * WebKit annota come errore JavaScript una richiesta di dati interrotta da una navigazione ("Fetch
+ * API cannot load … due to access control checks") e Playwright la riporta come eccezione della
+ * pagina, anche se React Router ha già gestito il rifiuto. Una richiesta `.data` della stessa
+ * origine non attraversa controlli di accesso: soltanto quel caso non è un errore.
  */
 export function abortedDataRequest(error: Error, origin: string) {
   const [text = ""] = (error.stack ?? "").split("\n");
@@ -97,7 +97,7 @@ const shownReleases = parseChangelog(
       existsSync(changesDirectory)
         ? readdirSync(changesDirectory)
             .filter((name) => name.endsWith(".md"))
-            .sort()
+            .toSorted()
             .map((name) => readFileSync(new URL(name, changesDirectory), "utf8"))
         : [],
     ),

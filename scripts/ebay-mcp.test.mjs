@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import { describe, it } from "node:test";
+
 import { serverCommand, serverPackage } from "./ebay-mcp.mjs";
 
 describe("server MCP eBay per gli agenti", () => {

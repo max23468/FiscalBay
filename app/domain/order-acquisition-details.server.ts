@@ -1,6 +1,19 @@
-import { deadlineCheckAt, DuplicateLineIdentity } from "./order-import.server";
-import type { OrderObservation } from "./order-observation.server";
-import { writableStore } from "./store-state.server";
+import { logFailure } from "../errors";
+import {
+  fulfillmentObservation,
+  fulfillmentTaxIdentifiers,
+  readFulfillmentOrder,
+} from "../integrations/ebay/fulfillment.server";
+import {
+  readItemImage,
+  readTradingTaxObservations,
+  tradingReachDays,
+  tradingTaxBatch,
+  type TradingTaxObservation,
+} from "../integrations/ebay/trading.server";
+import { UpstreamError } from "../integrations/http.server";
+import { inSequence, untilStopped } from "../sequence";
+import { dayMilliseconds } from "../time";
 import {
   limitKey,
   rateLimitWait,
@@ -11,26 +24,13 @@ import {
   type Context,
   urgentDays,
 } from "./order-acquisition-context.server";
-import { logFailure } from "../errors";
-import { UpstreamError } from "../integrations/http.server";
-import {
-  fulfillmentObservation,
-  fulfillmentTaxIdentifiers,
-  readFulfillmentOrder,
-} from "../integrations/ebay/fulfillment.server";
-import { inSequence, untilStopped } from "../sequence";
-import { dayMilliseconds } from "../time";
-import {
-  readItemImage,
-  readTradingTaxObservations,
-  tradingReachDays,
-  tradingTaxBatch,
-  type TradingTaxObservation,
-} from "../integrations/ebay/trading.server";
+import { deadlineCheckAt, DuplicateLineIdentity } from "./order-import.server";
+import type { OrderObservation } from "./order-observation.server";
+import { writableStore } from "./store-state.server";
 
 /**
- * Dettaglio delle versioni Fulfillment non ancora lette: dati fiscali e immagini. Un errore
- * del singolo ordine rimanda la versione senza estenderlo all'esecuzione.
+ * Dettaglio delle versioni Fulfillment non ancora lette: dati fiscali e immagini. Un errore del
+ * singolo ordine rimanda la versione senza estenderlo all'esecuzione.
  */
 
 // Immagini lette per versione: sempre entro la quota di un negozio, così nessun ordine resta
@@ -68,8 +68,8 @@ async function knownImages(
 /**
  * Registra gli ordini di una pagina Fulfillment, in sequenza: la riconciliazione delle righe
  * presuppone scritture serializzate per negozio. Un ordine non conforme, o con righe ripetute, si
- * salta e si segnala come in Trading: gli altri restano acquisibili e la lettura del negozio non
- * si ferma a ogni turno sullo stesso ordine.
+ * salta e si segnala come in Trading: gli altri restano acquisibili e la lettura del negozio non si
+ * ferma a ogni turno sullo stesso ordine.
  */
 export async function recordFulfillmentOrders(ctx: Context, orders: readonly unknown[]) {
   let skipped = 0;
@@ -93,8 +93,8 @@ export async function recordFulfillmentOrders(ctx: Context, orders: readonly unk
 /** Credenziali rifiutate o limite di eBay: nessuna lettura successiva può riuscire. */
 export function stopsReads(error: unknown): error is UpstreamError {
   return (
-    error instanceof UpstreamError &&
-    (error.failure === "credentials" || error.failure === "rate_limited")
+    error instanceof UpstreamError
+    && (error.failure === "credentials" || error.failure === "rate_limited")
   );
 }
 
@@ -134,9 +134,9 @@ export type PendingDetail = {
 };
 
 /**
- * Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. Con
- * la quota di una chiamata esaurita la versione non è in errore: resta da leggere e riparte alla
- * fine dell'attesa registrata, senza consumare tentativi né rileggere Fulfillment a ogni turno.
+ * Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. Con la
+ * quota di una chiamata esaurita la versione non è in errore: resta da leggere e riparte alla fine
+ * dell'attesa registrata, senza consumare tentativi né rileggere Fulfillment a ogni turno.
  */
 async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) {
   const code = error instanceof UpstreamError ? error.failure : "invalid_response";
@@ -194,8 +194,8 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
 /**
  * Lettura fiscale Trading già coperta per la versione: una risposta riuscita e autorevole di
  * Trading, ricevuta dopo la modifica della versione (anche dalla passata periodica, che porta gli
- * identificativi) oppure su un ordine già pagato, i cui identificativi non cambiano più senza
- * che la passata periodica lo riveda. Argomento: espressione della data di modifica della versione.
+ * identificativi) oppure su un ordine già pagato, i cui identificativi non cambiano più senza che
+ * la passata periodica lo riveda. Argomento: espressione della data di modifica della versione.
  */
 const tradingCoveredSql = (modified: string) =>
   `tc.source = 'ebay_trading_get_orders' AND tc.verification = 'completed'
@@ -214,7 +214,10 @@ async function tradingCovered(ctx: Context, pending: PendingDetail): Promise<boo
   return row !== null;
 }
 
-/** Versione letta da Fulfillment, in attesa della lettura fiscale Trading del lotto o della scrittura. */
+/**
+ * Versione letta da Fulfillment, in attesa della lettura fiscale Trading del lotto o della
+ * scrittura.
+ */
 type Prepared = {
   pending: PendingDetail;
   observation: OrderObservation;
@@ -234,10 +237,10 @@ const later = (first: string | null, second: string) =>
   first === null || second > first ? second : first;
 
 /**
- * Prima parte del dettaglio: rilegge l'ordine, le immagini mancanti (un errore lascia la riga
- * senza immagine) e il CF Fulfillment sul marketplace italiano Production, e decide se serve la
- * lettura fiscale Trading. Negli altri casi Trading resta il fallback. null se la versione è già
- * chiusa, `budget` se il budget non basta: la versione resta in attesa.
+ * Prima parte del dettaglio: rilegge l'ordine, le immagini mancanti (un errore lascia la riga senza
+ * immagine) e il CF Fulfillment sul marketplace italiano Production, e decide se serve la lettura
+ * fiscale Trading. Negli altri casi Trading resta il fallback. null se la versione è già chiusa,
+ * `budget` se il budget non basta: la versione resta in attesa.
  */
 async function prepareDetail(
   ctx: Context,
@@ -253,13 +256,13 @@ async function prepareDetail(
     .first();
   if (!retained) return null;
   const qualifiedMarketplace =
-    ctx.access.configuration.apiOrigin === "https://api.ebay.com" &&
-    pending.marketplace_id === "EBAY_IT";
+    ctx.access.configuration.apiOrigin === "https://api.ebay.com"
+    && pending.marketplace_id === "EBAY_IT";
   // Trading non trova gli ordini oltre i novanta giorni: per loro nessuna ricerca fiscale, come
   // per una versione la cui lettura Trading è già coperta.
   const fallback =
-    Date.parse(pending.creation_time) > Date.parse(ctx.at) - tradingReachDays * dayMilliseconds &&
-    !(await tradingCovered(ctx, pending));
+    Date.parse(pending.creation_time) > Date.parse(ctx.at) - tradingReachDays * dayMilliseconds
+    && !(await tradingCovered(ctx, pending));
   // Le letture di un ordine corrente non aspettano; le altre restano entro il budget del giorno.
   const urgent =
     Date.parse(pending.creation_time) > Date.parse(ctx.at) - urgentDays * dayMilliseconds;
@@ -297,8 +300,8 @@ async function prepareDetail(
     );
     observation = fulfillmentObservation(payload, ctx.at);
     if (
-      observation.externalOrderId !== pending.external_order_id ||
-      (qualifiedMarketplace && observation.marketplaceId !== pending.marketplace_id)
+      observation.externalOrderId !== pending.external_order_id
+      || (qualifiedMarketplace && observation.marketplaceId !== pending.marketplace_id)
     )
       throw new UpstreamError("invalid_response");
     if (qualifiedMarketplace) {
@@ -308,9 +311,9 @@ async function prepareDetail(
         values = fulfillmentTaxIdentifiers(payload);
       } catch {}
       if (
-        values?.length === 1 &&
-        values[0]!.type === "CODICE_FISCALE" &&
-        (values[0]!.issuingCountry === null || values[0]!.issuingCountry === "IT")
+        values?.length === 1
+        && values[0]!.type === "CODICE_FISCALE"
+        && (values[0]!.issuingCountry === null || values[0]!.issuingCountry === "IT")
       )
         observation = {
           ...observation,
@@ -477,9 +480,9 @@ async function finishBatch(ctx: Context, batch: Prepared[]) {
 }
 
 /**
- * Dettaglio delle versioni indicate, nell'ordine dato. Le letture fiscali Trading si raccolgono
- * in lotti da `tradingTaxBatch` ordini con una chiamata ciascuno. false se il budget non basta:
- * le versioni non lette restano in attesa.
+ * Dettaglio delle versioni indicate, nell'ordine dato. Le letture fiscali Trading si raccolgono in
+ * lotti da `tradingTaxBatch` ordini con una chiamata ciascuno. false se il budget non basta: le
+ * versioni non lette restano in attesa.
  */
 async function processDetails(ctx: Context, pendings: PendingDetail[]): Promise<boolean> {
   const batch: Prepared[] = [];
@@ -511,9 +514,9 @@ export function readDetail(ctx: Context, pending: PendingDetail): Promise<boolea
 }
 
 /**
- * Versioni in attesa dalla più recente per data di modifica, quindi anche i cambiamenti di
- * ordini vecchi. Ogni dettaglio costa almeno una chiamata: una riga in più delle chiamate
- * rimaste basta a sapere se ne restano oltre il budget.
+ * Versioni in attesa dalla più recente per data di modifica, quindi anche i cambiamenti di ordini
+ * vecchi. Ogni dettaglio costa almeno una chiamata: una riga in più delle chiamate rimaste basta a
+ * sapere se ne restano oltre il budget.
  */
 export async function readDetails(ctx: Context): Promise<boolean> {
   const { results } = await ctx.db

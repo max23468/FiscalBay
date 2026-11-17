@@ -2,12 +2,13 @@ import { CirclePause } from "lucide-react";
 import { useId } from "react";
 
 import { StatusBadge } from "~/components/status";
+
 import type { AuditRow } from "../../domain/admin-audit.server";
 import type { WorkspaceDetail } from "../../domain/admin-directory.server";
-import { AuditTable } from "./governance";
-import { ActionForm, DataTable, Disclosure, Facts, Panel, Stat, StatGrid, TextField } from "./kit";
 import { formatNumber } from "../../format";
 import { maxConsoleField, maxGrantDays } from "../../limits";
+import { AuditTable } from "./governance";
+import { ActionForm, DataTable, Disclosure, Facts, Panel, Stat, StatGrid, TextField } from "./kit";
 import { storeActions } from "./store-actions";
 import { useAdmin } from "./use-admin";
 
@@ -87,9 +88,9 @@ function Stores({ workspace }: { workspace: WorkspaceDetail }) {
               reason
             />
           </Disclosure>
-          {free &&
-          item.ebayEnvironment === "production" &&
-          workspace.freeStore?.storeId !== item.id ? (
+          {free
+          && item.ebayEnvironment === "production"
+          && workspace.freeStore?.storeId !== item.id ? (
             <Disclosure label={w.store.freeStore}>
               <ActionForm intent="free-store" fields={fields} submit={w.store.freeStore} reason />
             </Disclosure>
@@ -166,10 +167,10 @@ function WorkspaceSummary({ workspace, now }: { workspace: WorkspaceDetail; now:
   const coverage = workspace.coverage
     ? workspace.entitlements.find(
         (item) =>
-          item.source === workspace.coverage &&
-          !item.revokedAt &&
-          Date.parse(item.startsAt) <= at &&
-          (!item.endsAt || Date.parse(item.endsAt) > at),
+          item.source === workspace.coverage
+          && !item.revokedAt
+          && Date.parse(item.startsAt) <= at
+          && (!item.endsAt || Date.parse(item.endsAt) > at),
       )
     : undefined;
   const activeStores = workspace.stores.filter((store) => store.connection === "active").length;

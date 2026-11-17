@@ -4,16 +4,15 @@
  * checkout: un file JSON con, per ambiente, nomi logici e date di scadenza, mai valori o
  * riferimenti di custodia. Lo script lo convalida, lo confronta con i segreti dichiarati in
  * `cloudflare.config.ts` e con `apply` lo copia nella D1 dell'ambiente, dove la console ne ricava
- * le anomalie: una scadenza entro 45 giorni avvisa l'owner sul Control Center, una voce senza
- * data resta da completare.
+ * le anomalie: una scadenza entro 45 giorni avvisa l'owner sul Control Center, una voce senza data
+ * resta da completare.
  *
- * Forma del file, con `expires` uguale a una data, a `null` se ancora da cercare o a `"never"`
- * per una credenziale che non scade:
- *   { "test": [{ "name": "EBAY_CLIENT_SECRET", "expires": "2027-04-30" }], "live": [] }
+ * Forma del file, con `expires` uguale a una data, a `null` se ancora da cercare o a `"never"` per
+ * una credenziale che non scade: { "test": [{ "name": "EBAY_CLIENT_SECRET", "expires": "2027-04-30"
+ * }], "live": [] }
  *
- * Uso: node scripts/credential-expiries.mjs [plan|apply] [--mode live] [--local]
- *        [--file <percorso>]
- * Il percorso predefinito è `FISCALBAY_CREDENTIAL_REGISTRY` o
+ * Uso: node scripts/credential-expiries.mjs [plan|apply] [--mode live] [--local] [--file
+ * <percorso>] Il percorso predefinito è `FISCALBAY_CREDENTIAL_REGISTRY` o
  * `~/.config/fiscalbay/credential-expiries.json`.
  */
 import { readFileSync } from "node:fs";
@@ -32,13 +31,13 @@ const day = 86_400_000;
 const namePattern = /^[\p{L}\p{N} _.:'()«»-]{1,80}$/u;
 
 export const defaultFile = () =>
-  process.env.FISCALBAY_CREDENTIAL_REGISTRY ??
-  path.join(homedir(), ".config", "fiscalbay", "credential-expiries.json");
+  process.env.FISCALBAY_CREDENTIAL_REGISTRY
+  ?? path.join(homedir(), ".config", "fiscalbay", "credential-expiries.json");
 
 /**
  * Segreti che la configurazione non dichiara: senza di loro si fermano acquisti, Telegram,
- * notifiche eBay, metriche o statistiche del sito, quindi anche la loro scadenza va registrata.
- * Il deploy pretende quelli dei servizi (`serviceSecrets` in `release.mjs`).
+ * notifiche eBay, metriche o statistiche del sito, quindi anche la loro scadenza va registrata. Il
+ * deploy pretende quelli dei servizi (`serviceSecrets` in `release.mjs`).
  */
 const optionalSecrets = [
   "ANALYTICS_READ_TOKEN",
@@ -63,16 +62,16 @@ export function declaredSecrets(mode) {
       .map(([name]) => name),
     ...optionalSecrets,
     ...(live ? [] : sandboxSecrets),
-  ].sort();
+  ].toSorted();
 }
 
 const validDate = (value) =>
-  /^\d{4}-\d{2}-\d{2}$/u.test(value) &&
-  new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
+  /^\d{4}-\d{2}-\d{2}$/u.test(value)
+  && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
 
 /**
- * Voci dell'ambiente dal contenuto del file. Rifiuta il registro intero alla prima voce non
- * valida: un registro copiato a metà nasconderebbe una scadenza.
+ * Voci dell'ambiente dal contenuto del file. Rifiuta il registro intero alla prima voce non valida:
+ * un registro copiato a metà nasconderebbe una scadenza.
  */
 export function parseRegistry(text, environment) {
   let registry;
@@ -91,9 +90,9 @@ export function parseRegistry(text, environment) {
     seen.add(name);
     const { expires } = entry;
     if (
-      expires !== null &&
-      expires !== "never" &&
-      !(typeof expires === "string" && validDate(expires))
+      expires !== null
+      && expires !== "never"
+      && !(typeof expires === "string" && validDate(expires))
     )
       throw new Error(`Voce «${name}»: scadenza non valida, serve AAAA-MM-GG, null o "never".`);
     return { name, expires };

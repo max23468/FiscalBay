@@ -31,9 +31,9 @@ export async function markNotificationsRead(
 }
 
 /**
- * Elimina dalla campanella le notifiche indicate, che contano anche come lette. La riga riparte
- * da adesso: la notifica resta nascosta per i 30 giorni della campanella, mentre lo stesso
- * problema ripresentato più avanti ha un identificativo nuovo e torna visibile.
+ * Elimina dalla campanella le notifiche indicate, che contano anche come lette. La riga riparte da
+ * adesso: la notifica resta nascosta per i 30 giorni della campanella, mentre lo stesso problema
+ * ripresentato più avanti ha un identificativo nuovo e torna visibile.
  */
 export async function dismissNotifications(
   db: D1Database,
@@ -75,9 +75,9 @@ export async function restoreNotifications(
 /** Identificativi inviati dal browser, nel formato delle notifiche e entro il limite. */
 export function parseNotificationIds(value: string): string[] | null {
   const ids = value.split(",").filter(Boolean);
-  return ids.length > 0 &&
-    ids.length <= maxReadNotifications &&
-    ids.every((id) => id.length <= 200 && /^[a-z-]+:/u.test(id))
+  return ids.length > 0
+    && ids.length <= maxReadNotifications
+    && ids.every((id) => id.length <= 200 && /^[a-z-]+:/u.test(id))
     ? ids
     : null;
 }

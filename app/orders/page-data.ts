@@ -10,8 +10,8 @@ export interface SecondaryActions {
 }
 
 /** Piano, prova e sblocchi del ciclo: tutto ciò che la pagina Ordini usa dell'account. */
-export type OrdersAccount = Pick<AccountView, "plan" | "quota" | "trial"> &
-  Partial<Pick<AccountView, "trialAvailable" | "freeSuspended">>;
+export type OrdersAccount = Pick<AccountView, "plan" | "quota" | "trial">
+  & Partial<Pick<AccountView, "trialAvailable" | "freeSuspended">>;
 
 /**
  * Dati della pagina Ordini, uguali per l'area reale (ordini persistiti e autorizzati) e per
@@ -58,13 +58,13 @@ export interface OrdersPageData extends SecondaryActions {
   /** Le Impostazioni del piano esistono: l'avviso degli sblocchi esauriti vi rimanda. */
   settings: boolean;
   /**
-   * Proposta del consenso marketing, una volta e a primi passi conclusi, a chi in registrazione
-   * non ha aderito e non ha più scelto (§14).
+   * Proposta del consenso marketing, una volta e a primi passi conclusi, a chi in registrazione non
+   * ha aderito e non ha più scelto (§14).
    */
   marketingProposal?: boolean;
   /**
-   * Collegamento di un negozio dal primo accesso: pagina reale, oppure null finché non è
-   * possibile (email da confermare). Assente, l'azione resta quella simulata dell'anteprima.
+   * Collegamento di un negozio dal primo accesso: pagina reale, oppure null finché non è possibile
+   * (email da confermare). Assente, l'azione resta quella simulata dell'anteprima.
    */
   connectHref?: string | null;
 }
@@ -80,7 +80,7 @@ export function unlockable(fiscal: FiscalView) {
   return fiscal.state === "locked" && !fiscal.hold;
 }
 
-/** eBay non risponde: le azioni verso eBay restano sospese. */
+/** EBay non risponde: le azioni verso eBay restano sospese. */
 export function ebayDownNotice(data: Pick<OrdersPageData, "notices">) {
   return data.notices.find((notice) => notice.kind === "ebay-down");
 }
@@ -91,8 +91,8 @@ export function importingNotice(data: Pick<OrdersPageData, "notices">) {
 }
 
 /**
- * Sblocco chiesto dalla pagina e simulato nell'anteprima con lo stesso modulo: l'intent, gli
- * ordini separati da virgola e la scelta di non chiedere più la conferma.
+ * Sblocco chiesto dalla pagina e simulato nell'anteprima con lo stesso modulo: l'intent, gli ordini
+ * separati da virgola e la scelta di non chiedere più la conferma.
  */
 export const unlockIntent = "unlock";
 

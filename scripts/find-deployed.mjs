@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 /**
  * Base del confronto sui push a `develop`: l'ultimo deploy test riuscito oppure, se più recente,
- * l'ultima run riuscita le cui modifiche da quel deploy non chiedono un deploy. Una run annullata
- * o un deploy fallito restano nel diff della run successiva; le prove e gli strumenti già
- * qualificati da una run verde non si ripetono finché non arriva il deploy seguente.
- * Senza un deploy riuscito antenato di HEAD l'output resta vuoto e il gate completo.
- * Con `--production` indica il commit attivo in Production, base del lotto da promuovere.
+ * l'ultima run riuscita le cui modifiche da quel deploy non chiedono un deploy. Una run annullata o
+ * un deploy fallito restano nel diff della run successiva; le prove e gli strumenti già qualificati
+ * da una run verde non si ripetono finché non arriva il deploy seguente. Senza un deploy riuscito
+ * antenato di HEAD l'output resta vuoto e il gate completo. Con `--production` indica il commit
+ * attivo in Production, base del lotto da promuovere.
  */
 import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { needsDeploy } from "./classify-changes.mjs";
 import { ghJson, isAncestor, runJobs } from "./lib/provider.mjs";
 import { publicVersion, publicationRecord } from "./release/records.mjs";

@@ -1,5 +1,5 @@
-import { formatDate } from "../format";
 import { isProduction } from "../app-links";
+import { formatDate } from "../format";
 import { UpstreamError } from "../integrations/http.server";
 import {
   ownerCallbackPrefix,
@@ -13,8 +13,8 @@ import { backoffMs, minute } from "./work-timing";
 
 /**
  * Forma dei messaggi del Control Center dell'owner: un titolo, tabelle di righe etichetta-valore
- * per sezione, una nota facoltativa e il piè di pagina con ambiente e ora. Lo stesso pannello dà
- * il messaggio a tabelle e il testo semplice copiabile.
+ * per sezione, una nota facoltativa e il piè di pagina con ambiente e ora. Lo stesso pannello dà il
+ * messaggio a tabelle e il testo semplice copiabile.
  */
 
 export type Row = [label: string, value: string];
@@ -36,8 +36,8 @@ const truncated = "\n… testo troncato";
 export const tableRows = 15;
 
 /**
- * Attesa prima di ritentare un avviso all'owner dopo `failures` invii non riusciti: crescente
- * fino a sei ore, o quella indicata da Telegram.
+ * Attesa prima di ritentare un avviso all'owner dopo `failures` invii non riusciti: crescente fino
+ * a sei ore, o quella indicata da Telegram.
  */
 export function ownerRetryMs(failures: number, error: unknown): number {
   return backoffMs(
@@ -105,22 +105,22 @@ export function plainText(env: Env, panel: Panel, now: Date) {
 
 /**
  * Rifiuto del messaggio a tabelle per la sua forma, come un pannello oltre i limiti di Telegram:
- * ripeterlo non cambierebbe l'esito. Restano fuori la chat bloccata (403) e i rifiuti noti
- * della modifica.
+ * ripeterlo non cambierebbe l'esito. Restano fuori la chat bloccata (403) e i rifiuti noti della
+ * modifica.
  */
 export function panelRejected(error: unknown) {
   return (
-    error instanceof UpstreamError &&
-    error.failure === "rejected" &&
-    error.details.status === 400 &&
-    error.details.providerCode === undefined
+    error instanceof UpstreamError
+    && error.failure === "rejected"
+    && error.details.status === 400
+    && error.details.providerCode === undefined
   );
 }
 
 /**
- * Pannello a tabelle in un nuovo messaggio. Se Telegram lo rifiuta per la sua forma parte lo
- * stesso pannello in testo semplice troncato, quello di «Copia», invece di ritentare fino alla
- * scadenza un invio che fallirebbe sempre.
+ * Pannello a tabelle in un nuovo messaggio. Se Telegram lo rifiuta per la sua forma parte lo stesso
+ * pannello in testo semplice troncato, quello di «Copia», invece di ritentare fino alla scadenza un
+ * invio che fallirebbe sempre.
  */
 export async function sendPanel(
   env: Env,
@@ -138,8 +138,8 @@ export async function sendPanel(
 }
 
 /**
- * Dati di un pulsante dell'owner: vista, argomento numerico ed eventuale modo, `c` per la copia
- * e `n` per un nuovo messaggio invece di riscrivere quello del pulsante.
+ * Dati di un pulsante dell'owner: vista, argomento numerico ed eventuale modo, `c` per la copia e
+ * `n` per un nuovo messaggio invece di riscrivere quello del pulsante.
  */
 export function ownerCallback(view: string, arg = 0, mode?: "c" | "n") {
   return `${ownerCallbackPrefix}${view}:${arg}${mode ? `:${mode}` : ""}`;

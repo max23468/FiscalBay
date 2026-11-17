@@ -1,9 +1,9 @@
 import { stalledDeletions } from "./account-deletion.server";
-import { stalledEbayDeletions } from "./ebay-account-deletion.server";
 import { auditInProgress } from "./admin-audit.server";
+import { stalledEbayDeletions } from "./ebay-account-deletion.server";
 import { bulkDataAnomalies, quotaAnomalies } from "./ebay-quotas.server";
-import { minute, stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
 import { listedOrder, orderLineageSql, storeLabelSql } from "./store-state.server";
+import { minute, stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
 
 /**
  * Stato operativo per la console (§15): lavori periodici, ricevute dei provider, letture dei
@@ -68,9 +68,9 @@ export const credentialWarningDays = 45;
 
 /**
  * Ordini italiani senza dato fiscale (§31): un negozio li segnala quando, fra gli ordini delle
- * ultime 48 ore, ne mancano almeno 5 e almeno il 60%. Gli ordini delle ultime 3 ore attendono
- * la passata Trading, che spesso porta il dato dopo. Indica in anticipo un campo o uno scope che
- * eBay ha smesso di restituire, non un acquirente che non l'ha indicato.
+ * ultime 48 ore, ne mancano almeno 5 e almeno il 60%. Gli ordini delle ultime 3 ore attendono la
+ * passata Trading, che spesso porta il dato dopo. Indica in anticipo un campo o uno scope che eBay
+ * ha smesso di restituire, non un acquirente che non l'ha indicato.
  */
 export const taxGap = { orders: 5, percent: 60, windowHours: 48, settleHours: 3 } as const;
 
@@ -247,7 +247,8 @@ async function readSignals(db: D1Database, now: Date, at: string) {
 }
 
 /** Primo istante fra le righe. */
-const earliest = (values: (string | number | null | undefined)[]) => values.map(String).sort()[0]!;
+const earliest = (values: (string | number | null | undefined)[]) =>
+  values.map(String).toSorted()[0]!;
 
 /** Somma dei conteggi delle righe. */
 const totalCount = (rows: { count?: string | number | null }[]) =>
@@ -338,8 +339,8 @@ function credentialAnomalies(credentials: Signals["credentials"]): Anomaly[] {
       kind: "credential_expiry",
       severity: expiring.some((row) => row.expired) ? "p1" : "p2",
       since: new Date(
-        Date.parse(`${String(expiring[0]!.expires)}T00:00:00.000Z`) -
-          credentialWarningDays * 24 * 60 * minute,
+        Date.parse(`${String(expiring[0]!.expires)}T00:00:00.000Z`)
+          - credentialWarningDays * 24 * 60 * minute,
       ).toISOString(),
       count: expiring.length,
       subjects: expiring.map((row) => ({
@@ -439,7 +440,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       severity: stalled.some((task) => task.task === "billing" || task.task === "token_refresh")
         ? "p1"
         : "p2",
-      since: stalled.map((task) => task.queuedAt ?? task.slot ?? at).sort()[0]!,
+      since: stalled.map((task) => task.queuedAt ?? task.slot ?? at).toSorted()[0]!,
       count: stalled.length,
       subjects: stalled.map((task) => ({ id: task.task, label: task.task, href: "lavori" })),
     });
@@ -450,7 +451,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       key: "receipts_stalled",
       kind: "receipts_stalled",
       severity: delayed.some((receipts) => receipts.provider === "stripe") ? "p1" : "p2",
-      since: delayed.map((receipts) => receipts.oldest ?? at).sort()[0]!,
+      since: delayed.map((receipts) => receipts.oldest ?? at).toSorted()[0]!,
       count: delayed.reduce((total, receipts) => total + receipts.stalled, 0),
       subjects: delayed.map((receipts) => ({
         id: receipts.provider,
@@ -512,7 +513,9 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       key: "account_deletion",
       kind: "account_deletion",
       severity: deletions.some((deletion) => deletion.renewals_blocked_at) ? "p1" : "p2",
-      since: [...deletions, ...ebayDeletions].map((deletion) => deletion.requested_at).sort()[0]!,
+      since: [...deletions, ...ebayDeletions]
+        .map((deletion) => deletion.requested_at)
+        .toSorted()[0]!,
       count: deletions.length + ebayDeletions.length,
       subjects: [
         ...deletions.map((deletion) => ({
@@ -544,7 +547,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
 
   anomalies.push(...credentialAnomalies(credentials));
 
-  return anomalies.sort(
+  return anomalies.toSorted(
     (a, b) =>
       severityOrder[a.severity] - severityOrder[b.severity] || a.since.localeCompare(b.since),
   );

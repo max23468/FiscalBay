@@ -11,27 +11,28 @@ const ebayImages = ["https://i.ebayimg.com", "https://i.ebayimg.sandbox.ebay.com
 const reportGroup = "csp";
 
 /**
- * Nonce casuale degli script inline di React Router e di React, generato a ogni risposta
- * preparata dal Worker. La copia di Home e Prezzi servita a chi non ha cookie
- * (`page-cache.server.ts`) lo ripete, insieme alla CSP che lo dichiara, per i 60 secondi
- * della sua durata.
+ * Nonce casuale degli script inline di React Router e di React, generato a ogni risposta preparata
+ * dal Worker. La copia di Home e Prezzi servita a chi non ha cookie (`page-cache.server.ts`) lo
+ * ripete, insieme alla CSP che lo dichiara, per i 60 secondi della sua durata.
  */
 export function scriptNonce(): string {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
 }
 
-/** Le violazioni arrivano all'endpoint dell'origine: Reporting API e, nei browser senza, `report-uri`. */
+/**
+ * Le violazioni arrivano all'endpoint dell'origine: Reporting API e, nei browser senza,
+ * `report-uri`.
+ */
 const reporting = [`report-uri ${cspReportPath}`, `report-to ${reportGroup}`];
 
 /**
  * CSP dei documenti HTML. Eseguono soltanto gli script con il nonce della risposta e quelli che
  * essi caricano (`'strict-dynamic'`): moduli di React Router, widget Turnstile e beacon di Web
- * Analytics, che porta il nonce. `https:` vale soltanto nei browser senza `'strict-dynamic'`,
- * che ignorano il nonce. Gli stili inline restano ammessi per gli attributi `style` di React e
- * delle animazioni; l'unico frame esterno è il widget. `form-action` manca di proposito: i form
- * di accesso, collegamento eBay, Stripe e Telegram finiscono con redirect verso pagine dei
- * provider che a loro volta rimandano altrove, e il browser applicherebbe la direttiva a ogni
- * passaggio.
+ * Analytics, che porta il nonce. `https:` vale soltanto nei browser senza `'strict-dynamic'`, che
+ * ignorano il nonce. Gli stili inline restano ammessi per gli attributi `style` di React e delle
+ * animazioni; l'unico frame esterno è il widget. `form-action` manca di proposito: i form di
+ * accesso, collegamento eBay, Stripe e Telegram finiscono con redirect verso pagine dei provider
+ * che a loro volta rimandano altrove, e il browser applicherebbe la direttiva a ogni passaggio.
  */
 export function contentSecurityPolicy(nonce: string): string {
   return [

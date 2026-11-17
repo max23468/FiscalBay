@@ -1,10 +1,6 @@
 {
   "$schema": "https://react.doctor/schema/config.json",
   "blocking": "warning",
-  "supplyChain": {
-    "enabled": false
-  },
-  "ignore": {
-    "files": ["build/**", ".cloudflare/**", ".react-router/**"]
-  }
+  "supplyChain": { "enabled": false },
+  "ignore": { "files": ["build/**", ".cloudflare/**", ".react-router/**"] }
 }

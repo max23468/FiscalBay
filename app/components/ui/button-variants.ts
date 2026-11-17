@@ -2,12 +2,12 @@ import { cva } from "class-variance-authority";
 import { cn } from "cn";
 
 const variants = cva(
-  "group/button relative inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-[color,background-color,border-color,box-shadow,translate] duration-(--duration-quick) outline-none motion-reduce:transition-[color,background-color,border-color,box-shadow] select-none pointer-coarse:after:absolute pointer-coarse:after:top-1/2 pointer-coarse:after:left-1/2 pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 pointer-coarse:after:-translate-1/2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-60 data-disabled:pointer-events-none data-disabled:opacity-60 aria-busy:cursor-progress aria-busy:opacity-100! aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='size-'])]:size-4",
+  "group/button relative inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-[color,background-color,border-color,box-shadow,translate] duration-(--duration-quick) outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-60 aria-busy:cursor-progress aria-busy:opacity-100! aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 motion-reduce:transition-[color,background-color,border-color,box-shadow] dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 pointer-coarse:after:absolute pointer-coarse:after:top-1/2 pointer-coarse:after:left-1/2 pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 pointer-coarse:after:-translate-1/2 data-disabled:pointer-events-none data-disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-xs shadow-brand-navy/20 inset-shadow-[0_1px_rgb(255_255_255/0.16)] hover:bg-primary-hover active:inset-shadow-none dark:inset-shadow-[0_1px_rgb(255_255_255/0.24)]",
+          "bg-primary text-primary-foreground shadow-xs inset-shadow-[0_1px_rgb(255_255_255/0.16)] shadow-brand-navy/20 hover:bg-primary-hover active:inset-shadow-none dark:inset-shadow-[0_1px_rgb(255_255_255/0.24)]",
         outline:
           "border-border bg-card text-foreground shadow-xs shadow-brand-navy/5 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-muted/40 dark:hover:bg-muted",
         secondary:
@@ -29,17 +29,14 @@ const variants = cva(
           "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
       },
     },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
+    defaultVariants: { variant: "default", size: "default" },
   },
 );
 
 /**
- * Classi del pulsante, riusate anche dai collegamenti con lo stesso aspetto. Le classi in
- * conflitto si risolvono qui, come nel pulsante: il bordo della variante prevale su quello
- * trasparente di base anche in un collegamento.
+ * Classi del pulsante, riusate anche dai collegamenti con lo stesso aspetto. Le classi in conflitto
+ * si risolvono qui, come nel pulsante: il bordo della variante prevale su quello trasparente di
+ * base anche in un collegamento.
  */
 export function buttonVariants(props?: Parameters<typeof variants>[0]) {
   return cn(variants(props));

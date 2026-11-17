@@ -19,39 +19,38 @@ import {
 } from "../domain/export-jobs.server";
 import { orderAllowance } from "../domain/grants.server";
 import { exportFileName } from "../domain/order-export.server";
+import { visibleOrderTallies } from "../domain/orders.server";
 import { XlsxRowLimitError } from "../domain/xlsx.server";
+import { errorResponse, postOnly } from "../error-response";
+import { logFailure } from "../errors";
+import { localizedPath } from "../i18n";
+import { measure } from "../observability.server";
 import {
   customColumns,
   parseColumns,
   standardColumns,
   type ExportRows,
 } from "../orders/export-columns";
-import { visibleOrderTallies } from "../domain/orders.server";
-import { errorResponse, postOnly } from "../error-response";
-import { logFailure } from "../errors";
-import { localizedPath } from "../i18n";
-import { measure } from "../observability.server";
-import { limitedHeaders, requestLimitWait } from "../request-limits.server";
-import { onlyAvailable, periodScope } from "../orders/order-criteria";
 import { accountExportScope } from "../orders/export-scope.server";
+import { onlyAvailable, periodScope } from "../orders/order-criteria";
+import { limitedHeaders, requestLimitWait } from "../request-limits.server";
 import type { ActionResult } from "../view-models";
 import type { Route } from "./+types/order-export";
 
 export const loader = postOnly;
 
 /**
- * File degli ordini, creato soltanto dalla conferma «Crea file». L'ambito arriva
- * nell'indirizzo, uguale a quello della sezione Esportazione (filtri, ricerca cifrata,
- * istantanea e selezione); le opzioni nel corpo. XLSX e colonne scelte valgono soltanto con
- * Premium, riletto qui come gli altri diritti; colonne uguali allo schema standard non sono una
- * scelta Premium. Sessione, negozi, conservazione e diritti si rileggono qui, all'istante della
- * richiesta. Il file si salva nel bucket privato e la risposta
- * rimanda al suo download, che passa dal Worker senza URL bearer; il file vale al più 24 ore,
- * non oltre la fine della copertura Premium con cui è nato né oltre il primo termine dei dati
- * inclusi. Oltre `exportJobOrders` ordini il file si prepara dalla coda: la risposta 202 lo
- * annuncia e la campanella avvisa quando è pronto, con al più `maxQueuedExports` file in
- * preparazione per utente. Con `Accept: application/json` un rifiuto risponde con l'avviso; un
- * modulo inviato senza JavaScript torna alla sezione.
+ * File degli ordini, creato soltanto dalla conferma «Crea file». L'ambito arriva nell'indirizzo,
+ * uguale a quello della sezione Esportazione (filtri, ricerca cifrata, istantanea e selezione); le
+ * opzioni nel corpo. XLSX e colonne scelte valgono soltanto con Premium, riletto qui come gli altri
+ * diritti; colonne uguali allo schema standard non sono una scelta Premium. Sessione, negozi,
+ * conservazione e diritti si rileggono qui, all'istante della richiesta. Il file si salva nel
+ * bucket privato e la risposta rimanda al suo download, che passa dal Worker senza URL bearer; il
+ * file vale al più 24 ore, non oltre la fine della copertura Premium con cui è nato né oltre il
+ * primo termine dei dati inclusi. Oltre `exportJobOrders` ordini il file si prepara dalla coda: la
+ * risposta 202 lo annuncia e la campanella avvisa quando è pronto, con al più `maxQueuedExports`
+ * file in preparazione per utente. Con `Accept: application/json` un rifiuto risponde con l'avviso;
+ * un modulo inviato senza JavaScript torna alla sezione.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
@@ -101,8 +100,8 @@ export async function action({ request }: Route.ActionArgs) {
       accountExportScope(area.session, query, environment, premium, now),
     );
     const scoped =
-      fromOrders?.filter ??
-      periodScope(String(form.get("period") ?? ""), premium ? "premium" : "free", now);
+      fromOrders?.filter
+      ?? periodScope(String(form.get("period") ?? ""), premium ? "premium" : "free", now);
     const filter = form.get("fiscal") === "available" ? onlyAvailable(scoped) : scoped;
     // Un ambito senza ordini non produce un file con la sola intestazione.
     const [tally] = filter
@@ -129,10 +128,7 @@ export async function action({ request }: Route.ActionArgs) {
       return json
         ? Response.json(
             { ok: true, notice: t.settings.export.exportQueued } satisfies ActionResult,
-            {
-              status: 202,
-              headers: { "cache-control": "no-store" },
-            },
+            { status: 202, headers: { "cache-control": "no-store" } },
           )
         : redirect(`${localizedPath(language, `${settingsPath}/esportazione`)}?${query}`, 303);
     }

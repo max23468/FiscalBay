@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
+
+import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
 import {
   consumerTests,
   criticalModule,
@@ -28,7 +30,6 @@ import {
   pullRequestShards,
   unsplitRetests,
 } from "./mutation.mjs";
-import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
 
 describe("esito dei mutation test", () => {
   it("con la riusabilità della PR la matrice parte senza restare in attesa del proprio modulo", () => {
@@ -474,7 +475,10 @@ describe("esito dei mutation test", () => {
         [3, "Survived"],
       ],
     );
-    assert.deepEqual(Object.keys(merged.testFiles).sort(), ["test/a.spec.ts", "test/b.spec.ts"]);
+    assert.deepEqual(Object.keys(merged.testFiles).toSorted(), [
+      "test/a.spec.ts",
+      "test/b.spec.ts",
+    ]);
     assert.equal(mergeReports([]), undefined);
   });
 
@@ -571,10 +575,7 @@ describe("esito dei mutation test", () => {
     const extracted = [
       ...files,
       { path: "app/domain/estratta.server.ts", text: "export const regola = 1;" },
-      {
-        path: "app/domain/grants.server.ts",
-        text: 'import { regola } from "./estratta.server";',
-      },
+      { path: "app/domain/grants.server.ts", text: 'import { regola } from "./estratta.server";' },
     ].filter(
       (file, index, all) => all.findLastIndex((other) => other.path === file.path) === index,
     );

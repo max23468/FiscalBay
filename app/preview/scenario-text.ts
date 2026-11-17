@@ -257,14 +257,8 @@ export const scenarioText: Record<ScenarioId, Record<Language, { name: string; f
     },
   },
   "nessun-ordine": {
-    it: {
-      name: "Nessun ordine",
-      focus: "Negozio collegato e aggiornato, periodo senza ordini.",
-    },
-    en: {
-      name: "No orders",
-      focus: "Store connected and up to date, no orders in the period.",
-    },
+    it: { name: "Nessun ordine", focus: "Negozio collegato e aggiornato, periodo senza ordini." },
+    en: { name: "No orders", focus: "Store connected and up to date, no orders in the period." },
   },
   caricamento: {
     it: { name: "Caricamento", focus: "Scheletro aderente al layout delle schede." },

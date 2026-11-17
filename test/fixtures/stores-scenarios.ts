@@ -1,24 +1,15 @@
 import { env } from "cloudflare:workers";
-
 import { afterEach, beforeEach, vi } from "vitest";
 
-import { unlockOrders } from "../../app/domain/grants.server";
-
 import { handleAuthRequest } from "../../app/auth-route.server";
-
-import { action as storesAction, loader as loadStores } from "../../app/routes/stores";
-
+import { unlockOrders } from "../../app/domain/grants.server";
 import { action as settingsAction, loader as loadSettings } from "../../app/routes/settings";
-
-import { resetDatabase } from "./database-fixtures";
-
-import { syntheticEbay } from "./ebay-fixtures";
-
+import { action as storesAction, loader as loadStores } from "../../app/routes/stores";
 import { verifiedSession } from "./account-fixtures";
-
-import { beginStoreLink, storeCallback } from "./store-link-fixtures";
-
+import { resetDatabase } from "./database-fixtures";
+import { syntheticEbay } from "./ebay-fixtures";
 import { callRoute, testOrigin } from "./route-fixtures";
+import { beginStoreLink, storeCallback } from "./store-link-fixtures";
 
 export const day = 24 * 60 * 60 * 1000;
 

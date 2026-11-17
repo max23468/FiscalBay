@@ -1,11 +1,15 @@
-import { passwordSession } from "./fixtures/account-fixtures";
-import { env } from "cloudflare:workers";
-
 import { hashPassword as originalHash } from "better-auth/crypto";
-
 import { getMigrations } from "better-auth/db/migration";
-
+import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  passwordSession,
+  emailSender,
+  mailEnv,
+  sessionCookie,
+  verifiedSession,
+} from "./fixtures/account-fixtures";
 
 const background = vi.hoisted(() => {
   vi.resetModules();
@@ -25,29 +29,17 @@ afterEach(drainBackground);
 
 import { sendEmail } from "../app/account-email.server";
 import { handleAuthRequest } from "../app/auth-route.server";
-import { countAuthAttempt, purgeAuthAttempts } from "../app/domain/auth-attempts.server";
-
 import { createAuth, createAuthOptions } from "../app/auth.server";
-
-import { withinOneLimitWindow } from "./fixtures/rate-limiter";
-
-import { completeRegistration } from "../app/domain/registration.server";
-
+import { countAuthAttempt, purgeAuthAttempts } from "../app/domain/auth-attempts.server";
 import { passkeySignals, withPasskeyUser } from "../app/domain/passkey-user.server";
-
-import { action as securityRouteAction } from "../app/routes/settings";
-
-import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
-
-import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
-
-import { action as passwordCheckAction } from "../app/routes/password-check";
-
-import { hashPassword, verifyPassword } from "../app/password.server";
-
-import { emailSender, mailEnv, sessionCookie, verifiedSession } from "./fixtures/account-fixtures";
+import { completeRegistration } from "../app/domain/registration.server";
 import { ebayStoreGrantScopes, ebayStoreScopes } from "../app/integrations/ebay/store-link.server";
-
+import { hashPassword, verifyPassword } from "../app/password.server";
+import { action as passwordCheckAction } from "../app/routes/password-check";
+import { action as securityRouteAction } from "../app/routes/settings";
+import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
+import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
+import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 import { routeData, routeResponse, pagePath } from "./fixtures/route-fixtures";
 
 it("mantiene i metodi di accesso e i flag di sicurezza previsti dal contratto Auth", () => {
@@ -425,10 +417,7 @@ describe("Better Auth su Workers e D1", () => {
     expect(send).toHaveBeenCalledTimes(2);
     for (const [message] of send.mock.calls) {
       expect(message).toMatchObject({
-        from: {
-          email: ["noreply", "fiscalbay.it"].join("@"),
-          name: "FiscalBay",
-        },
+        from: { email: ["noreply", "fiscalbay.it"].join("@"), name: "FiscalBay" },
         replyTo: ["supporto", "fiscalbay.it"].join("@"),
         to: user.email,
       });
@@ -540,9 +529,7 @@ describe("Better Auth su Workers e D1", () => {
     );
     expect(verify.status).toBe(403);
     const trailing = await handleAuthRequest(
-      new Request(`${origin}/api/auth/passkey/generate-register-options/`, {
-        headers: { cookie },
-      }),
+      new Request(`${origin}/api/auth/passkey/generate-register-options/`, { headers: { cookie } }),
       env,
     );
     expect(trailing.status).toBe(404);
@@ -952,8 +939,8 @@ describe("Better Auth su Workers e D1", () => {
       }),
     );
     const authorize = new URL((await start.json<{ url: string }>()).url);
-    expect(authorize.searchParams.get("scope")?.split(" ").sort()).toEqual(
-      [...ebayStoreScopes].sort(),
+    expect(authorize.searchParams.get("scope")?.split(" ").toSorted()).toEqual(
+      [...ebayStoreScopes].toSorted(),
     );
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = input instanceof Request ? input.url : String(input);
@@ -1245,9 +1232,7 @@ describe("Better Auth su Workers e D1", () => {
         const response = await handleAuthRequest(
           new Request(
             `http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${state}`,
-            {
-              headers: { cookie },
-            },
+            { headers: { cookie } },
           ),
           env,
         );

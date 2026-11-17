@@ -2,6 +2,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
 import { gh, ghJson } from "../lib/provider.mjs";
 
 /** Identità osservata, con SHA e digest dell'artefatto registrati da Cloudflare. */
@@ -38,11 +39,11 @@ export function receiptActive(receipt, version) {
   }
   // Ricevute anteriori all'introduzione della riconciliazione finale: sempre legate al readback.
   if (
-    receipt.version === version &&
-    receipt.readback &&
-    !receipt.rolledBack &&
-    /^[a-f0-9]{40}$/u.test(receipt.sha ?? "") &&
-    /^[a-f0-9]{64}$/u.test(receipt.digest ?? "")
+    receipt.version === version
+    && receipt.readback
+    && !receipt.rolledBack
+    && /^[a-f0-9]{40}$/u.test(receipt.sha ?? "")
+    && /^[a-f0-9]{64}$/u.test(receipt.digest ?? "")
   )
     return observedRelease(
       { version, identity: `${receipt.sha}:${receipt.digest.slice(0, 32)}` },
@@ -87,9 +88,9 @@ export function publicationRecord(
 ) {
   const repositoryId = api(`repos/${repository}`).id;
   const valid = (artifact) =>
-    !artifact.expired &&
-    artifact.workflow_run?.repository_id === repositoryId &&
-    artifact.workflow_run.head_repository_id === repositoryId;
+    !artifact.expired
+    && artifact.workflow_run?.repository_id === repositoryId
+    && artifact.workflow_run.head_repository_id === repositoryId;
   const named = api(
     `repos/${repository}/actions/artifacts?name=production-state-${version}&per_page=20`,
   ).artifacts;
@@ -97,15 +98,15 @@ export function publicationRecord(
     if (!valid(artifact)) return undefined;
     const run = knownRun ?? api(`repos/${repository}/actions/runs/${artifact.workflow_run.id}`);
     if (
-      ![".github/workflows/publish.yml", ".github/workflows/rollback.yml"].includes(run.path) ||
-      run.head_branch !== "main"
+      ![".github/workflows/publish.yml", ".github/workflows/rollback.yml"].includes(run.path)
+      || run.head_branch !== "main"
     )
       return undefined;
     const receipt = download(repository, artifact);
     const active = receiptActive(receipt, version);
     return active ? { ...receipt, active, artifact: artifact.id, run: run.id } : undefined;
   };
-  for (const artifact of named.sort((a, b) => b.id - a.id)) {
+  for (const artifact of named.toSorted((a, b) => b.id - a.id)) {
     const record = inspect(artifact);
     if (record) return record;
   }
@@ -120,7 +121,7 @@ export function publicationRecord(
       ).artifacts;
       for (const artifact of artifacts
         .filter((entry) => entry.name.startsWith("release-receipt-"))
-        .sort((a, b) => b.id - a.id)) {
+        .toSorted((a, b) => b.id - a.id)) {
         const record = inspect(
           {
             ...artifact,
@@ -147,11 +148,11 @@ export function publicationRecord(
         api(`repos/${repository}/actions/workflows/${workflow}/runs?branch=main&per_page=20`)
           .workflow_runs,
     )
-    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    .toSorted((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   for (const run of runs) {
     const [artifact] = api(`repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`)
       .artifacts.filter((entry) => entry.name.startsWith("production-state-"))
-      .sort((a, b) => b.id - a.id);
+      .toSorted((a, b) => b.id - a.id);
     if (!artifact) continue;
     const receipt = valid(artifact) ? download(repository, artifact) : undefined;
     const active =

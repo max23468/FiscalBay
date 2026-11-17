@@ -19,7 +19,7 @@
   "compilerOptions": {
     "composite": true,
     "types": ["node"],
-    "lib": ["ES2022", "ES2023.Intl", "DOM"],
+    "lib": ["ES2023", "DOM"],
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",

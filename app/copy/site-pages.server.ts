@@ -9,9 +9,9 @@ const exportGuidePath = "/guide/esportare-ordini-ebay-excel-csv" satisfies Guide
 const comparisonGuidePath = "/guide/confronto-console-venditori-ebay-ready-pro" satisfies GuidePath;
 
 /**
- * Testi delle pagine del sito pubblico. Restano sul server: i loader li consegnano già
- * risolti alla pagina, così il JavaScript dell'app e del sito non li scarica. Barra e footer
- * usano i testi comuni dell'interfaccia.
+ * Testi delle pagine del sito pubblico. Restano sul server: i loader li consegnano già risolti alla
+ * pagina, così il JavaScript dell'app e del sito non li scarica. Barra e footer usano i testi
+ * comuni dell'interfaccia.
  */
 const it = {
   home: {
@@ -92,7 +92,10 @@ const it = {
   },
   features: {
     title: "Funzionalità",
-    /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
+    /**
+     * Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola
+     * chiave.
+     */
     metaTitle: "Funzionalità | Codice Fiscale degli ordini eBay",
     description:
       "Codice Fiscale e Partita IVA dagli ordini eBay, sincronizzazione automatica, ricerca, export CSV e XLSX, notifiche Telegram e più negozi.",
@@ -153,7 +156,10 @@ const it = {
 
   pricing: {
     title: "Prezzi",
-    /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
+    /**
+     * Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola
+     * chiave.
+     */
     metaTitle: "Prezzi | Codice Fiscale degli ordini eBay",
     description:
       "Piano Free gratuito e Pro mensile, annuale o a vita per recuperare il Codice Fiscale dagli ordini eBay. Prova Pro di 14 giorni senza carta.",
@@ -237,7 +243,10 @@ const it = {
   },
   security: {
     title: "Sicurezza",
-    /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
+    /**
+     * Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola
+     * chiave.
+     */
     metaTitle: "Sicurezza | Codice Fiscale degli ordini eBay",
     description:
       "Come FiscalBay protegge l’accesso al tuo negozio eBay e i dati dei tuoi ordini: sola lettura, token cifrati e dati nell’Unione Europea.",
@@ -292,7 +301,10 @@ const it = {
   },
   faq: {
     title: "Domande frequenti",
-    /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
+    /**
+     * Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola
+     * chiave.
+     */
     metaTitle: "Domande frequenti | Codice Fiscale su eBay",
     description:
       "Risposte su FiscalBay: come ottenere Codice Fiscale e Partita IVA dagli ordini eBay, piani, prova Pro, pagamenti, permessi e dati.",
@@ -392,10 +404,7 @@ const en: SitePagesCopy = {
     howItWorks: "How it works",
     trust: ["Official eBay APIs", "Secure payments handled by Stripe", "No card to get started"],
     steps: [
-      {
-        title: "Connect eBay",
-        body: "Sign in to eBay and allow FiscalBay to read your orders.",
-      },
+      { title: "Connect eBay", body: "Sign in to eBay and allow FiscalBay to read your orders." },
       {
         title: "FiscalBay reads your orders",
         body: "It imports your recent orders, then reads new ones on its own and finds the tax code, when eBay provides it.",
@@ -730,10 +739,7 @@ const en: SitePagesCopy = {
     sicurezza: "Sign-in methods and active sessions in FiscalBay Settings",
   },
   legal: {
-    description: {
-      termini: "FiscalBay terms of service.",
-      privacy: "FiscalBay privacy policy.",
-    },
+    description: { termini: "FiscalBay terms of service.", privacy: "FiscalBay privacy policy." },
   },
 };
 

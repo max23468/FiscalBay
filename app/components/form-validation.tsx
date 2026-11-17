@@ -13,9 +13,9 @@ interface ValidationCopy {
 type Control = HTMLInputElement | HTMLTextAreaElement;
 
 /**
- * Testo più corto del minimo. Il browser lo segnala soltanto dopo una modifica dell'utente e
- * Safari lo dimentica quando il campo cambia tipo, come con «Mostra password»: la lunghezza si
- * controlla anche qui.
+ * Testo più corto del minimo. Il browser lo segnala soltanto dopo una modifica dell'utente e Safari
+ * lo dimentica quando il campo cambia tipo, come con «Mostra password»: la lunghezza si controlla
+ * anche qui.
  */
 function tooShort(control: Control) {
   const length = control.value.length;
@@ -37,9 +37,9 @@ function messageFor(control: Control, copy: ValidationCopy): string {
 }
 
 /**
- * Errori dei campi accanto al campo, al posto del fumetto del browser: valgono i
- * vincoli HTML (`required`, `type`, `minLength`). Il fumetto si disattiva solo
- * dopo l'idratazione, così senza JavaScript resta la validazione nativa.
+ * Errori dei campi accanto al campo, al posto del fumetto del browser: valgono i vincoli HTML
+ * (`required`, `type`, `minLength`). Il fumetto si disattiva solo dopo l'idratazione, così senza
+ * JavaScript resta la validazione nativa.
  */
 export function useFieldErrors(copy: ValidationCopy) {
   const id = useId();
@@ -88,8 +88,8 @@ export function useFieldErrors(copy: ValidationCopy) {
       control.focus();
     },
     /**
-     * Attributi del controllo: stato di validità, esplicito dopo la prima validazione, e
-     * messaggio collegato. Il focus sul campo annuncia l'errore tramite la descrizione.
+     * Attributi del controllo: stato di validità, esplicito dopo la prima validazione, e messaggio
+     * collegato. Il focus sul campo annuncia l'errore tramite la descrizione.
      */
     control(name: string, describedBy?: string) {
       const invalid = name in errors;

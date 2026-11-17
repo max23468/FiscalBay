@@ -25,8 +25,8 @@ declare global {
 }
 
 /**
- * Prestazioni nella console: le query di `metrics-queries.ts` sulla SQL API di Analytics Engine
- * e sui Workers Logs, per le ultime 24 ore dell'ambiente. I valori di Analytics Engine sono stime
+ * Prestazioni nella console: le query di `metrics-queries.ts` sulla SQL API di Analytics Engine e
+ * sui Workers Logs, per le ultime 24 ore dell'ambiente. I valori di Analytics Engine sono stime
  * pesate con il campionamento, non conteggi esatti; una lettura non riuscita resta indicata come
  * tale, mai come zero.
  */

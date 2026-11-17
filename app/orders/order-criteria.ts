@@ -42,9 +42,9 @@ export type OrderScope = { ids?: string[]; criteria: OrderCriteria; provisional?
 export type OrderTally = { orders: number; locked: number; available: number };
 
 /**
- * Istantanea dell'elenco aperto: gli ordini entrati negli elenchi dopo di essa non si
- * inseriscono fra quelli già letti, così «Carica altri», dettaglio, Indietro e ricarica
- * ritrovano lo stesso ordine. Nell'indirizzo è un cursore opaco.
+ * Istantanea dell'elenco aperto: gli ordini entrati negli elenchi dopo di essa non si inseriscono
+ * fra quelli già letti, così «Carica altri», dettaglio, Indietro e ricarica ritrovano lo stesso
+ * ordine. Nell'indirizzo è un cursore opaco.
  */
 export const snapshotParam = "vista";
 
@@ -103,8 +103,8 @@ export function orderCriteria(
 
 /**
  * Criteri dell'elenco aperto, uguali per la pagina Ordini e per l'esportazione: filtri
- * dall'indirizzo, negozio soltanto fra quelli filtrabili e istantanea dell'elenco. Senza
- * istantanea l'elenco si apre adesso.
+ * dall'indirizzo, negozio soltanto fra quelli filtrabili e istantanea dell'elenco. Senza istantanea
+ * l'elenco si apre adesso.
  */
 export function listCriteria(
   query: URLSearchParams,

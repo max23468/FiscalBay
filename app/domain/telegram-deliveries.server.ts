@@ -1,7 +1,13 @@
-import { activeEntitlementSql } from "./grants.server";
-import { workLockMilliseconds } from "./work-timing";
-import { listVisibleOrders } from "./orders.server";
+import { logFailure } from "../errors";
+import type { Language } from "../i18n";
+import { UpstreamError } from "../integrations/http.server";
+import { sendMessage, telegramConfigured, type BotMessage } from "../integrations/telegram.server";
 import { maxListedOrders } from "../orders/order-criteria";
+import { inSequence, untilStopped } from "../sequence";
+import { dayMilliseconds, localClock, zonedInstant } from "../time";
+import type { EbayEnvironment } from "../view-models";
+import { activeEntitlementSql } from "./grants.server";
+import { listVisibleOrders } from "./orders.server";
 import { serviceSetting } from "./service-settings.server";
 import {
   consultableStore,
@@ -9,14 +15,6 @@ import {
   orderLineageSql,
   storeLabelSql,
 } from "./store-state.server";
-import { backoffMs, minute } from "./work-timing";
-import {
-  telegramPreferencesSql,
-  telegramRecipient,
-  telegramRecipientSql,
-  type TelegramFilter,
-  type TelegramMode,
-} from "./telegram.server";
 import {
   digestMessage,
   emptyFiscalKey,
@@ -27,29 +25,30 @@ import {
   type OrderChange,
   type OrderNotice,
 } from "./telegram-messages.server";
-import { logFailure } from "../errors";
-import { UpstreamError } from "../integrations/http.server";
-import { sendMessage, telegramConfigured, type BotMessage } from "../integrations/telegram.server";
-import type { Language } from "../i18n";
-import type { EbayEnvironment } from "../view-models";
-import { inSequence, untilStopped } from "../sequence";
-import { dayMilliseconds, localClock, zonedInstant } from "../time";
+import {
+  telegramPreferencesSql,
+  telegramRecipient,
+  telegramRecipientSql,
+  type TelegramFilter,
+  type TelegramMode,
+} from "./telegram.server";
+import { workLockMilliseconds, backoffMs, minute } from "./work-timing";
 
 /**
  * Consegne Telegram degli ordini, in tre passi che si possono interrompere e riprendere:
  *
- * 1. valutazione: lo stato fiscale corrente di ogni ordine si confronta con quello registrato in
- *    `telegram_order_notices`; la variazione e il nuovo stato si scrivono nello stesso commit,
- *    con la condizione che lo stato registrato sia ancora quello letto. Una valutazione ripetuta
- *    o concorrente non prepara due volte lo stesso evento;
- * 2. riepilogo e importazione: il turno del giorno nel fuso del riepilogo e il completamento di
+ * 1. Valutazione: lo stato fiscale corrente di ogni ordine si confronta con quello registrato in
+ *    `telegram_order_notices`; la variazione e il nuovo stato si scrivono nello stesso commit, con
+ *    la condizione che lo stato registrato sia ancora quello letto. Una valutazione ripetuta o
+ *    concorrente non prepara due volte lo stesso evento;
+ * 2. Riepilogo e importazione: il turno del giorno nel fuso del riepilogo e il completamento di
  *    un'importazione hanno un'identità propria, unica per collegamento;
- * 3. invio: ogni consegna si prende con un lease, rilegge il destinatario e compone il testo dai
- *    dati correnti. Le parti già consegnate di un messaggio suddiviso non si ripetono.
+ * 3. Invio: ogni consegna si prende con un lease, rilegge il destinatario e compone il testo dai dati
+ *    correnti. Le parti già consegnate di un messaggio suddiviso non si ripetono.
  *
- * Telegram non conferma l'esito di una richiesta interrotta: un timeout o una rete caduta
- * lasciano la consegna incerta e la ritentano, quindi un messaggio può arrivare due volte. Un
- * rifiuto certo non si ritenta.
+ * Telegram non conferma l'esito di una richiesta interrotta: un timeout o una rete caduta lasciano
+ * la consegna incerta e la ritentano, quindi un messaggio può arrivare due volte. Un rifiuto certo
+ * non si ritenta.
  */
 
 /** Tentativi di una consegna prima di segnare la chat come irraggiungibile. */
@@ -75,10 +74,10 @@ type Workspace = {
 };
 
 /**
- * Valuta e consegna le notifiche degli spazi con una chat collegata e Premium in corso, o del
- * solo spazio del negozio indicato. Un errore di uno spazio non ferma gli altri. Ogni spazio
- * servito, anche senza esito, registra il proprio turno e passa in fondo: un'esecuzione
- * interrotta da un'attesa di Telegram lascia in testa gli spazi non ancora serviti.
+ * Valuta e consegna le notifiche degli spazi con una chat collegata e Premium in corso, o del solo
+ * spazio del negozio indicato. Un errore di uno spazio non ferma gli altri. Ogni spazio servito,
+ * anche senza esito, registra il proprio turno e passa in fondo: un'esecuzione interrotta da
+ * un'attesa di Telegram lascia in testa gli spazi non ancora serviti.
  */
 export async function deliverTelegram(
   env: Env,
@@ -151,9 +150,9 @@ type Candidate = {
 
 /**
  * Variazioni fiscali dell'ordine, anche dei suoi acquisti confluiti, dopo la valutazione. Una
- * lettura registra l'istante in cui è partita e scrive al massimo per la durata del suo blocco:
- * una valutazione nel frattempo non l'ha vista, quindi il confronto la include. Rivalutare un
- * ordine senza variazioni non prepara eventi, perché l'impronta resta la stessa.
+ * lettura registra l'istante in cui è partita e scrive al massimo per la durata del suo blocco: una
+ * valutazione nel frattempo non l'ha vista, quindi il confronto la include. Rivalutare un ordine
+ * senza variazioni non prepara eventi, perché l'impronta resta la stessa.
  */
 const writtenSince = (column: string) =>
   `julianday(${column}) > julianday(n.evaluated_at) - ${workLockMilliseconds / dayMilliseconds}`;
@@ -164,9 +163,9 @@ const changedSinceSql = `(EXISTS (SELECT 1 FROM tax_identifiers t JOIN orders or
       WHERE ${orderLineageSql("o.id")} AND ${writtenSince("tc.observed_at")}))`;
 
 /**
- * Istante dell'ultima variazione dei valori fiscali dell'ordine, anche dei suoi acquisti
- * confluiti: l'arrivo o la rimozione di un identificativo. Le verifiche ripetute senza
- * variazioni non lo spostano.
+ * Istante dell'ultima variazione dei valori fiscali dell'ordine, anche dei suoi acquisti confluiti:
+ * l'arrivo o la rimozione di un identificativo. Le verifiche ripetute senza variazioni non lo
+ * spostano.
  */
 const changedAtSql = `(SELECT MAX(max(t.observed_at, COALESCE(t.removed_at, t.observed_at)))
       FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
@@ -206,18 +205,18 @@ export async function noticesOf(
 /**
  * Primo passo: per ogni ordine nuovo o con una variazione fiscale dopo l'ultima valutazione,
  * l'evento da notificare. Nuovo ordine soltanto se definitivo, entrato negli elenchi dopo il
- * collegamento e le riattivazioni, creato dopo l'inizio dell'importazione del negozio: lo
- * storico ha un solo riepilogo. Con «solo fiscali» un ordine senza dato, anche in verifica,
- * non si notifica, ma resta valutato e si notifica quando il dato arriva; le correzioni e le
- * rimozioni di un ordine già notificato arrivano con qualunque filtro.
+ * collegamento e le riattivazioni, creato dopo l'inizio dell'importazione del negozio: lo storico
+ * ha un solo riepilogo. Con «solo fiscali» un ordine senza dato, anche in verifica, non si
+ * notifica, ma resta valutato e si notifica quando il dato arriva; le correzioni e le rimozioni di
+ * un ordine già notificato arrivano con qualunque filtro.
  *
- * Una variazione si notifica se il destinatario l'avrebbe ricevuta all'istante in cui è
- * avvenuta: quelle del periodo con le notifiche spente, il negozio escluso, la chat bloccata o
- * senza Premium aggiornano soltanto lo stato, così la ripresa non porta l'arretrato. Quelle
- * rimaste indietro per un'interruzione del compito arrivano.
+ * Una variazione si notifica se il destinatario l'avrebbe ricevuta all'istante in cui è avvenuta:
+ * quelle del periodo con le notifiche spente, il negozio escluso, la chat bloccata o senza Premium
+ * aggiornano soltanto lo stato, così la ripresa non porta l'arretrato. Quelle rimaste indietro per
+ * un'interruzione del compito arrivano.
  *
- * Prima gli ordini mai valutati per il collegamento, poi quelli valutati da più tempo: gli
- * ordini rivalutati in un'esecuzione passano in fondo e non tolgono il turno agli altri.
+ * Prima gli ordini mai valutati per il collegamento, poi quelli valutati da più tempo: gli ordini
+ * rivalutati in un'esecuzione passano in fondo e non tolgono il turno agli altri.
  */
 async function prepareOrderEvents(db: D1Database, workspace: Workspace, now: Date) {
   const at = now.toISOString();
@@ -248,10 +247,7 @@ async function prepareOrderEvents(db: D1Database, workspace: Workspace, now: Dat
   const keys = await Promise.all(
     candidates.map(async (candidate) => {
       const notice = notices.get(candidate.id);
-      return {
-        key: notice ? await fiscalKey(notice) : null,
-        stored: candidate.fiscalKey,
-      };
+      return { key: notice ? await fiscalKey(notice) : null, stored: candidate.fiscalKey };
     }),
   );
   const statements: D1PreparedStatement[] = [];
@@ -337,10 +333,10 @@ async function prepareImportEvents(db: D1Database, workspace: Workspace, now: Da
 }
 
 /**
- * Riepilogo del giorno locale all'orario scelto, con gli eventi in attesa fino a quell'istante:
- * uno al giorno anche nei cambi di ora legale, perché l'identità è la data nel fuso. Gli eventi
- * successivi, anche senza un riepilogo nel giorno, vanno al giorno dopo; quelli precedenti
- * rimasti indietro per un'interruzione entrano nel primo riepilogo che parte.
+ * Riepilogo del giorno locale all'orario scelto, con gli eventi in attesa fino a quell'istante: uno
+ * al giorno anche nei cambi di ora legale, perché l'identità è la data nel fuso. Gli eventi
+ * successivi, anche senza un riepilogo nel giorno, vanno al giorno dopo; quelli precedenti rimasti
+ * indietro per un'interruzione entrano nel primo riepilogo che parte.
  */
 async function prepareDigest(db: D1Database, workspace: Workspace, now: Date) {
   if (workspace.mode !== "digest") return;
@@ -394,10 +390,10 @@ function closeMembers(db: D1Database, digestId: string, at: string) {
  * prima che non riesce, così la chat non riceve un messaggio successivo prima di uno precedente
  * ancora in attesa. Restituisce `stop` se il token del bot non è più valido.
  *
- * Con il riepilogo scelto gli ordini del collegamento aspettano il loro riepilogo e restano
- * fuori dal giro: non tolgono il turno alle altre consegne, e il riepilogo chiude con sé quelli
- * che il destinatario non riceverebbe più. Gli ordini preparati per una chat poi sostituita non
- * entrano in alcun riepilogo, quindi passano di qui e si scartano.
+ * Con il riepilogo scelto gli ordini del collegamento aspettano il loro riepilogo e restano fuori
+ * dal giro: non tolgono il turno alle altre consegne, e il riepilogo chiude con sé quelli che il
+ * destinatario non riceverebbe più. Gli ordini preparati per una chat poi sostituita non entrano in
+ * alcun riepilogo, quindi passano di qui e si scartano.
  */
 async function sendPending(
   env: Env,
@@ -600,9 +596,9 @@ async function deliver(
 }
 
 /**
- * Testo della consegna dai dati correnti, dopo aver riletto il destinatario: null o un
- * collegamento diverso scartano la consegna; un ordine singolo aspetta se il riepilogo è stato
- * scelto dopo la lettura dello spazio.
+ * Testo della consegna dai dati correnti, dopo aver riletto il destinatario: null o un collegamento
+ * diverso scartano la consegna; un ordine singolo aspetta se il riepilogo è stato scelto dopo la
+ * lettura dello spazio.
  */
 async function compose(
   env: Env,
@@ -694,8 +690,8 @@ async function compose(
 
 /**
  * Consegne chiuse da più di sette giorni: restano per diagnosi, poi si eliminano; quelle ancora
- * aperte dopo trenta. Due istruzioni perché ognuna legga il proprio indice parziale, delle
- * chiuse e delle aperte, invece di scorrere la tabella.
+ * aperte dopo trenta. Due istruzioni perché ognuna legga il proprio indice parziale, delle chiuse e
+ * delle aperte, invece di scorrere la tabella.
  */
 export function purgeTelegramDeliveries(db: D1Database, now: Date) {
   return [

@@ -2,10 +2,10 @@ import { canonicalPath } from "./i18n";
 import { writeLog } from "./log-records";
 
 /**
- * Violazione della CSP ridotta ai campi che servono a trovarne la causa. Indirizzi e codice
- * possono contenere identificativi o dati dell'utente: restano soltanto parole chiave del
- * browser, origini esterne, i primi due segmenti dei percorsi dell'app e, per gli script inline,
- * i primi 40 caratteri del codice, che è dell'app.
+ * Violazione della CSP ridotta ai campi che servono a trovarne la causa. Indirizzi e codice possono
+ * contenere identificativi o dati dell'utente: restano soltanto parole chiave del browser, origini
+ * esterne, i primi due segmenti dei percorsi dell'app e, per gli script inline, i primi 40
+ * caratteri del codice, che è dell'app.
  */
 export interface CspViolation {
   directive: string;

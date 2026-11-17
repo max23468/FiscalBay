@@ -14,6 +14,7 @@ import {
   DropdownMenuLinkItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+
 import { localizedPath } from "../../i18n";
 import { useAdmin } from "./use-admin";
 
@@ -35,10 +36,10 @@ const items = [
 export type AdminSectionKey = (typeof items)[number][1];
 
 /**
- * Cornice della console, distinta dall'area dei venditori: logo, sezioni della console e
- * ritorno a FiscalBay, senza la navigazione di Ordini, Negozi e Impostazioni. Da 768 px le
- * sezioni stanno in una barra; sotto, in un menu con la sezione aperta come titolo, così su
- * mobile resta in vista dove si è. La scadenza della conferma con passkey sta nell'intestazione.
+ * Cornice della console, distinta dall'area dei venditori: logo, sezioni della console e ritorno a
+ * FiscalBay, senza la navigazione di Ordini, Negozi e Impostazioni. Da 768 px le sezioni stanno in
+ * una barra; sotto, in un menu con la sezione aperta come titolo, così su mobile resta in vista
+ * dove si è. La scadenza della conferma con passkey sta nell'intestazione.
  */
 export function AdminShell({
   current,

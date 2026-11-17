@@ -16,9 +16,9 @@ export const minutesAgo = (minutes: number) =>
   new Date(new Date(previewNow).getTime() - minutes * 60_000).toISOString();
 
 /**
- * Immagini degli articoli dell'anteprima e delle schermate del sito: illustrazioni originali,
- * senza foto di terzi né marchi, su un fondo chiaro da catalogo. Sono data URL come le miniature
- * che l'app riceve da eBay e non chiedono altre origini.
+ * Immagini degli articoli dell'anteprima e delle schermate del sito: illustrazioni originali, senza
+ * foto di terzi né marchi, su un fondo chiaro da catalogo. Sono data URL come le miniature che
+ * l'app riceve da eBay e non chiedono altre origini.
  */
 const picture = (shapes: string, defs = "") =>
   `data:image/svg+xml,${encodeURIComponent(
@@ -58,8 +58,8 @@ const productImages = {
      <path d="M 26 44h44M 48 22v44M 33 29l30 30M 63 29 33 59" stroke="#fff" stroke-width=".8" opacity=".55"/>
      <circle cx="48" cy="44" r="7" fill="#fffbeb"/>
      <path d="M 31 31c5-6 12-9 19-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".85"/>`,
-    chrome +
-      `<radialGradient id="glass"><stop offset="0" stop-color="#fffbeb"/><stop offset=".7" stop-color="#fde68a"/><stop offset="1" stop-color="#b08a3a"/></radialGradient>`,
+    chrome
+      + `<radialGradient id="glass"><stop offset="0" stop-color="#fffbeb"/><stop offset=".7" stop-color="#fde68a"/><stop offset="1" stop-color="#b08a3a"/></radialGradient>`,
   ),
   typewriter: picture(
     `<rect x="32" y="12" width="32" height="30" fill="#fff" stroke="#d6d3d1"/>
@@ -201,11 +201,7 @@ export const readNotices: Partial<Record<string, FiscalNotice>> = {
 export const cf = (
   value: string,
   quality: TaxIdentifierView["quality"] = "valid",
-): TaxIdentifierView => ({
-  type: "CF",
-  value,
-  quality,
-});
+): TaxIdentifierView => ({ type: "CF", value, quality });
 
 /** Riga con prezzo unitario: l'importo della riga è prezzo per quantità. */
 const item = (
@@ -214,13 +210,7 @@ const item = (
   priceMinor: number,
   quantity = 1,
   sku: string | null = null,
-) => ({
-  id,
-  title,
-  totalMinor: priceMinor * quantity,
-  quantity,
-  sku,
-});
+) => ({ id, title, totalMinor: priceMinor * quantity, quantity, sku });
 
 export const seeds: OrderSeed[] = [
   {

@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 
 import { StatusBadge } from "~/components/status";
+
 import type { SectionData } from "../../admin-console.server";
 import { exitReasons } from "../../exit-reasons";
 import { ActionForm, DataTable, Disclosure, Panel, Stat, StatGrid, TextField } from "./kit";
@@ -86,8 +87,8 @@ function Promotions({ promotions, now }: { promotions: CommerceData["promotions"
 }
 
 /**
- * Motivi di uscita (D314): disdette e cancellazioni per motivo negli ultimi 30 giorni, tre e
- * dodici mesi, poi i commenti dei 30 giorni con lo spazio, finché esiste.
+ * Motivi di uscita (D314): disdette e cancellazioni per motivo negli ultimi 30 giorni, tre e dodici
+ * mesi, poi i commenti dei 30 giorni con lo spazio, finché esiste.
  */
 function Exits({ exits }: { exits: CommerceData["exits"] }) {
   const { t, date, href } = useAdmin();

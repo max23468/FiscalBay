@@ -3,22 +3,24 @@ import { LogOut } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useRouteLoaderData } from "react-router";
 
+import { AccessNotice, VerifyEmail } from "~/components/access-notice";
 import { BrandPanel } from "~/components/access/brand-panel";
 import { EmailField, PasswordField } from "~/components/access/credential-fields";
 import { ConfirmEmail } from "~/components/access/email-code";
-import { usePasswordCheck } from "~/components/access/password-check";
-import { EbayMark, GoogleMark } from "~/components/access/marks";
 import { useLastUsed } from "~/components/access/last-used";
+import { EbayMark, GoogleMark } from "~/components/access/marks";
 import { PasskeyButton, usePasskeySignIn } from "~/components/access/passkey-button";
+import { usePasswordCheck } from "~/components/access/password-check";
 import { rise } from "~/components/access/rise";
-import { AccessNotice, VerifyEmail } from "~/components/access-notice";
+import { useCopy } from "~/components/copy-context";
 import { DeleteAccount } from "~/components/delete-account";
-import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
+import { ProfileFields } from "~/components/profile-fields";
 import { SiteFooter } from "~/components/site-footer";
 import { SourceLinks } from "~/components/source-links";
-import { ProfileFields } from "~/components/profile-fields";
+import { Logo } from "~/components/standalone-page";
+import { useTurnstile } from "~/components/turnstile";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
@@ -30,8 +32,10 @@ import {
   FieldSeparator,
 } from "~/components/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { useCopy } from "~/components/copy-context";
-import { useTurnstile } from "~/components/turnstile";
+
+import { areaPage } from "../account-area.server";
+import { accessAction, accessLoader, type LoginMethod } from "../account-page.server";
+import { appCopy, pageTitle } from "../app-copy";
 import {
   accessPath,
   planChoice,
@@ -40,14 +44,11 @@ import {
   securityReturnPath,
   termsPath,
 } from "../app-links";
-import { areaPage } from "../account-area.server";
-import { accessAction, accessLoader, type LoginMethod } from "../account-page.server";
-import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
-import { turnstileActions } from "../turnstile";
-import type { Route } from "./+types/sign-in";
 import { pageHeaders } from "../request-limits.server";
 import { sourceParam } from "../signup-source";
+import { turnstileActions } from "../turnstile";
+import type { Route } from "./+types/sign-in";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
@@ -98,8 +99,8 @@ function useAccessAction() {
 }
 
 /**
- * Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. Il marketing manca
- * per chi ha già una scelta, che si cambia dalle Impostazioni.
+ * Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. Il marketing manca per
+ * chi ha già una scelta, che si cambia dalle Impostazioni.
  */
 function AgreementFields({
   v,

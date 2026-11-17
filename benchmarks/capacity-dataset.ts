@@ -2,12 +2,11 @@
  * Dataset sintetico del caso di riferimento per le misure di capacità (§36): spazi Premium e Free
  * con un negozio e circa 100 ordini al mese, più uno spazio Premium grande con più negozi. I
  * Premium conservano un anno di ordini e i Free trenta giorni, con i termini che l'app assegna:
- * oltre 70.000 ordini con tre articoli, identificativi fiscali, verifiche, riferimenti
- * Fulfillment e i cinque sblocchi mensili degli spazi Free.
- * Le righe si generano in SQL, così la stessa sequenza popola la D1 della suite Workers e quella
- * locale dell'anteprima. Ogni identificativo inizia con `cap-` e nessun valore è reale.
- * Le versioni dei termini arrivano dal chiamante: il modulo resta senza import, eseguibile anche
- * da Node per gli script.
+ * oltre 70.000 ordini con tre articoli, identificativi fiscali, verifiche, riferimenti Fulfillment
+ * e i cinque sblocchi mensili degli spazi Free. Le righe si generano in SQL, così la stessa
+ * sequenza popola la D1 della suite Workers e quella locale dell'anteprima. Ogni identificativo
+ * inizia con `cap-` e nessun valore è reale. Le versioni dei termini arrivano dal chiamante: il
+ * modulo resta senza import, eseguibile anche da Node per gli script.
  */
 export type CapacityShape = {
   /** Spazi con un negozio, escluso quello grande: i primi `premium` hanno Premium. */
@@ -44,9 +43,9 @@ export const sessionToken = (workspace: string) => workspace.replace("cap-w-", "
 
 export function orderCount(shape: CapacityShape) {
   return (
-    shape.premium * shape.premiumOrders +
-    (shape.workspaces - shape.premium) * shape.freeOrders +
-    shape.largeStores * shape.largeOrdersPerStore
+    shape.premium * shape.premiumOrders
+    + (shape.workspaces - shape.premium) * shape.freeOrders
+    + shape.largeStores * shape.largeOrdersPerStore
   );
 }
 
@@ -127,9 +126,9 @@ export function capacityStatements(
 }
 
 /**
- * Ordini e righe collegate di un negozio, o di tutti i negozi del dataset senza `store`. Sulla
- * D1 remota si eseguono negozio per negozio: un'istruzione su centinaia di migliaia di righe
- * supera i limiti di esecuzione.
+ * Ordini e righe collegate di un negozio, o di tutti i negozi del dataset senza `store`. Sulla D1
+ * remota si eseguono negozio per negozio: un'istruzione su centinaia di migliaia di righe supera i
+ * limiti di esecuzione.
  */
 export function capacityStoreStatements(shape: CapacityShape, store?: string): string[] {
   const day = `'${shape.now}'`;

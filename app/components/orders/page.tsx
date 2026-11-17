@@ -4,10 +4,12 @@ import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "rea
 
 import { useFetcherResult, useNotice } from "~/components/action";
 import { useConfirmed } from "~/components/confirmation";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { EmptyState } from "~/components/empty-state";
 import { smoothTransition } from "~/components/motion";
 import { StatusAlert } from "~/components/status";
 import { buttonLink } from "~/components/ui/button-variants";
+
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
 import {
@@ -20,7 +22,6 @@ import {
 import { snapshotParam } from "../../orders/order-criteria";
 import { pagesParam, rememberStore } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
-import { usePageTiming } from "../../page-timing";
 import {
   ebayDownNotice,
   importingNotice,
@@ -30,16 +31,16 @@ import {
   type OrdersPageData,
   type UnlockResult,
 } from "../../orders/page-data";
+import { usePageTiming } from "../../page-timing";
 import { orderPeriods, type OrderView } from "../../view-models";
 import { OrderCard } from "./card";
 import { useEnterIndexes, useListSnapshot, useNewOrders } from "./list-snapshot";
-import { OrdersHeader, OrdersNotices, TrialNotice } from "./notices";
 import { MarketingProposal } from "./marketing-proposal";
+import { OrdersHeader, OrdersNotices, TrialNotice } from "./notices";
 import { FirstUse, NoOrders } from "./onboarding";
-import { SelectionBar, useOrderSelection } from "./selection";
 import { usePendingList } from "./pending-list";
+import { SelectionBar, useOrderSelection } from "./selection";
 import { OrdersToolbar, SearchChip } from "./toolbar";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 const unlockableOrder = (order: OrderView) => unlockable(order.fiscal);
 
@@ -343,8 +344,8 @@ function OrdersList({
 
 /**
  * Pagina Ordini: la home dopo l'accesso, la stessa nell'area reale e nell'anteprima. Ricerca e
- * filtri vivono nell'URL, così dettaglio, indietro e ricarica conservano il contesto. Gli ordini
- * in verifica compaiono subito con l'ultimo stato salvato; `confirmation` porta, nella stessa
+ * filtri vivono nell'URL, così dettaglio, indietro e ricarica conservano il contesto. Gli ordini in
+ * verifica compaiono subito con l'ultimo stato salvato; `confirmation` porta, nella stessa
  * risposta, il loro stato confermato.
  */
 export function OrdersPage({

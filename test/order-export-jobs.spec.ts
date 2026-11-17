@@ -1,15 +1,8 @@
 import { env } from "cloudflare:workers";
-
 import { expect, it, vi } from "vitest";
 
 import { appCopy } from "../app/app-copy";
-
-import { standardColumns } from "../app/orders/export-columns";
-
-import { XlsxRowLimitError } from "../app/domain/xlsx.server";
-
 import { purgeExportFiles } from "../app/domain/export-files.server";
-
 import {
   consumeExportJob,
   exportJobOrders,
@@ -18,15 +11,11 @@ import {
   queueOrderFile,
   resumeExportJobs,
 } from "../app/domain/export-jobs.server";
-
 import { consumeTask, taskSlot } from "../app/domain/scheduled-work.server";
-
+import { XlsxRowLimitError } from "../app/domain/xlsx.server";
+import { standardColumns } from "../app/orders/export-columns";
 import { verifiedSession } from "./fixtures/account-fixtures";
-
-import { queued, queueMessage } from "./fixtures/queue-fixture";
-
 import { insertEntitlement, now } from "./fixtures/database-fixtures";
-
 import {
   it_,
   userId,
@@ -41,6 +30,7 @@ import {
   bell,
   setupScenarios,
 } from "./fixtures/order-export-scenarios";
+import { queued, queueMessage } from "./fixtures/queue-fixture";
 
 setupScenarios();
 
@@ -60,10 +50,7 @@ it("oltre la soglia prepara il file dalla coda e la campanella lo annuncia", asy
   try {
     const response = await request("", { period: "30" });
     expect(response.status).toBe(202);
-    expect(await response.json()).toEqual({
-      ok: true,
-      notice: it_.settings.export.exportQueued,
-    });
+    expect(await response.json()).toEqual({ ok: true, notice: it_.settings.export.exportQueued });
     expect(send).toHaveBeenCalledOnce();
     message = send.mock.calls[0]![0];
   } finally {
@@ -75,13 +62,7 @@ it("oltre la soglia prepara il file dalla coda e la campanella lo annuncia", asy
   expect(pending).toMatchObject({ state: "queued", file_id: null, finished_at: null });
   expect(pending!.request_sealed).not.toMatch(/since|production|Europe/u);
   expect(await sectionFiles()).toEqual([
-    {
-      id,
-      name: "fiscalbay-ordini-2026-09-13.csv",
-      state: "queued",
-      at: now,
-      expiresAt: null,
-    },
+    { id, name: "fiscalbay-ordini-2026-09-13.csv", state: "queued", at: now, expiresAt: null },
   ]);
   expect(await bell()).toEqual([]);
   const delivery = queueMessage(message);
@@ -330,13 +311,15 @@ it("se il blocco non si libera dopo un errore, lo segnala e riprova allo scadere
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   const failing = vi.spyOn(env.EXPORT_FILES, "put").mockRejectedValue(new Error("R2"));
   const prepare = env.DB.prepare.bind(env.DB);
-  const release = vi.spyOn(env.DB, "prepare").mockImplementation((sql: string) =>
-    sql.includes("SET locked_until = NULL WHERE id = ?1 AND state = 'queued'")
-      ? ({
-          bind: () => ({ run: () => Promise.reject(new Error("D1")) }),
-        } as unknown as D1PreparedStatement)
-      : prepare(sql),
-  );
+  const release = vi
+    .spyOn(env.DB, "prepare")
+    .mockImplementation((sql: string) =>
+      sql.includes("SET locked_until = NULL WHERE id = ?1 AND state = 'queued'")
+        ? ({
+            bind: () => ({ run: () => Promise.reject(new Error("D1")) }),
+          } as unknown as D1PreparedStatement)
+        : prepare(sql),
+    );
   try {
     const message = queueMessage({ exportJob: id });
     await consumeExportJob(message, env);
@@ -377,7 +360,7 @@ it("la ripresa oraria riaccoda un lavoro interrotto e due consumer creano un sol
   // aspetta lo scadere del blocco del primo.
   const deliveries = [queueMessage({ exportJob: id }), queueMessage({ exportJob: id }, 5)];
   await Promise.all(deliveries.map((delivery) => consumeExportJob(delivery, env)));
-  expect(deliveries.map((delivery) => delivery.ack.mock.calls.length).sort()).toEqual([0, 1]);
+  expect(deliveries.map((delivery) => delivery.ack.mock.calls.length).toSorted()).toEqual([0, 1]);
   expect(deliveries.flatMap((delivery) => delivery.retry.mock.calls)).toEqual([
     [{ delaySeconds: 900 }],
   ]);
@@ -416,8 +399,8 @@ it("il compito orario riaccoda un lavoro senza messaggio e chiude quello che non
     expect(
       [...sendBatch.mock.calls[0]![0]]
         .map(({ body }) => (body as { exportJob: string }).exportJob)
-        .sort(),
-    ).toEqual([lost, running].sort());
+        .toSorted(),
+    ).toEqual([lost, running].toSorted());
     // Dopo 24 ore il lavoro libero non riesce; quello di un consumer in corso resta a lui.
     sendBatch.mockClear();
     await env.DB.prepare("UPDATE export_jobs SET locked_until = ? WHERE id = ?")
@@ -441,8 +424,8 @@ it("il compito orario riaccoda un lavoro senza messaggio e chiude quello che non
     expect.objectContaining({ id: `export:${lost}`, tone: "warning", at: hours(24) }),
   ]);
   // Richiesti nello stesso istante: l'ordine fra i due segue l'identificativo.
-  expect((await sectionFiles()).map(({ id, state }) => `${id} ${state}`).sort()).toEqual(
-    [`${running} queued`, `${lost} failed`].sort(),
+  expect((await sectionFiles()).map(({ id, state }) => `${id} ${state}`).toSorted()).toEqual(
+    [`${running} queued`, `${lost} failed`].toSorted(),
   );
 });
 
@@ -496,15 +479,15 @@ it("la campanella annuncia il file finché resta scaricabile e il lavoro non riu
   const announced = async () =>
     (await bell())
       .map(({ id, tone, at }) => [id, tone, at])
-      .sort((a, b) => a[0]!.localeCompare(b[0]!));
+      .toSorted((a, b) => a[0]!.localeCompare(b[0]!));
   vi.setSystemTime(Date.parse(hours(26)) - 1);
   expect(await announced()).toEqual(
     [
       [`export:${failed}`, "warning", hours(2)],
       [`export:${ready}`, "success", hours(2)],
-    ].sort((a, b) => a[0]!.localeCompare(b[0]!)),
+    ].toSorted((a, b) => a[0]!.localeCompare(b[0]!)),
   );
-  expect((await sectionFiles()).map(({ state }) => state).sort()).toEqual(["failed", "ready"]);
+  expect((await sectionFiles()).map(({ state }) => state).toSorted()).toEqual(["failed", "ready"]);
   await purgeExportFiles(env, new Date());
   expect(await env.DB.prepare("SELECT count(*) AS n FROM export_jobs").first("n")).toBe(2);
   vi.setSystemTime(Date.parse(hours(26)));

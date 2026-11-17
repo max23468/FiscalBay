@@ -1,10 +1,9 @@
 import type { AddressView, ContactsView } from "./view-models";
 
 /**
- * Forma di visualizzazione di telefono, email e indirizzo dell'acquirente. Come per CF e
- * Partita IVA, la formattazione non corregge né sostituisce il dato di eBay, che resta
- * conservato com'è: un valore che non si riconosce con certezza si mostra originale e non
- * diventa un collegamento.
+ * Forma di visualizzazione di telefono, email e indirizzo dell'acquirente. Come per CF e Partita
+ * IVA, la formattazione non corregge né sostituisce il dato di eBay, che resta conservato com'è: un
+ * valore che non si riconosce con certezza si mostra originale e non diventa un collegamento.
  */
 
 /** Prefissi internazionali dei Paesi di fatturazione più frequenti. */
@@ -46,7 +45,9 @@ const callingCodes: Record<string, string> = {
   AU: "61",
 };
 
-const knownCodes = [...new Set(Object.values(callingCodes))].sort((a, b) => b.length - a.length);
+const knownCodes = [...new Set(Object.values(callingCodes))].toSorted(
+  (a, b) => b.length - a.length,
+);
 
 /** In Italia, San Marino e Vaticano lo zero iniziale fa parte del numero. */
 const keepsLeadingZero = new Set(["39", "378"]);
@@ -59,8 +60,8 @@ export interface PhoneView {
 }
 
 /**
- * Telefono nella forma internazionale. Senza prefisso vale il Paese di fatturazione; un
- * numero con lettere, troppo corto o di un Paese senza prefisso noto resta null.
+ * Telefono nella forma internazionale. Senza prefisso vale il Paese di fatturazione; un numero con
+ * lettere, troppo corto o di un Paese senza prefisso noto resta null.
  */
 export function phoneView(raw: string, country: string | null): PhoneView | null {
   // Asterischi e punti di mascheramento non sono separatori di un numero.
@@ -124,8 +125,8 @@ export function emailView(raw: string): EmailView | null {
 }
 
 /**
- * Collegamento `mailto:` con la parte locale codificata (RFC 6068): un `?`, `&` o `#` della
- * fonte resta parte dell'indirizzo e non aggiunge oggetto o testo.
+ * Collegamento `mailto:` con la parte locale codificata (RFC 6068): un `?`, `&` o `#` della fonte
+ * resta parte dell'indirizzo e non aggiunge oggetto o testo.
  */
 export function mailtoHref(address: string, fields: { subject?: string; body?: string } = {}) {
   const separator = address.lastIndexOf("@");
@@ -173,24 +174,24 @@ export function contactText(text: string): string {
 
 /**
  * Iniziali maiuscole per nomi tutti maiuscoli o minuscoli, anche dopo apostrofi e trattini.
- * Conservare grafia mista, mascheramenti e ragioni sociali con sigle riconoscibili.
- * Non dedurre nome/cognome né usare identificativi fiscali per correggerli.
+ * Conservare grafia mista, mascheramenti e ragioni sociali con sigle riconoscibili. Non dedurre
+ * nome/cognome né usare identificativi fiscali per correggerli.
  */
 export function buyerNameView(name: string | null): string | null {
   const text = name ? contactText(name) : "";
   if (!text) return null;
   if (
-    (/\p{Lu}/u.test(text) && /\p{Ll}/u.test(text)) ||
-    /[\d*•…]/u.test(text) ||
-    /(?:^|\s)(?:s\.?r\.?l\.?s?\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?)(?:\s|$)/iu.test(text)
+    (/\p{Lu}/u.test(text) && /\p{Ll}/u.test(text))
+    || /[\d*•…]/u.test(text)
+    || /(?:^|\s)(?:s\.?r\.?l\.?s?\.?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?)(?:\s|$)/iu.test(text)
   )
     return text;
   return text.toLowerCase().replace(/\p{L}[\p{L}\p{M}]*/gu, capitalize);
 }
 
 /**
- * Indirizzo italiano tutto maiuscolo o minuscolo con iniziali leggibili. La grafia mista e
- * quella estera restano intatte; sigle, numeri romani e civici non perdono informazioni.
+ * Indirizzo italiano tutto maiuscolo o minuscolo con iniziali leggibili. La grafia mista e quella
+ * estera restano intatte; sigle, numeri romani e civici non perdono informazioni.
  */
 export function addressCase(raw: string, country = "IT"): string {
   const text = contactText(raw);
@@ -221,8 +222,8 @@ export function addressCase(raw: string, country = "IT"): string {
 }
 
 /**
- * Contatti nella forma mostrata, calcolati sul server per area reale e anteprima: il browser
- * riceve soltanto il risultato. L'indirizzo perde le maiuscole di eBay e gli spazi superflui.
+ * Contatti nella forma mostrata, calcolati sul server per area reale e anteprima: il browser riceve
+ * soltanto il risultato. L'indirizzo perde le maiuscole di eBay e gli spazi superflui.
  */
 export function contactsView(order: {
   phone: string | null;

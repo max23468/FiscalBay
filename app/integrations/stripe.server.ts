@@ -18,8 +18,8 @@ declare global {
 
 /**
  * Chiave Stripe utilizzabile nell'ambiente, standard o con limitazioni: di test fuori da
- * Production, live in Production. La chiave dell'altro ambiente vale come chiave assente:
- * acquisti, portale e letture restano fermi invece di agire sugli oggetti sbagliati.
+ * Production, live in Production. La chiave dell'altro ambiente vale come chiave assente: acquisti,
+ * portale e letture restano fermi invece di agire sugli oggetti sbagliati.
  */
 export function stripeSecretKey(env: Pick<Env, "APP_ORIGIN" | "STRIPE_SECRET_KEY">) {
   const key = env.STRIPE_SECRET_KEY;
@@ -44,8 +44,8 @@ const integrationIdentifier = "fiscalbay_mp_qnwjrzta";
 const loadStripe = () => import("stripe").then((module) => module.default);
 
 /**
- * Versione dell'API fissata in ogni client: un aggiornamento dello SDK non cambia da solo la
- * forma degli oggetti letti, e il controllo dei tipi chiede di rivederla insieme allo SDK.
+ * Versione dell'API fissata in ogni client: un aggiornamento dello SDK non cambia da solo la forma
+ * degli oggetti letti, e il controllo dei tipi chiede di rivederla insieme allo SDK.
  */
 export const stripeApiVersion = "2026-10-28.endive";
 
@@ -94,8 +94,8 @@ export async function createBoundedStripeClient(
 }
 
 /**
- * Errore di Stripe nella classificazione comune dei provider. Un oggetto che Stripe non
- * restituisce più resta distinto: non prova un acquisto inesistente né un rimborso.
+ * Errore di Stripe nella classificazione comune dei provider. Un oggetto che Stripe non restituisce
+ * più resta distinto: non prova un acquisto inesistente né un rimborso.
  */
 export function stripeFailure(error: unknown): UpstreamError {
   const {
@@ -126,9 +126,9 @@ export function stripeFailure(error: unknown): UpstreamError {
 /** Oggetto che Stripe non restituisce più; ogni altro errore, anche non di Stripe, resta tale. */
 export function isMissingObject(error: unknown) {
   return (
-    error instanceof UpstreamError &&
-    error.details.status === 404 &&
-    error.details.providerCode === "resource_missing"
+    error instanceof UpstreamError
+    && error.details.status === 404
+    && error.details.providerCode === "resource_missing"
   );
 }
 
@@ -145,9 +145,9 @@ export async function stripeCall<T>(call: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Sessione di Hosted Checkout nel percorso Managed Payments. Imposte, conversione di valuta,
- * metodi di pagamento e dati di fatturazione li decide Stripe come merchant of record: i
- * parametri del Checkout ordinario che li controllano non compaiono.
+ * Sessione di Hosted Checkout nel percorso Managed Payments. Imposte, conversione di valuta, metodi
+ * di pagamento e dati di fatturazione li decide Stripe come merchant of record: i parametri del
+ * Checkout ordinario che li controllano non compaiono.
  */
 export function buildManagedCheckoutParams(input: {
   offer: PremiumOffer;
@@ -164,13 +164,13 @@ export function buildManagedCheckoutParams(input: {
    */
   trial?: { endsAt: string; chargeAt: string };
   /**
-   * Lifetime: scadenza della sessione, che coincide con quella della prenotazione del posto,
-   * coupon del periodo pagato non usato e cliente Stripe di un abbonamento da sostituire.
+   * Lifetime: scadenza della sessione, che coincide con quella della prenotazione del posto, coupon
+   * del periodo pagato non usato e cliente Stripe di un abbonamento da sostituire.
    */
   lifetime?: { expiresAt: string; coupon?: string; customerId?: string };
   /**
-   * Mensile e annuale: scadenza della sessione, una sola aperta per spazio, e cliente Stripe
-   * già usato dallo spazio, così il portale mostra abbonamenti e documenti di un solo cliente.
+   * Mensile e annuale: scadenza della sessione, una sola aperta per spazio, e cliente Stripe già
+   * usato dallo spazio, così il portale mostra abbonamenti e documenti di un solo cliente.
    */
   subscription?: { expiresAt: string; customerId?: string };
 }): Stripe.Checkout.SessionCreateParams {
@@ -236,8 +236,8 @@ export async function createManagedCheckout(
 
 /**
  * Credito del periodo pagato non usato per chi passa al lifetime: un coupon da usare una sola
- * volta, soltanto sul prodotto lifetime ed entro la scadenza della sessione. Il nome compare
- * nel riepilogo di Stripe accanto allo sconto.
+ * volta, soltanto sul prodotto lifetime ed entro la scadenza della sessione. Il nome compare nel
+ * riepilogo di Stripe accanto allo sconto.
  */
 export async function createLifetimeCredit(
   stripe: Stripe,

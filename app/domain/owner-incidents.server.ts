@@ -4,8 +4,8 @@ import { originUrl } from "../app-links";
 import { adminCopy } from "../copy/admin-copy";
 import { ownerTelegramCopy as copy } from "../copy/owner-telegram";
 import { logFailure } from "../errors";
-import { untilStopped } from "../sequence";
 import { ownerChatId, telegramConfigured, type BotButton } from "../integrations/telegram.server";
+import { untilStopped } from "../sequence";
 import { listAnomalies, type Anomaly, type AnomalyKind } from "./admin-operations.server";
 import {
   at,
@@ -82,9 +82,9 @@ function instant(value: string, fallback: string) {
 }
 
 /**
- * Allinea gli incidenti alle anomalie aperte e invia gli avvisi dovuti. Un incidente che si
- * riapre dopo il rientro comunicato è una nuova apertura; uno che si riapre prima conserva
- * l'apertura comunicata, e il rientro non comunicato non parte.
+ * Allinea gli incidenti alle anomalie aperte e invia gli avvisi dovuti. Un incidente che si riapre
+ * dopo il rientro comunicato è una nuova apertura; uno che si riapre prima conserva l'apertura
+ * comunicata, e il rientro non comunicato non parte.
  */
 export async function reconcileOwnerIncidents(env: Env, fetcher: typeof fetch, now = new Date()) {
   const db = env.DB;
@@ -229,8 +229,8 @@ async function deliverOwnerIncidents(env: Env, fetcher: typeof fetch, now: Date)
 }
 
 /**
- * Copia per email dell'avviso che Telegram non consegna, a `info@`: una volta per avviso. Un
- * invio email non riuscito si riprova al tentativo Telegram successivo.
+ * Copia per email dell'avviso che Telegram non consegna, a `info@`: una volta per avviso. Un invio
+ * email non riuscito si riprova al tentativo Telegram successivo.
  */
 async function emailIncident(env: Env, row: IncidentRow, now: Date) {
   const sent = `${pendingState(row)}:${row.severity}`;

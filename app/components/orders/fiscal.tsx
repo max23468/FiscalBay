@@ -1,10 +1,14 @@
+import { cn } from "cn";
 import { Mail, MessageSquareText } from "lucide-react";
 import { useId, useRef, useState } from "react";
 
 import { useAction } from "~/components/action";
+import { CheckboxOption } from "~/components/checkbox-option";
+import { useCopy } from "~/components/copy-context";
 import { UnlockIcon } from "~/components/icons";
 import { StatusBadge, StatusIcon } from "~/components/status";
 import { TaxCode, useCopyFeedback } from "~/components/tax-code";
+import { useDate } from "~/components/time-zone";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -27,10 +31,18 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
-import { cn } from "cn";
+
 import { supportEmail, type AppCopy } from "../../app-copy";
 import { mailtoHref } from "../../contact";
+import { countryName } from "../../format";
 import { isLanguage, languages, languageNames, type Language } from "../../i18n";
+import {
+  remainingUnlocks,
+  retryFields,
+  retryIntent,
+  unlockable,
+  type OrdersAccount,
+} from "../../orders/page-data";
 import { defaultTemplate, requestEmailSubject } from "../../preferences";
 import { displayTaxValue } from "../../tax-quality";
 import {
@@ -40,19 +52,7 @@ import {
   type SuggestionView,
   type TaxIdentifierView,
 } from "../../view-models";
-import { countryName } from "../../format";
-
-import {
-  remainingUnlocks,
-  retryFields,
-  retryIntent,
-  unlockable,
-  type OrdersAccount,
-} from "../../orders/page-data";
 import { buyerLanguage, identifierLabel, taxCodeLabels } from "./labels";
-import { CheckboxOption } from "~/components/checkbox-option";
-import { useDate } from "~/components/time-zone";
-import { useCopy } from "~/components/copy-context";
 
 const cardRow = "flex flex-wrap items-center gap-x-3 gap-y-2";
 
@@ -61,8 +61,8 @@ function CardLabel({ children }: { children: string }) {
 }
 
 /**
- * Spiegazione del dato fiscale. Nella scheda occupa tutta la larghezza sotto
- * acquirente e codice, così non allunga la colonna del codice.
+ * Spiegazione del dato fiscale. Nella scheda occupa tutta la larghezza sotto acquirente e codice,
+ * così non allunga la colonna del codice.
  */
 function CardNote({ tone, children }: { tone?: "info" | "warning"; children: React.ReactNode }) {
   return (
@@ -220,7 +220,7 @@ function AvailableNotes({ fiscal }: { fiscal: Extract<FiscalView, { state: "avai
 export interface FiscalProps {
   order: OrderView;
   account: OrdersAccount;
-  /** eBay non risponde: le azioni che lo richiedono restano sospese. */
+  /** EBay non risponde: le azioni che lo richiedono restano sospese. */
   ebayDown: boolean;
   revealed: boolean;
   unlocking: boolean;
@@ -233,9 +233,9 @@ function unavailableTone(state: "missing" | "checking" | "error") {
 }
 
 /**
- * Riquadro del dato fiscale con la sua azione: stessa forma per ogni stato,
- * nella scheda accanto all'acquirente e nel dettaglio in cima al pannello.
- * Il valore si mostra e si copia nella forma normalizzata dei tipi italiani.
+ * Riquadro del dato fiscale con la sua azione: stessa forma per ogni stato, nella scheda accanto
+ * all'acquirente e nel dettaglio in cima al pannello. Il valore si mostra e si copia nella forma
+ * normalizzata dei tipi italiani.
  */
 export function FiscalCodes({
   order,
@@ -393,17 +393,15 @@ function suggestionValue(suggestion: SuggestionView) {
 }
 
 /**
- * Spiegazioni del dato fiscale. Nella scheda restano brevi, perché l'avviso
- * in cima alla pagina spiega già le condizioni comuni; nel dettaglio sono complete.
+ * Spiegazioni del dato fiscale. Nella scheda restano brevi, perché l'avviso in cima alla pagina
+ * spiega già le condizioni comuni; nel dettaglio sono complete.
  */
 export function FiscalNotes({
   order,
   account,
   ebayDown,
   compact,
-}: Pick<FiscalProps, "order" | "account" | "ebayDown"> & {
-  compact: boolean;
-}) {
+}: Pick<FiscalProps, "order" | "account" | "ebayDown"> & { compact: boolean }) {
   const { t, language } = useCopy();
   const { fiscal } = order;
   if (fiscal.state === "available") return <AvailableNotes fiscal={fiscal} />;
@@ -412,9 +410,9 @@ export function FiscalNotes({
   }
   // Lo stato è già nel riquadro: nella scheda aggiungi solo cause o attese specifiche.
   const showHint =
-    !compact ||
-    (fiscal.state === "missing" && Boolean(fiscal.reason)) ||
-    (fiscal.state === "error" && ebayDown);
+    !compact
+    || (fiscal.state === "missing" && Boolean(fiscal.reason))
+    || (fiscal.state === "error" && ebayDown);
   return (
     <>
       {showHint ? <CardNote>{unavailableHint(fiscal, ebayDown, t, language)}</CardNote> : null}

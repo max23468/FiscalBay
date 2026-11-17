@@ -1,8 +1,1 @@
-{
-  "mcpServers": {
-    "ebay": {
-      "command": "node",
-      "args": ["scripts/ebay-mcp.mjs"]
-    }
-  }
-}
+{ "mcpServers": { "ebay": { "command": "node", "args": ["scripts/ebay-mcp.mjs"] } } }

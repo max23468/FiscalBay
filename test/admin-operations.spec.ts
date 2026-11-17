@@ -1,17 +1,12 @@
 import { env } from "cloudflare:workers";
-
 import { describe, expect, it, vi } from "vitest";
 
 import { listAudit } from "../app/domain/admin-audit.server";
-
 import { consoleSummary } from "../app/domain/admin-directory.server";
-
 import { listAnomalies, receiptStates, taskStates } from "../app/domain/admin-operations.server";
-
 import { requeueTask } from "../app/domain/scheduled-work.server";
-
 import { verifiedSession } from "./fixtures/account-fixtures";
-
+import { at, hour, later, setupScenarios } from "./fixtures/admin-scenarios";
 import {
   insertCredentials,
   insertEntitlement,
@@ -20,10 +15,7 @@ import {
   insertWorkspace,
   now,
 } from "./fixtures/database-fixtures";
-
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
-
-import { at, hour, later, setupScenarios } from "./fixtures/admin-scenarios";
 
 setupScenarios();
 
@@ -49,7 +41,7 @@ describe("anomalie e lavori", () => {
       (a) => a.kind === "store_reads",
     );
     expect(reads).toMatchObject({ severity: "p2", count: 2 });
-    expect(reads!.subjects.map((subject) => subject.id).sort()).toEqual(["s-ko1", "s-ko2"]);
+    expect(reads!.subjects.map((subject) => subject.id).toSorted()).toEqual(["s-ko1", "s-ko2"]);
     // Quando nessun negozio attivo dell'ambiente legge, il problema è eBay.
     await env.DB.prepare(
       `INSERT INTO sync_runs (store_id, started_at, ok, new_orders)
@@ -171,9 +163,7 @@ describe("anomalie e lavori", () => {
     const stalledLater = at(later(3 * hour));
     expect(
       (await taskStates(env.DB, stalledLater)).find((t) => t.task === "billing"),
-    ).toMatchObject({
-      stalled: true,
-    });
+    ).toMatchObject({ stalled: true });
     expect(await requeueTask(queueEnv, "billing", stalledLater)).toBe("queued");
     expect(send).toHaveBeenLastCalledWith({ task: "billing", slot: "2026-09-13T23:00:00.000Z" });
   });
@@ -214,7 +204,7 @@ describe("panoramica e registro", () => {
                ('a2', 'admin', 'save-notice', 'notice:n-1', 'done', ?1)`).bind(now),
     ]);
     const [pause, notice] = await listAudit(env.DB, {});
-    expect([pause, notice].map((entry) => entry!.id).sort()).toEqual(["a1", "a2"]);
+    expect([pause, notice].map((entry) => entry!.id).toSorted()).toEqual(["a1", "a2"]);
     const entries = await listAudit(env.DB, {});
     expect(entries.find((entry) => entry.id === "a1")).toMatchObject({
       workspace: { id: "w-a", email: "registro@example.invalid" },

@@ -7,9 +7,10 @@ import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+
 import type { AccountRow, StoreRow } from "../../domain/admin-directory.server";
-import { ActionForm, DataTable } from "./kit";
 import { adminPageSize } from "../../limits";
+import { ActionForm, DataTable } from "./kit";
 import { storeActions } from "./store-actions";
 import { useAdmin } from "./use-admin";
 
@@ -188,7 +189,7 @@ export function StoresView({
               <Link
                 key="workspace"
                 to={href(`spazi/${encodeURIComponent(row.workspaceId)}`)}
-                className="text-primary underline-offset-[0.25em] wrap-anywhere hover:underline"
+                className="wrap-anywhere text-primary underline-offset-[0.25em] hover:underline"
               >
                 {row.ownerEmail ?? row.workspaceId}
               </Link>,

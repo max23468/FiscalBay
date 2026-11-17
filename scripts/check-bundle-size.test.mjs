@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { randomBytes } from "node:crypto";
+
 import { budgetKiB } from "./check-bundle-size.mjs";
 
 describe("budget del JavaScript client", () => {

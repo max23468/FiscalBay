@@ -1,13 +1,13 @@
 import { z } from "zod";
 
+import type { EbayEnvironment } from "../../view-models";
 import { upstreamJson } from "../http.server";
 import { applicationToken, ebayConfiguration } from "./environment.server";
-import type { EbayEnvironment } from "../../view-models";
 
 /**
- * Quote delle API eBay dell'applicazione (D188), lette da `getRateLimits` della Developer
- * Analytics API con il token dell'applicazione: nessun token di un venditore e nessuna chiamata
- * per conto dei negozi. Ogni lettura ha un'attesa propria, più breve di quella delle letture.
+ * Quote delle API eBay dell'applicazione (D188), lette da `getRateLimits` della Developer Analytics
+ * API con il token dell'applicazione: nessun token di un venditore e nessuna chiamata per conto dei
+ * negozi. Ogni lettura ha un'attesa propria, più breve di quella delle letture.
  */
 
 const timeoutMs = 8_000;

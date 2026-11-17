@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { data, redirect } from "react-router";
 
 import { accessNotice, signInNotice, withStoreNotice, type SignInNotice } from "./access-notice";
-import { currentSession } from "./account-area.server";
+import { currentSession, isSameOrigin } from "./account-area.server";
 import {
   accessPath,
   authErrorPath,
@@ -16,6 +16,7 @@ import {
   securityReturnPath,
   visitCookie,
 } from "./app-links";
+import { tooManyRequests } from "./area-actions.server";
 import {
   authLimitWait,
   forwardToAuth,
@@ -25,31 +26,29 @@ import {
   signInFailureKey,
   signInFailures,
 } from "./auth-route.server";
-import { limitedHeaders } from "./request-limits.server";
-import { countAuthAttempt } from "./domain/auth-attempts.server";
 import { activateStoreGrant, lastLoginMethodCookie, readSession } from "./auth.server";
+import { deletionReauthenticated } from "./domain/account-deletion.server";
+import { countAuthAttempt } from "./domain/auth-attempts.server";
 import {
   completeRegistration,
   parseProfile,
   registrationComplete,
   registrationStatus,
+  registeredUserExists,
 } from "./domain/registration.server";
-import { deletionReauthenticated } from "./domain/account-deletion.server";
 import { listSignInMethods } from "./domain/sign-in-methods.server";
+import { recordSignupSource } from "./domain/signup-sources.server";
+import { errorResponse, unavailableData } from "./error-response";
+import { tracePhase } from "./errors";
+import { languageFromPath, localizedPath } from "./i18n";
+import { ebayStoreGrantScopes } from "./integrations/ebay/store-link.server";
+import { limitedHeaders } from "./request-limits.server";
 import {
   requestAccountDeletion,
   securityAction,
   securityAuthPath,
 } from "./security-actions.server";
-import { tooManyRequests } from "./area-actions.server";
-import { errorResponse, unavailableData } from "./error-response";
-import { isSameOrigin } from "./account-area.server";
-import { registeredUserExists } from "./domain/registration.server";
-import { recordSignupSource } from "./domain/signup-sources.server";
 import { formatSource, parseSource, sourceParam } from "./signup-source";
-import { tracePhase } from "./errors";
-import { languageFromPath, localizedPath } from "./i18n";
-import { ebayStoreGrantScopes } from "./integrations/ebay/store-link.server";
 import { turnstileActions, turnstileField } from "./turnstile";
 import { turnstileFailure } from "./turnstile.server";
 
@@ -84,8 +83,8 @@ async function compromisedPassword(response: Response): Promise<boolean> {
 
 /**
  * Dati della cancellazione self-service per chi non raggiunge le Impostazioni (registrazione
- * incompleta o email non verificata): metodi per confermare l'identità sul posto, sessione in
- * uso e accesso abbastanza recente per chiedere il link.
+ * incompleta o email non verificata): metodi per confermare l'identità sul posto, sessione in uso e
+ * accesso abbastanza recente per chiedere il link.
  */
 export async function deletionAccess(
   session: NonNullable<Awaited<ReturnType<typeof readSession>>>,
@@ -100,9 +99,9 @@ export async function deletionAccess(
 
 /**
  * Pagina di accesso: login, registrazione, recupero della password, passkey e completamento del
- * profilo, con la cancellazione dell'account per chi non l'ha ancora completato. Con la sessione e la registrazione completa rimanda agli Ordini (o alla Sicurezza
- * da cui si è partiti), conservando l'esito nell'indirizzo; il link per la nuova password resta
- * qui anche con la sessione.
+ * profilo, con la cancellazione dell'account per chi non l'ha ancora completato. Con la sessione e
+ * la registrazione completa rimanda agli Ordini (o alla Sicurezza da cui si è partiti), conservando
+ * l'esito nell'indirizzo; il link per la nuova password resta qui anche con la sessione.
  */
 export async function accessLoader(request: Request) {
   const url = new URL(request.url);
@@ -153,10 +152,10 @@ export async function accessLoader(request: Request) {
 }
 
 /**
- * Invii della pagina di accesso: uscita, accesso con email o Google/eBay, recupero della
- * password, registrazione, verifica dell'email e completamento del profilo. Gli errori dei moduli
- * compilati rispondono sulla pagina stessa; gli altri esiti tornano con un avviso
- * nell'indirizzo, oppure entrano nell'app.
+ * Invii della pagina di accesso: uscita, accesso con email o Google/eBay, recupero della password,
+ * registrazione, verifica dell'email e completamento del profilo. Gli errori dei moduli compilati
+ * rispondono sulla pagina stessa; gli altri esiti tornano con un avviso nell'indirizzo, oppure
+ * entrano nell'app.
  */
 export async function accessAction(request: Request) {
   const language = languageFromPath(new URL(request.url).pathname);
@@ -280,10 +279,7 @@ export async function accessAction(request: Request) {
   if (intent === "reimposta-password") {
     const token = field("token");
     if (!token || token.length > 512) return notice("recupero-scaduto");
-    const response = await forward("/reset-password", {
-      token,
-      newPassword: field("password"),
-    });
+    const response = await forward("/reset-password", { token, newPassword: field("password") });
     // La password violata non consuma il link: la pagina resta sul modulo con lo stesso token.
     if (await compromisedPassword(response)) {
       const query = new URLSearchParams({ token, accesso: "password-violata" });

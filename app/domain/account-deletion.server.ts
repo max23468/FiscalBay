@@ -21,23 +21,22 @@ import { storeIdentityHash, storeMarkSql, trialMarkExpiry } from "./store-marks.
 import { taskPeriods } from "./work-timing";
 
 /**
- * Cancellazione dell'account (§30, D163). La conferma dal link email registra la richiesta e
- * nello stesso commit ferma accesso, letture e notifiche: chiude le sessioni, elimina le
- * credenziali eBay e il collegamento Telegram. Il lavoro dalla coda, ripreso dopo un crash o un
- * retry senza doppi effetti, ferma i rinnovi Stripe, scrive i segni minimi dei negozi, elimina
- * i dati operativi e per ultimo l'utente Auth, poi lo spazio con i riferimenti dei pagamenti e
- * l'email finale. Se Stripe non conferma lo stop dei rinnovi restano soltanto la richiesta, i
- * segni e lo spazio con i riferimenti necessari a completarlo: la console lo segnala e il
- * compito periodico riprova.
+ * Cancellazione dell'account (§30, D163). La conferma dal link email registra la richiesta e nello
+ * stesso commit ferma accesso, letture e notifiche: chiude le sessioni, elimina le credenziali eBay
+ * e il collegamento Telegram. Il lavoro dalla coda, ripreso dopo un crash o un retry senza doppi
+ * effetti, ferma i rinnovi Stripe, scrive i segni minimi dei negozi, elimina i dati operativi e per
+ * ultimo l'utente Auth, poi lo spazio con i riferimenti dei pagamenti e l'email finale. Se Stripe
+ * non conferma lo stop dei rinnovi restano soltanto la richiesta, i segni e lo spazio con i
+ * riferimenti necessari a completarlo: la console lo segnala e il compito periodico riprova.
  */
 
 /** Attesa massima fra due tentativi di una richiesta ferma. */
 const maxRetryMilliseconds = 6 * 3_600_000;
 
 /**
- * Prossimo tentativo di una richiesta ferma, su Stripe, sull'email finale o per un errore:
- * l'attesa cresce con l'età della richiesta, da un periodo del compito a sei ore. Nel
- * frattempo la richiesta non è candidata e le altre avanzano.
+ * Prossimo tentativo di una richiesta ferma, su Stripe, sull'email finale o per un errore: l'attesa
+ * cresce con l'età della richiesta, da un periodo del compito a sei ore. Nel frattempo la richiesta
+ * non è candidata e le altre avanzano.
  */
 function retryAt(requestedAt: string, now: Date): string {
   const age = now.getTime() - Date.parse(requestedAt);
@@ -64,8 +63,8 @@ export function deletionReauthenticated(createdAt: Date | string, now = new Date
 }
 
 /**
- * Arresto immediato, ripetibile: sessioni, credenziali dei negozi (letture e rinnovi dei token
- * non trovano più il consenso e non scrivono) e collegamento Telegram.
+ * Arresto immediato, ripetibile: sessioni, credenziali dei negozi (letture e rinnovi dei token non
+ * trovano più il consenso e non scrivono) e collegamento Telegram.
  */
 function stopStatements(db: D1Database, userId: string, workspaceId: string | null) {
   return [
@@ -93,10 +92,10 @@ async function userWorkspace(db: D1Database, userId: string) {
 }
 
 /**
- * Callback del link di conferma: registra la richiesta e ferma accesso, letture e notifiche in
- * un solo commit, poi accoda il lavoro. Una seconda conferma ritrova la richiesta esistente.
- * L'utente Auth resta: lo elimina il lavoro, per ultimo. Se l'invio alla coda non riesce la
- * richiesta resta registrata e la riprende il compito periodico.
+ * Callback del link di conferma: registra la richiesta e ferma accesso, letture e notifiche in un
+ * solo commit, poi accoda il lavoro. Una seconda conferma ritrova la richiesta esistente. L'utente
+ * Auth resta: lo elimina il lavoro, per ultimo. Se l'invio alla coda non riesce la richiesta resta
+ * registrata e la riprende il compito periodico.
  */
 export async function startAccountDeletion(
   env: Pick<Env, "DB" | "WORK_QUEUE" | "BETTER_AUTH_SECRET">,
@@ -168,10 +167,10 @@ const workspaceOrdersSql = `SELECT o.id FROM orders o
   JOIN ebay_stores s ON s.id = o.store_id WHERE s.workspace_id = ?1`;
 
 /**
- * Dati operativi dello spazio: negozi con letture, ricevute, pause, marker degli ordini e
- * consegne; cicli, coperture, estensioni, preferenze Telegram, metriche e revisioni antiabuso.
- * Restano la riga dello spazio e i riferimenti di Stripe e dei posti lifetime, che servono allo
- * stop dei rinnovi ed escono con lo spazio.
+ * Dati operativi dello spazio: negozi con letture, ricevute, pause, marker degli ordini e consegne;
+ * cicli, coperture, estensioni, preferenze Telegram, metriche e revisioni antiabuso. Restano la
+ * riga dello spazio e i riferimenti di Stripe e dei posti lifetime, che servono allo stop dei
+ * rinnovi ed escono con lo spazio.
  */
 function workspaceDataStatements(db: D1Database, workspaceId: string) {
   return [
@@ -192,9 +191,9 @@ function workspaceDataStatements(db: D1Database, workspaceId: string) {
 }
 
 /**
- * Utente Auth, per ultimo: file delle esportazioni nel bucket, poi le righe che seguono
- * l'utente (accessi, sessioni, passkey, profilo, consensi, preferenze, configurazioni, file,
- * lavori, assistenza) e quelle senza chiave esterna.
+ * Utente Auth, per ultimo: file delle esportazioni nel bucket, poi le righe che seguono l'utente
+ * (accessi, sessioni, passkey, profilo, consensi, preferenze, configurazioni, file, lavori,
+ * assistenza) e quelle senza chiave esterna.
  */
 async function deleteUser(
   env: Pick<Env, "DB" | "EXPORT_FILES">,
@@ -226,8 +225,8 @@ export type DeletionOutcome = "done" | "more" | "waiting" | "busy" | "missing";
 
 /**
  * Un passo del lavoro, ripetibile: ogni fase rilegge lo stato corrente e una ripetizione non
- * duplica effetti. «more» quando restano ordini oltre il budget, «waiting» se lo stop dei
- * rinnovi o l'email finale vanno ritentati, «busy» se un altro consumer ha la richiesta.
+ * duplica effetti. «more» quando restano ordini oltre il budget, «waiting» se lo stop dei rinnovi o
+ * l'email finale vanno ritentati, «busy» se un altro consumer ha la richiesta.
  */
 export async function runAccountDeletion(
   env: Env,
@@ -353,11 +352,11 @@ export function isAccountDeletionMessage(body: unknown): body is z.infer<typeof 
 }
 
 /**
- * Esegue un passo dalla coda. Gli ordini oltre il budget ripartono con un nuovo messaggio; lo
- * stop dei rinnovi non confermato, l'email da ritentare e la richiesta tenuta da un altro
- * consumer o in attesa del prossimo tentativo restano al compito periodico, così nessuna
- * richiesta finisce fra i messaggi non consegnati. Un errore riprova con backoff per poche
- * consegne, entro il limite della coda, poi passa anch'esso al compito.
+ * Esegue un passo dalla coda. Gli ordini oltre il budget ripartono con un nuovo messaggio; lo stop
+ * dei rinnovi non confermato, l'email da ritentare e la richiesta tenuta da un altro consumer o in
+ * attesa del prossimo tentativo restano al compito periodico, così nessuna richiesta finisce fra i
+ * messaggi non consegnati. Un errore riprova con backoff per poche consegne, entro il limite della
+ * coda, poi passa anch'esso al compito.
  */
 export async function consumeAccountDeletion(
   message: Message<unknown>,
@@ -375,12 +374,12 @@ export async function consumeAccountDeletion(
 }
 
 /**
- * Compito periodico: riprende le richieste non concluse (messaggio perso, stop dei rinnovi o
- * email da ritentare, errore) e riapre quelle concluse il cui utente o spazio esiste di nuovo,
- * come dopo un restore con i marker riapplicati. La riapertura ripete anche lo stop dei rinnovi;
- * l'email già inviata non riparte. Le richieste dovute partono dal tentativo più vecchio e una
- * richiesta ferma attende sempre di più: le nuove non restano dietro a quelle bloccate, e un
- * errore su una richiesta non ferma le altre.
+ * Compito periodico: riprende le richieste non concluse (messaggio perso, stop dei rinnovi o email
+ * da ritentare, errore) e riapre quelle concluse il cui utente o spazio esiste di nuovo, come dopo
+ * un restore con i marker riapplicati. La riapertura ripete anche lo stop dei rinnovi; l'email già
+ * inviata non riparte. Le richieste dovute partono dal tentativo più vecchio e una richiesta ferma
+ * attende sempre di più: le nuove non restano dietro a quelle bloccate, e un errore su una
+ * richiesta non ferma le altre.
  */
 export async function resumeAccountDeletions(
   env: Env,
@@ -414,8 +413,8 @@ export async function resumeAccountDeletions(
 }
 
 /**
- * Pulizia: richieste concluse da oltre la finestra di Time Travel, segni scaduti e cicli dei
- * segni finiti. Il ciclo resta soltanto fino alla sua fine, la prova usata per due anni (D220).
+ * Pulizia: richieste concluse da oltre la finestra di Time Travel, segni scaduti e cicli dei segni
+ * finiti. Il ciclo resta soltanto fino alla sua fine, la prova usata per due anni (D220).
  */
 export function purgeDeletionMarkers(db: D1Database, now: Date) {
   return [

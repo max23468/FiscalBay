@@ -1,6 +1,6 @@
 /**
- * Regole della ricerca ordini, uguali per l'area reale, l'anteprima e la barra superiore.
- * Il confronto ignora maiuscole e accenti di qualunque alfabeto: «lucia» trova «Lucía».
+ * Regole della ricerca ordini, uguali per l'area reale, l'anteprima e la barra superiore. Il
+ * confronto ignora maiuscole e accenti di qualunque alfabeto: «lucia» trova «Lucía».
  */
 
 /** Parametro dell'indirizzo con la ricerca attiva: un testo cifrato, mai la query in chiaro. */

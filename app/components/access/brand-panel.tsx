@@ -3,6 +3,7 @@ import { ClipboardList, Copy, Store } from "lucide-react";
 
 import { useCopy } from "~/components/copy-context";
 import { Logo } from "~/components/standalone-page";
+
 import { rise } from "./rise";
 
 const featureIcons = [

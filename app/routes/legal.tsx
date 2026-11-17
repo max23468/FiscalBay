@@ -11,14 +11,15 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import type { Route } from "./+types/legal";
+
 import { appCopy, infoEmail } from "../app-copy";
+import { privacyPath, termsPath } from "../app-links";
 import { legalDocuments, type LegalBlock } from "../copy/legal-documents.server";
 import { sitePages } from "../copy/site-pages.server";
-import { privacyPath, termsPath } from "../app-links";
 import { legalVersions } from "../domain/registration.server";
-import { publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
+import { publicPage, publicPageHeaders } from "../site.server";
+import type { Route } from "./+types/legal";
 
 const documents = {
   termini: { version: "terms", path: termsPath },
@@ -26,8 +27,8 @@ const documents = {
 } as const;
 
 /**
- * Termini e Privacy: pubblici ma `noindex` e fuori dalla sitemap (D204), con l'operatore
- * Temisfera, che non compare altrove nel sito.
+ * Termini e Privacy: pubblici ma `noindex` e fuori dalla sitemap (D204), con l'operatore Temisfera,
+ * che non compare altrove nel sito.
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const { language, origin, session } = await publicPage(request);

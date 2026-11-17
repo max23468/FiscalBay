@@ -1,17 +1,16 @@
 import { z } from "zod";
 
-import { storeLabelSql } from "./store-state.server";
 import { maxAuditReason } from "../limits";
+import { storeLabelSql } from "./store-state.server";
 
 /**
  * Registro delle operazioni della console amministrativa (§15): ogni operazione eseguita da un
  * admin lascia autore, oggetto, motivo ed esito, anche quando lo stato riletto la rifiuta. Il
  * registro non contiene dati dei buyer né valori fiscali.
  *
- * La riga di un'operazione nasce prima dell'operazione, con l'esito «in corso», e riceve una
- * sola volta l'esito definitivo e l'oggetto riletto: se quell'ultima scrittura non riesce, la
- * riga resta «in corso» con autore, oggetto, motivo e istante. Un trigger rifiuta ogni altra
- * modifica.
+ * La riga di un'operazione nasce prima dell'operazione, con l'esito «in corso», e riceve una sola
+ * volta l'esito definitivo e l'oggetto riletto: se quell'ultima scrittura non riesce, la riga resta
+ * «in corso» con autore, oggetto, motivo e istante. Un trigger rifiuta ogni altra modifica.
  */
 
 /** Esito della riga scritta prima dell'operazione, finché non riceve quello definitivo. */

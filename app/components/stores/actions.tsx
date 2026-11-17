@@ -12,6 +12,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { useAction } from "~/components/action";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { useFieldErrors } from "~/components/form-validation";
 import { useHydrated } from "~/components/hydrated";
 import {
@@ -28,12 +29,12 @@ import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Field, FieldError, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
-import { useCopy, useLinks } from "~/components/copy-context";
+
 import type { AppCopy } from "../../app-copy";
 import { appHref, reconnectHref, type AppLinks } from "../../app-links";
 import type { StoreView } from "../../view-models";
-import { StoreSection } from "./store";
 import { needsReconnect } from "./state";
+import { StoreSection } from "./store";
 
 /** Azioni del negozio: una colonna di pulsanti uguali, poi le due disconnessioni. */
 export function StoreActions({
@@ -112,8 +113,8 @@ function ReadActions({ store, ebayDown }: { store: StoreView; ebayDown: boolean 
 }
 
 /**
- * Metti in pausa o riprendi. Anche un negozio da ricollegare può essere in pausa: il pulsante
- * segue la pausa.
+ * Metti in pausa o riprendi. Anche un negozio da ricollegare può essere in pausa: il pulsante segue
+ * la pausa.
  */
 export function PauseButton({
   store,
@@ -147,8 +148,8 @@ export function PauseButton({
 }
 
 /**
- * Scollega ed elimina negozio; un negozio già scollegato offre solo l'eliminazione.
- * Dopo il successo si torna all'elenco.
+ * Scollega ed elimina negozio; un negozio già scollegato offre solo l'eliminazione. Dopo il
+ * successo si torna all'elenco.
  */
 function useDisconnectDialog(store: StoreView, t: AppCopy, links: AppLinks) {
   const navigate = useNavigate();
@@ -189,7 +190,7 @@ function DisconnectActions({ store, renewsAlone }: { store: StoreView; renewsAlo
             render={
               <Button
                 variant="destructive"
-                className="h-auto min-h-9 justify-start py-2 whitespace-normal text-left"
+                className="h-auto min-h-9 justify-start py-2 text-left whitespace-normal"
               />
             }
           >
@@ -232,7 +233,7 @@ function DisconnectActions({ store, renewsAlone }: { store: StoreView; renewsAlo
           render={
             <Button
               variant="destructive"
-              className="h-auto min-h-9 justify-start py-2 whitespace-normal text-left"
+              className="h-auto min-h-9 justify-start py-2 text-left whitespace-normal"
             />
           }
         >
@@ -262,8 +263,8 @@ function DisconnectActions({ store, renewsAlone }: { store: StoreView; renewsAlo
 }
 
 /**
- * Conferma dell'eliminazione con il nome del negozio. Il pulsante resta attivo: un nome
- * diverso ferma l'invio con il messaggio accanto al campo, che riceve il focus.
+ * Conferma dell'eliminazione con il nome del negozio. Il pulsante resta attivo: un nome diverso
+ * ferma l'invio con il messaggio accanto al campo, che riceve il focus.
  */
 function StoreDeleteForm({
   store,

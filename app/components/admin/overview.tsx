@@ -3,6 +3,7 @@ import { CircleCheck, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 
 import { StatusBadge } from "~/components/status";
+
 import type { SectionData } from "../../admin-console.server";
 import type { AdminCopy } from "../../copy/admin-copy";
 import type { Anomaly, Severity } from "../../domain/admin-operations.server";
@@ -59,10 +60,10 @@ function AnomalyAction({ anomaly }: { anomaly: Anomaly }) {
     );
   }
   if (
-    anomaly.kind === "ebay_quota" ||
-    anomaly.kind === "ebay_bulk_data" ||
-    anomaly.kind === "ebay_down" ||
-    anomaly.kind === "ebay_suspended"
+    anomaly.kind === "ebay_quota"
+    || anomaly.kind === "ebay_bulk_data"
+    || anomaly.kind === "ebay_down"
+    || anomaly.kind === "ebay_suspended"
   )
     return (
       <Link
@@ -125,8 +126,8 @@ function AnomalyList({ anomalies }: { anomalies: Anomaly[] }) {
 type OverviewData = Extract<SectionData, { section: "panoramica" }>;
 
 /**
- * Panoramica: prima lo stato, con le anomalie aperte, poi i numeri chiave che portano alle
- * sezioni e le ultime operazioni del registro.
+ * Panoramica: prima lo stato, con le anomalie aperte, poi i numeri chiave che portano alle sezioni
+ * e le ultime operazioni del registro.
  */
 export function Overview({ data }: { data: OverviewData }) {
   const { t, href, money } = useAdmin();

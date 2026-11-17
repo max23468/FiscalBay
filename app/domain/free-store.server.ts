@@ -1,16 +1,16 @@
+import { freeStoreChangeDays } from "../limits";
+import { dayMilliseconds } from "../time";
 import { abuseSuspendedSql, activeEntitlementSql, paidCoverageSql } from "./grants.server";
 import { coveredMonthsSql, freeHistoryDays, historyEndSql } from "./history-window.server";
 import { storeNameSql } from "./store-state.server";
-import { freeStoreChangeDays } from "../limits";
-import { dayMilliseconds } from "../time";
 
 /**
- * Negozio attivo del Free e downgrade (§6.4, §18, D155). Con una copertura in corso tutti i
- * negozi dello spazio sono ammessi; nel Free soltanto il negozio attivo, gli altri hanno la
- * pausa `plan`: nessuna lettura di eBay e ordini non consultabili. Senza una scelta il negozio
- * attivo è il primo ancora collegato quando il Free si applica, registrato subito: scollegarlo
- * e ricollegarlo non lo sposta. La sostituzione dell'utente vale ogni 90 giorni; l'assistenza
- * può fare eccezione con motivo e autore, senza toccare quota, prova o ciclo.
+ * Negozio attivo del Free e downgrade (§6.4, §18, D155). Con una copertura in corso tutti i negozi
+ * dello spazio sono ammessi; nel Free soltanto il negozio attivo, gli altri hanno la pausa `plan`:
+ * nessuna lettura di eBay e ordini non consultabili. Senza una scelta il negozio attivo è il primo
+ * ancora collegato quando il Free si applica, registrato subito: scollegarlo e ricollegarlo non lo
+ * sposta. La sostituzione dell'utente vale ogni 90 giorni; l'assistenza può fare eccezione con
+ * motivo e autore, senza toccare quota, prova o ciclo.
  *
  * Il riallineamento parte dal cron prima di smistare le letture, a ogni pagina dell'area e al
  * collegamento di un negozio: l'utente non vede mai lo stato precedente al downgrade.
@@ -26,8 +26,8 @@ const freeWindowSql = `strftime('%Y-%m-%dT%H:%M:%fZ', orders.creation_time,
   '+${freeHistoryDays} days')`;
 
 /**
- * Negozio eBay reale con i dati ancora presenti. La Sandbox, disponibile soltanto sul test per
- * le qualifiche, resta fuori dal limite del Free.
+ * Negozio eBay reale con i dati ancora presenti. La Sandbox, disponibile soltanto sul test per le
+ * qualifiche, resta fuori dal limite del Free.
  */
 const realStore = (store: string) =>
   `${store}.data_deleted_at IS NULL AND ${store}.ebay_environment = 'production'`;
@@ -50,8 +50,8 @@ function lastChangeSql(workspace: string) {
 }
 
 /**
- * Spazi da riallineare: `workspaces` filtra l'alias `w` per i negozi, `orders` per i termini
- * degli ordini. ?1 è sempre l'istante, gli altri parametri seguono.
+ * Spazi da riallineare: `workspaces` filtra l'alias `w` per i negozi, `orders` per i termini degli
+ * ordini. ?1 è sempre l'istante, gli altri parametri seguono.
  */
 type Scope = { workspaces: string; orders: string; binds: unknown[] };
 
@@ -72,9 +72,9 @@ const lastWeek = (column: string) =>
 
 /**
  * Il cron rivede i negozi di ogni spazio, i termini degli ordini soltanto per gli spazi la cui
- * copertura è finita o la cui estensione dello storico è cambiata nell'ultima settimana, per
- * quelli con un cambiamento non ancora riallineato (`plan_changed_at`) e per quelli che
- * perderebbero entro un giorno un ordine ancora dentro la loro finestra.
+ * copertura è finita o la cui estensione dello storico è cambiata nell'ultima settimana, per quelli
+ * con un cambiamento non ancora riallineato (`plan_changed_at`) e per quelli che perderebbero entro
+ * un giorno un ordine ancora dentro la loro finestra.
  */
 const allScope: Scope = {
   workspaces: "1 = 1",
@@ -90,19 +90,19 @@ const allScope: Scope = {
 };
 
 /**
- * Istruzioni del riallineamento, in un solo batch. Nell'ordine: in Premium il negozio
- * predefinito si dimentica, perché al prossimo downgrade vale di nuovo il primo ancora
- * collegato; nel Free si registra il predefinito se manca o se i suoi dati sono stati eliminati;
- * la pausa `plan` lascia i negozi ammessi e raggiunge gli altri; una copertura toglie la pausa
- * per inattività e il suo preavviso. Infine i termini, secondo la finestra dello spazio: gli
- * ordini che la superano, nel Free o dopo la revoca di un'estensione, tornano alla finestra e
- * restano conservati, non consultabili, per trenta giorni; i negozi esclusi dal Free conservano i
- * propri dati per trenta giorni dalla pausa. Con una copertura gli ordini ancora conservati
- * riprendono la finestra intera, anche durante quei trenta giorni; gli altri termini non si
- * allungano mai. La sospensione antiabuso del Free mette la pausa dell'assistenza su ogni
- * negozio reale dello spazio sospeso senza copertura pagata o concessa e la toglie negli altri
- * casi, senza toccare la pausa manuale della console. L'ultima istruzione segna lo spazio come
- * riallineato: un cambiamento arrivato durante il batch ha un istante successivo e resta da fare.
+ * Istruzioni del riallineamento, in un solo batch. Nell'ordine: in Premium il negozio predefinito
+ * si dimentica, perché al prossimo downgrade vale di nuovo il primo ancora collegato; nel Free si
+ * registra il predefinito se manca o se i suoi dati sono stati eliminati; la pausa `plan` lascia i
+ * negozi ammessi e raggiunge gli altri; una copertura toglie la pausa per inattività e il suo
+ * preavviso. Infine i termini, secondo la finestra dello spazio: gli ordini che la superano, nel
+ * Free o dopo la revoca di un'estensione, tornano alla finestra e restano conservati, non
+ * consultabili, per trenta giorni; i negozi esclusi dal Free conservano i propri dati per trenta
+ * giorni dalla pausa. Con una copertura gli ordini ancora conservati riprendono la finestra intera,
+ * anche durante quei trenta giorni; gli altri termini non si allungano mai. La sospensione
+ * antiabuso del Free mette la pausa dell'assistenza su ogni negozio reale dello spazio sospeso
+ * senza copertura pagata o concessa e la toglie negli altri casi, senza toccare la pausa manuale
+ * della console. L'ultima istruzione segna lo spazio come riallineato: un cambiamento arrivato
+ * durante il batch ha un istante successivo e resta da fare.
  */
 function planStatements(db: D1Database, scope: Scope, at: string) {
   const covered = (workspace: string) => activeEntitlementSql(workspace, "?1");
@@ -242,9 +242,9 @@ export type FreeStoreChoice =
   | { result: "locked"; changeFrom: string };
 
 /**
- * Sostituzione del negozio attivo scelta dall'utente, soltanto nel Free e non prima di 90
- * giorni dall'ultima: la prima è sempre ammessa. Scelta e pause sono un unico commit, quindi
- * due richieste concorrenti ne registrano una sola. Il negozio lasciato va subito in pausa.
+ * Sostituzione del negozio attivo scelta dall'utente, soltanto nel Free e non prima di 90 giorni
+ * dall'ultima: la prima è sempre ammessa. Scelta e pause sono un unico commit, quindi due richieste
+ * concorrenti ne registrano una sola. Il negozio lasciato va subito in pausa.
  */
 export async function chooseFreeStore(
   db: D1Database,
@@ -280,9 +280,9 @@ export async function chooseFreeStore(
 export type AssistedFreeStore = "done" | "not_found" | "covered" | "unchanged";
 
 /**
- * Eccezione dell'assistenza al vincolo dei 90 giorni (§6.4): il negozio indicato diventa il
- * negozio attivo del Free dello spazio, con motivo e autore. Come la scelta dell'utente apre una
- * nuova attesa di 90 giorni e non tocca quota, prova o ciclo. Scelta e pause sono un commit.
+ * Eccezione dell'assistenza al vincolo dei 90 giorni (§6.4): il negozio indicato diventa il negozio
+ * attivo del Free dello spazio, con motivo e autore. Come la scelta dell'utente apre una nuova
+ * attesa di 90 giorni e non tocca quota, prova o ciclo. Scelta e pause sono un commit.
  */
 export async function assistFreeStore(
   db: D1Database,

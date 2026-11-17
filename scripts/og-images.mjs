@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 /**
- * Immagini delle condivisioni, 1200×630, per ogni pagina della sitemap e lingua: logo, titolo
- * della pagina e descrittore del servizio sul blu del marchio, come le righe della tessera del
- * logo. I testi arrivano dai testi del sito, così restano allineati ai titoli. Scrive i PNG in
- * `public/og/` con i nomi letti da `ogImage` in `app/site-meta.ts`.
+ * Immagini delle condivisioni, 1200×630, per ogni pagina della sitemap e lingua: logo, titolo della
+ * pagina e descrittore del servizio sul blu del marchio, come le righe della tessera del logo. I
+ * testi arrivano dai testi del sito, così restano allineati ai titoli. Scrive i PNG in `public/og/`
+ * con i nomi letti da `ogImage` in `app/site-meta.ts`.
  *
  * Da rieseguire quando cambiano titoli delle pagine o guide: `pnpm site:og`.
  */
-import { chromium } from "@playwright/test";
+
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+
+import { chromium } from "@playwright/test";
 
 import { guides } from "../app/copy/guides.server.ts";
 import { sitePages } from "../app/copy/site-pages.server.ts";

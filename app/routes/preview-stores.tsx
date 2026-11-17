@@ -1,14 +1,15 @@
 import { data, isRouteErrorResponse } from "react-router";
 
 import { AccessNotice } from "~/components/access-notice";
+import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores/page";
 import type { StoresPageData } from "~/components/stores/state";
-import { NotFoundState } from "~/components/not-found";
+
 import { accessNotice } from "../access-notice";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
-import type { AccountView } from "../view-models";
 import { assertPreviewAction, verifiedPageScenario, simulateAction } from "../preview/state.server";
+import type { AccountView } from "../view-models";
 import type { Route } from "./+types/preview-stores";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {

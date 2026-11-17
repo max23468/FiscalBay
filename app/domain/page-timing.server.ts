@@ -1,11 +1,11 @@
-import { base64Url, derivedKey } from "../sealed.server";
 import type { TimedPage } from "../page-timing";
+import { base64Url, derivedKey } from "../sealed.server";
 
 /**
  * Biglietti dei report del browser: la pagina misurata ne riceve uno dal proprio loader, firmato
- * con una chiave derivata dal segreto server e legato alla pagina. Il report vale soltanto con
- * un biglietto valido, entro quindici minuti e una sola volta, così un invio ripetuto o
- * fabbricato senza aprire la pagina non lascia misure.
+ * con una chiave derivata dal segreto server e legato alla pagina. Il report vale soltanto con un
+ * biglietto valido, entro quindici minuti e una sola volta, così un invio ripetuto o fabbricato
+ * senza aprire la pagina non lascia misure.
  */
 
 const ticketLifetime = 15 * 60_000;

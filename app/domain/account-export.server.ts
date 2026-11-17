@@ -5,11 +5,11 @@ import type { Language } from "../i18n";
 import { csvLine, exportDateTime } from "./order-export.server";
 
 /**
- * Dati dell'account in un archivio ZIP (§12.2, D076), per tutti i piani: un JSON completo e
- * CSV leggibili di profilo, accessi, negozi, piano e configurazioni dell'esportazione. Ogni
- * campo è scelto qui: nessuna password, token, chiave passkey, identificativo della chat o del
- * cliente Stripe, importo, fattura o ricevuta di pagamento, nessun motivo o autore delle
- * concessioni e nessun ordine, che resta nell'esportazione degli ordini con i suoi sblocchi.
+ * Dati dell'account in un archivio ZIP (§12.2, D076), per tutti i piani: un JSON completo e CSV
+ * leggibili di profilo, accessi, negozi, piano e configurazioni dell'esportazione. Ogni campo è
+ * scelto qui: nessuna password, token, chiave passkey, identificativo della chat o del cliente
+ * Stripe, importo, fattura o ricevuta di pagamento, nessun motivo o autore delle concessioni e
+ * nessun ordine, che resta nell'esportazione degli ordini con i suoi sblocchi.
  */
 
 type Row = Record<string, string | number | null>;

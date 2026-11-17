@@ -1,11 +1,11 @@
-import { legalDate, plural } from "./format";
-import type { AppCopy } from "./copy-it";
 import type { ExitReason } from "../exit-reasons";
+import type { AppCopy } from "./copy-it";
+import { legalDate, plural } from "./format";
 
 /**
  * Conteggi con il separatore delle migliaia anche a quattro cifre, come `formatNumber`. Il formato
- * nasce al primo uso: creato al caricamento renderebbe il modulo non eliminabile dai bundle che
- * non usano i testi.
+ * nasce al primo uso: creato al caricamento renderebbe il modulo non eliminabile dai bundle che non
+ * usano i testi.
  */
 let groupedFormat: Intl.NumberFormat | undefined;
 const grouped = (value: number) =>
@@ -25,12 +25,7 @@ const termsTitle = "Terms of service";
 const privacyTitle = "Privacy policy";
 
 export const en: AppCopy = {
-  common: {
-    cancel: "Cancel",
-    save: "Save",
-    saving: "Saving…",
-    contactSupport,
-  },
+  common: { cancel: "Cancel", save: "Save", saving: "Saving…", contactSupport },
   shell: {
     notFound: {
       order: {
@@ -457,10 +452,7 @@ export const en: AppCopy = {
       "The store will be removed from FiscalBay and all its imported orders will be deleted. This cannot be undone. Your store on eBay and your FiscalBay subscription will not change.",
     deleteLabel: "Type the store name to confirm",
     issue: {
-      reconnect: {
-        title: "Connection expired",
-        body: "Syncing is paused. Reconnect the store.",
-      },
+      reconnect: { title: "Connection expired", body: "Syncing is paused. Reconnect the store." },
       permissions: {
         title: "Incomplete authorisation",
         body: "eBay did not grant access to orders. Reconnect the store and accept all requested permissions.",
@@ -592,11 +584,7 @@ export const en: AppCopy = {
       freeStoreConfirm: "Make active",
       freeStoreChanged: "Active store updated.",
       freeStoreUnavailable: "The active store cannot be replaced right now.",
-      premiumPeriod: {
-        monthly: premiumMonthly,
-        annual: premiumAnnual,
-        lifetime: premiumLifetime,
-      },
+      premiumPeriod: { monthly: premiumMonthly, annual: premiumAnnual, lifetime: premiumLifetime },
       premiumLifetime: "One-off purchase, no renewals.",
       premiumLifetimeGranted: "Granted by FiscalBay, no renewals.",
       grantEnds: (date: string) => `Pro granted until ${date}.`,
@@ -991,10 +979,7 @@ export const en: AppCopy = {
   },
   authError: {
     title: "Sign in incomplete",
-    registrationRestricted: {
-      title: "Registration restricted",
-      body: registrationRestricted,
-    },
+    registrationRestricted: { title: "Registration restricted", body: registrationRestricted },
     body: "Try again with the sign-in method you usually use.",
     back: "Back to sign-in",
     ebayWithoutEmail: {

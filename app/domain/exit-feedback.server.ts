@@ -6,13 +6,13 @@ import { activeCoverageSql } from "./grants.server";
 
 /**
  * Motivi di uscita (D314): perché un abbonato disdice dal portale Stripe e perché un utente
- * cancella l'account. La disdetta porta `cancellation_details` dell'abbonamento, la
- * cancellazione il motivo scelto nella richiesta, che aspetta la conferma dal link email in
+ * cancella l'account. La disdetta porta `cancellation_details` dell'abbonamento, la cancellazione
+ * il motivo scelto nella richiesta, che aspetta la conferma dal link email in
  * `account_deletion_feedback`. Ogni uscita è una riga di `exit_feedback` con la stessa chiave
  * dell'avviso all'owner, che la legge all'invio. Rispondere è sempre facoltativo.
  *
- * Nei primi 30 giorni la riga porta chiave, spazio, commento e istante; poi la pulizia li toglie
- * e resta l'istantanea anonima, con motivo, piano, fascia di anzianità e mese, per 24 mesi. La
+ * Nei primi 30 giorni la riga porta chiave, spazio, commento e istante; poi la pulizia li toglie e
+ * resta l'istantanea anonima, con motivo, piano, fascia di anzianità e mese, per 24 mesi. La
  * cancellazione dello spazio toglie subito il commento di una sua disdetta.
  */
 
@@ -251,8 +251,8 @@ export async function exitOfNotification(db: D1Database, key: string) {
 }
 
 /**
- * Pulizia giornaliera: dettaglio tolto dopo 30 giorni, istantanee eliminate dopo 24 mesi, motivi
- * in attesa di una conferma mai arrivata eliminati dopo un giorno.
+ * Pulizia giornaliera: dettaglio tolto dopo 30 giorni, istantanee eliminate dopo 24 mesi, motivi in
+ * attesa di una conferma mai arrivata eliminati dopo un giorno.
  */
 export function purgeExitFeedback(db: D1Database, now: Date) {
   const at = now.toISOString();
@@ -286,8 +286,8 @@ export type RecentExit = {
 };
 
 /**
- * Uscite per tipo e motivo negli ultimi 30 giorni, negli ultimi tre e dodici mesi di
- * calendario, e commenti dei 30 giorni dal più recente.
+ * Uscite per tipo e motivo negli ultimi 30 giorni, negli ultimi tre e dodici mesi di calendario, e
+ * commenti dei 30 giorni dal più recente.
  */
 export async function exitOverview(db: D1Database, now = new Date()) {
   const at = now.toISOString();

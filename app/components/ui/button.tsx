@@ -7,9 +7,9 @@ import { buttonVariants } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
 
 /**
- * `pending` segna la richiesta partita dal pulsante: resta raggiungibile ma non si ripete,
- * mostra lo spinner al posto dell'icona iniziale e aggiunge l'attesa al nome accessibile,
- * perché `aria-busy` da solo non viene letto da tutti i lettori di schermo.
+ * `pending` segna la richiesta partita dal pulsante: resta raggiungibile ma non si ripete, mostra
+ * lo spinner al posto dell'icona iniziale e aggiunge l'attesa al nome accessibile, perché
+ * `aria-busy` da solo non viene letto da tutti i lettori di schermo.
  */
 function Button({
   className,

@@ -1,51 +1,21 @@
 import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
-import type { SettingsPageData } from "./components/settings/page";
 import { areaStores, requestedEbayEnvironment, type AccountArea } from "./account-area.server";
 import { sendEmail } from "./account-email.server";
-import { planDiagnostics } from "./support";
-import {
-  appVersion,
-  parseSupportRequest,
-  supportDiagnostics,
-  supportEmailMessage,
-} from "./domain/support.server";
-import { releaseSupportRequest, reserveSupportRequest } from "./domain/support-requests.server";
 import { appCopy } from "./app-copy";
-import { isCheckoutOffer, startCheckout } from "./domain/checkout.server";
-import { changeSubscriptionPeriod, openBillingPortal } from "./domain/billing.server";
-import { admission } from "./domain/admission.server";
-import { chooseFreeStore } from "./domain/free-store.server";
-import { orderAllowance, setUnlockConfirmation } from "./domain/grants.server";
-import { completeRegistration, parseProfile } from "./domain/registration.server";
-import {
-  parsePreference,
-  parseTemplates,
-  recordMarketingConsent,
-  savePreference,
-  saveTemplates,
-} from "./domain/preferences.server";
-import {
-  parseTelegramChange,
-  saveTelegramChange,
-  startTelegramLink,
-} from "./domain/telegram.server";
-import { telegramConfigured } from "./integrations/telegram.server";
 import { appUrl, exportFilePath, ordersPath, planPath } from "./app-links";
-import { correlationId, logFailure } from "./errors";
-import { localizedPath } from "./i18n";
-import { measure } from "./observability.server";
-import { requestAccountDeletion } from "./security-actions.server";
 import {
-  orderPeriods,
-  orderPeriodStart,
-  type ActionResult,
-  type DiagnosticsView,
-  type OrderPeriod,
-} from "./view-models";
-import { listVisibleOrders, visibleOrderTallies } from "./domain/orders.server";
-import { onlyAvailable, type OrderScope, type OrderTally } from "./orders/order-criteria";
+  actionFailure,
+  trialAction,
+  type AreaAction,
+  type AreaActionContext,
+} from "./area-actions.server";
+import type { SettingsPageData } from "./components/settings/page";
+import { accountArchive, accountArchiveName, accountData } from "./domain/account-export.server";
+import { admission } from "./domain/admission.server";
+import { changeSubscriptionPeriod, openBillingPortal } from "./domain/billing.server";
+import { isCheckoutOffer, startCheckout } from "./domain/checkout.server";
 import {
   deleteExportConfiguration,
   maxExportConfigurations,
@@ -53,22 +23,52 @@ import {
   parseExportLayout,
   saveExportConfiguration,
 } from "./domain/export-configurations.server";
-import { exportContext } from "./orders/export-scope";
 import { exportRevision, publishExportFile } from "./domain/export-files.server";
-import { accountArchive, accountArchiveName, accountData } from "./domain/account-export.server";
-import { accountExportScope } from "./orders/export-scope.server";
+import { chooseFreeStore } from "./domain/free-store.server";
+import { orderAllowance, setUnlockConfirmation } from "./domain/grants.server";
 import { exportSampleOrders } from "./domain/order-export.server";
-import type { ExportSample } from "./orders/export-columns";
-import { formatDate } from "./format";
-import { turnstileActions } from "./turnstile";
-import { turnstileFailure } from "./turnstile.server";
+import { listVisibleOrders, visibleOrderTallies } from "./domain/orders.server";
 import { planView, subscriptionView } from "./domain/plan-view.server";
 import {
-  actionFailure,
-  trialAction,
-  type AreaAction,
-  type AreaActionContext,
-} from "./area-actions.server";
+  parsePreference,
+  parseTemplates,
+  recordMarketingConsent,
+  savePreference,
+  saveTemplates,
+} from "./domain/preferences.server";
+import { completeRegistration, parseProfile } from "./domain/registration.server";
+import { releaseSupportRequest, reserveSupportRequest } from "./domain/support-requests.server";
+import {
+  appVersion,
+  parseSupportRequest,
+  supportDiagnostics,
+  supportEmailMessage,
+} from "./domain/support.server";
+import {
+  parseTelegramChange,
+  saveTelegramChange,
+  startTelegramLink,
+} from "./domain/telegram.server";
+import { correlationId, logFailure } from "./errors";
+import { formatDate } from "./format";
+import { localizedPath } from "./i18n";
+import { telegramConfigured } from "./integrations/telegram.server";
+import { measure } from "./observability.server";
+import type { ExportSample } from "./orders/export-columns";
+import { exportContext } from "./orders/export-scope";
+import { accountExportScope } from "./orders/export-scope.server";
+import { onlyAvailable, type OrderScope, type OrderTally } from "./orders/order-criteria";
+import { requestAccountDeletion } from "./security-actions.server";
+import { planDiagnostics } from "./support";
+import { turnstileActions } from "./turnstile";
+import { turnstileFailure } from "./turnstile.server";
+import {
+  orderPeriods,
+  orderPeriodStart,
+  type ActionResult,
+  type DiagnosticsView,
+  type OrderPeriod,
+} from "./view-models";
 
 type Allowance = Awaited<ReturnType<typeof orderAllowance>>;
 
@@ -80,9 +80,9 @@ export function subscriptionState(allowance: Allowance, now: Date) {
 }
 
 /**
- * Riepilogo diagnostico dell'assistenza, dai soli negozi dello spazio dell'utente. Una lettura
- * che non riesce lascia il modulo senza riepilogo: la richiesta si invia lo stesso. Il
- * riferimento è il correlation ID della pagina, oppure quello già mostrato all'utente.
+ * Riepilogo diagnostico dell'assistenza, dai soli negozi dello spazio dell'utente. Una lettura che
+ * non riesce lascia il modulo senza riepilogo: la richiesta si invia lo stesso. Il riferimento è il
+ * correlation ID della pagina, oppure quello già mostrato all'utente.
  */
 export async function readDiagnostics(
   request: Request,
@@ -138,9 +138,9 @@ async function attachedDiagnostics(
 }
 
 /**
- * Richiesta di assistenza verso `supporto@`, con Reply-To sull'indirizzo dell'account. Il
- * riepilogo si rilegge qui, mai dal browser, che fornisce soltanto il correlation ID già
- * mostrato; senza riepilogo la richiesta parte lo stesso.
+ * Richiesta di assistenza verso `supporto@`, con Reply-To sull'indirizzo dell'account. Il riepilogo
+ * si rilegge qui, mai dal browser, che fornisce soltanto il correlation ID già mostrato; senza
+ * riepilogo la richiesta parte lo stesso.
  */
 async function sendSupport(request: Request, area: AccountArea, form: FormData) {
   const t = appCopy[area.language].settings.support;
@@ -321,10 +321,7 @@ async function exportAccount({ area }: AreaActionContext) {
     now,
   });
   if (!id) return actionFailure(409, appCopy[language].settings.privacy.accountExportFailed);
-  return {
-    ok: true,
-    download: localizedPath(language, exportFilePath(id)),
-  } satisfies ActionResult;
+  return { ok: true, download: localizedPath(language, exportFilePath(id)) } satisfies ActionResult;
 }
 
 /**

@@ -1,45 +1,32 @@
 import { env } from "cloudflare:workers";
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { acquireOrders, consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
-
-import { setSwitch } from "../app/domain/service-settings.server";
-
-import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
-
 import {
   consumeStoreSync,
   dispatchStoreSyncs,
   requestStoreSync,
 } from "../app/domain/order-sync.server";
-
 import {
   consumeTask,
   dispatchScheduledWork,
   dispatchTasks,
 } from "../app/domain/scheduled-work.server";
-
+import { setSwitch } from "../app/domain/service-settings.server";
 import { listStores } from "../app/domain/stores.server";
-
+import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
 import {
   saveStoreCredentials,
   sealToken,
 } from "../app/integrations/ebay/seller-credentials.server";
-
 import {
   insertCredentials,
   insertEntitlement,
   insertStorePause,
   now,
 } from "./fixtures/database-fixtures";
-
-import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
-
-import { withSandbox } from "./fixtures/ebay-fixtures";
-
 import { access, order } from "./fixtures/ebay-client-fixtures";
-
+import { withSandbox } from "./fixtures/ebay-fixtures";
 import {
   grantedAt,
   ebay,
@@ -48,6 +35,7 @@ import {
   cronTurn,
   setupScenarios,
 } from "./fixtures/order-acquisition-scenarios";
+import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
 
 setupScenarios();
 // Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
@@ -775,9 +763,7 @@ describe("lettura periodica e richieste manuali", () => {
     const fetcher = ebay();
     await consumeStoreSync(message(), queueEnv, fetcher, minutes(60 * 24 + 2));
     expect(slices(fetcher, "creationdate")).toHaveLength(1);
-    expect(await state()).toMatchObject({
-      history_done_at: minutes(60 * 24 + 2).toISOString(),
-    });
+    expect(await state()).toMatchObject({ history_done_at: minutes(60 * 24 + 2).toISOString() });
   });
 
   it("con una copertura la reimportazione riparte da un anno di storico", async () => {
@@ -1141,7 +1127,7 @@ describe("lettura periodica e richieste manuali", () => {
         ["s-001", "s-002", "s-a"].map((id) => ({ id, dispatched_at: null, polled_at: null })),
       );
       expect(await dispatchStoreSyncs(cron, minutes(2))).toEqual([]);
-      expect((await dispatchStoreSyncs(cron, minutes(16))).sort()).toEqual([
+      expect((await dispatchStoreSyncs(cron, minutes(16))).toSorted()).toEqual([
         "s-001",
         "s-002",
         "s-a",
@@ -1380,10 +1366,7 @@ describe("lettura periodica e richieste manuali", () => {
       const repeated = queueMessage(body);
       await consumeTask(repeated, env, fetch, minutes(62));
       expect(repeated.ack).toHaveBeenCalledOnce();
-      const older = queueMessage({
-        task: "maintenance",
-        slot: minutes(-24 * 60).toISOString(),
-      });
+      const older = queueMessage({ task: "maintenance", slot: minutes(-24 * 60).toISOString() });
       await consumeTask(older, env, fetch, minutes(62));
       expect(older.ack).toHaveBeenCalledOnce();
       expect(await remaining()).toBe(1);
@@ -1453,7 +1436,7 @@ describe("lettura periodica e richieste manuali", () => {
         dispatchTasks(cron, minutes(0)),
         dispatchTasks(cron, minutes(0)),
       ]);
-      expect(turns.flat().sort()).toEqual([
+      expect(turns.flat().toSorted()).toEqual([
         "account_deletion",
         "billing",
         "ebay_quotas",

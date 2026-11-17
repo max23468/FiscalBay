@@ -359,8 +359,8 @@ for (const language of ["it", "en"] as const) {
           .evaluateAll((elements) =>
             elements.map((element) =>
               Math.round(
-                element.getBoundingClientRect().height /
-                  parseFloat(getComputedStyle(element).lineHeight),
+                element.getBoundingClientRect().height
+                  / parseFloat(getComputedStyle(element).lineHeight),
               ),
             ),
           );
@@ -460,8 +460,8 @@ for (const language of ["it", "en"] as const) {
       const logo = page.locator("header img:visible");
       const card = page.locator("main > div");
       expect(
-        (await card.boundingBox())!.y -
-          ((await logo.boundingBox())!.y + (await logo.boundingBox())!.height),
+        (await card.boundingBox())!.y
+          - ((await logo.boundingBox())!.y + (await logo.boundingBox())!.height),
       ).toBeLessThan(40);
       await expect.poll(() => noPageOverflow(page)).toBe(true);
       for (const provider of ["google", "ebay", "unknown"]) {
@@ -502,9 +502,11 @@ for (const language of ["it", "en"] as const) {
       language === "it" ? "/accesso" : "/en/sign-in",
     );
     await page.goto(`${prefix}?accesso=password-link`);
-    const notice = page.getByRole("status").filter({
-      hasText: language === "it" ? "impostare una nuova password" : "set a new password",
-    });
+    const notice = page
+      .getByRole("status")
+      .filter({
+        hasText: language === "it" ? "impostare una nuova password" : "set a new password",
+      });
     await expect(notice.locator("..")).toBeFocused();
   });
 }
@@ -801,10 +803,7 @@ for (const language of ["it", "en"] as const) {
         ).toBeVisible();
         await expect(
           page
-            .getByRole("tabpanel", {
-              name: language === "it" ? "Accedi" : "Sign in",
-              exact: true,
-            })
+            .getByRole("tabpanel", { name: language === "it" ? "Accedi" : "Sign in", exact: true })
             .locator('input[name="email"]'),
         ).toBeVisible();
       } finally {

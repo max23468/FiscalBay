@@ -1,6 +1,6 @@
 import { loader as loadHome } from "../../app/routes/orders";
-import { action as signIn, loader as loadAccess } from "../../app/routes/sign-in";
 import { action as securityAction } from "../../app/routes/settings";
+import { action as signIn, loader as loadAccess } from "../../app/routes/sign-in";
 import { routeData, routePage, routeResponse } from "./route-fixtures";
 
 export function accessForm(path: string, fields: Record<string, string>, cookie?: string) {
@@ -18,10 +18,9 @@ export async function accessError(response: Response) {
 
 /** Pagina del codice dopo la registrazione: senza avviso, con l'indirizzo da confermare. */
 export async function codePage(response: Response) {
-  const body = await response.clone().json<{
-    notice: null;
-    remembered: { tab: string; values: Record<string, string> };
-  }>();
+  const body = await response
+    .clone()
+    .json<{ notice: null; remembered: { tab: string; values: Record<string, string> } }>();
   return { status: response.status, notice: body.notice, ...body.remembered };
 }
 

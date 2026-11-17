@@ -1,6 +1,11 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { forwardToAuth } from "../app/auth-route.server";
+
+import { accessNotice } from "../app/access-notice";
+import { sendExistingAccountEmail } from "../app/account-email.server";
+import { planChoiceParam } from "../app/app-links";
+import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
+import { createAuth } from "../app/auth.server";
 import {
   completeRegistration,
   legalVersions,
@@ -9,15 +14,12 @@ import {
   registrationComplete,
   registrationStatus,
 } from "../app/domain/registration.server";
-import { createAuth } from "../app/auth.server";
-import { sendExistingAccountEmail } from "../app/account-email.server";
-import { handleAuthRequest } from "../app/auth-route.server";
+import { recordSignupSource } from "../app/domain/signup-sources.server";
 import { loader as loadLegal } from "../app/routes/legal";
-import { action as signIn, loader as loadAccess } from "../app/routes/sign-in";
 import { action as securityAction } from "../app/routes/settings";
+import { action as signIn, loader as loadAccess } from "../app/routes/sign-in";
 import { action as startStoreLink } from "../app/routes/store-link";
-import { accessNotice } from "../app/access-notice";
-import { now, resetDatabase } from "./fixtures/database-fixtures";
+import { turnstileField } from "../app/turnstile";
 import {
   syntheticProfile,
   verifiedSession,
@@ -33,7 +35,8 @@ import {
   securityForm,
   homeFor,
 } from "./fixtures/account-route-fixtures";
-import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
+import { now, resetDatabase } from "./fixtures/database-fixtures";
+import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 import {
   areaShell,
   callRoute,
@@ -41,11 +44,8 @@ import {
   routeResponse,
   pagePath,
 } from "./fixtures/route-fixtures";
-import { withinOneLimitWindow } from "./fixtures/rate-limiter";
+import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
 import { siteverify, testToken } from "./fixtures/turnstile-fixtures";
-import { turnstileField } from "../app/turnstile";
-import { planChoiceParam } from "../app/app-links";
-import { recordSignupSource } from "../app/domain/signup-sources.server";
 
 beforeEach(resetDatabase);
 afterEach(() => {
@@ -620,8 +620,8 @@ describe("registrazione e verifica del contatto", () => {
     ).toEqual({ ok: true, notice: "Termini accettati." });
     expect(await notifications()).not.toContain(invitation);
     const { terms, marketing } = await agreements(userId);
-    expect(terms.map((row) => row.terms_version).sort()).toEqual(
-      ["bozza-precedente", legalVersions.terms].sort(),
+    expect(terms.map((row) => row.terms_version).toSorted()).toEqual(
+      ["bozza-precedente", legalVersions.terms].toSorted(),
     );
     expect(marketing).toEqual([
       { granted: 1, text_version: marketingTextVersions.settings, language: "it" },
