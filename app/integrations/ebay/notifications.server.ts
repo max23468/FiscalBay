@@ -1,8 +1,10 @@
 import { verify } from "node:crypto";
+
 import { z } from "zod";
+
 import { ApplicationError } from "../../errors";
-import { upstreamJson } from "../http.server";
 import type { EbayEnvironment } from "../../view-models";
+import { upstreamJson } from "../http.server";
 import { applicationToken, ebayConfiguration } from "./environment.server";
 
 const identifier = z.string().min(1).max(256);
@@ -127,8 +129,8 @@ const trackedOrigins = 1000;
 const origins = new Map<string, { start: number; count: number }>();
 
 /**
- * Limite di consegne per origine, con memoria limitata: oltre il limite l'ingresso risponde
- * 429 prima di leggere il corpo, ed eBay ritenta la consegna.
+ * Limite di consegne per origine, con memoria limitata: oltre il limite l'ingresso risponde 429
+ * prima di leggere il corpo, ed eBay ritenta la consegna.
  */
 export function admitOrigin(origin: string, now: number): void {
   let window = origins.get(origin);

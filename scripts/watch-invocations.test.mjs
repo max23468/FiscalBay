@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+
 import { jsonObjects, summarize as summarizeInvocations } from "./watch-invocations.mjs";
 
 describe("invocazioni osservate durante il collaudo remoto", () => {

@@ -1,10 +1,10 @@
-import * as React from "react";
 import { cn } from "cn";
+import * as React from "react";
 
 /**
- * Ombre ai bordi dell'area che scorre, soltanto dove c'è altro contenuto: le coperture seguono
- * il contenuto (`local`) e nascondono le ombre ferme sul contenitore (`scroll`) quando si è a un
- * capo. Le coperture hanno il colore del fondo, `--table-surface`, la pagina se non indicato.
+ * Ombre ai bordi dell'area che scorre, soltanto dove c'è altro contenuto: le coperture seguono il
+ * contenuto (`local`) e nascondono le ombre ferme sul contenitore (`scroll`) quando si è a un capo.
+ * Le coperture hanno il colore del fondo, `--table-surface`, la pagina se non indicato.
  */
 const surface = "var(--table-surface, var(--background))";
 const shadow = "color-mix(in oklab, var(--foreground) 14%, transparent)";

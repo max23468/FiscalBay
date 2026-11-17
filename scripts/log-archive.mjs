@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * Archivio dei log a 90 giorni (§31, D166). Workers Logpush esporta gli eventi di invocazione
- * del Worker dell'ambiente in un bucket R2 UE dedicato, tramite la destinazione S3-compatible
+ * Archivio dei log a 90 giorni (§31, D166). Workers Logpush esporta gli eventi di invocazione del
+ * Worker dell'ambiente in un bucket R2 UE dedicato, tramite la destinazione S3-compatible
  * sull'endpoint UE, perché quella R2 diretta non supporta la giurisdizione. Lo script descrive
- * bucket, lifecycle e job, li applica e li rilegge, verifica il contenuto degli oggetti esportati
- * e interroga l'archivio con le query di diagnosi del runbook.
+ * bucket, lifecycle e job, li applica e li rilegge, verifica il contenuto degli oggetti esportati e
+ * interroga l'archivio con le query di diagnosi del runbook.
  *
- * Le chiamate passano dal profilo della CLI `cf`. Le credenziali S3 limitate al bucket arrivano
- * da `LOG_ARCHIVE_ACCESS_KEY_ID` e `LOG_ARCHIVE_SECRET_ACCESS_KEY` o dal Portachiavi, entrano nel
- * job da un file temporaneo e non compaiono mai negli argomenti o nell'output.
+ * Le chiamate passano dal profilo della CLI `cf`. Le credenziali S3 limitate al bucket arrivano da
+ * `LOG_ARCHIVE_ACCESS_KEY_ID` e `LOG_ARCHIVE_SECRET_ACCESS_KEY` o dal Portachiavi, entrano nel job
+ * da un file temporaneo e non compaiono mai negli argomenti o nell'output.
  *
- * Uso: node scripts/log-archive.mjs <plan|apply|readback|verify> [--mode live]
- *      node scripts/log-archive.mjs <errors|webhooks|failures> [--days 1] [--mode live]
- *      node scripts/log-archive.mjs correlation --id <correlation ID> [--days 1] [--mode live]
+ * Uso: node scripts/log-archive.mjs <plan|apply|readback|verify> [--mode live] node
+ * scripts/log-archive.mjs <errors|webhooks|failures> [--days 1] [--mode live] node
+ * scripts/log-archive.mjs correlation --id <correlation ID> [--days 1] [--mode live]
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,8 +22,8 @@ import { gunzipSync } from "node:zlib";
 import { logEvents, logKeys } from "../app/log-records.ts";
 import { logArchives } from "../cloudflare.config.ts";
 import * as provider from "./lib/provider.mjs";
-import { workerOf } from "./lib/worker.mjs";
 import { cf, cfJson, keychain, modeOf, optionalJson } from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
 
 export const retentionDays = 90;
 export const dataset = "workers_trace_events";
@@ -93,11 +93,7 @@ export function describeDestination(conf) {
 }
 
 export const jobFilter = (target) =>
-  JSON.stringify({
-    where: {
-      and: [{ key: "ScriptName", operator: "eq", value: target.worker }],
-    },
-  });
+  JSON.stringify({ where: { and: [{ key: "ScriptName", operator: "eq", value: target.worker }] } });
 
 /** Corpo del job: soltanto il Worker dell'ambiente, i campi ammessi e ogni invocazione. */
 export function jobBody(target, credentials) {
@@ -125,33 +121,19 @@ export function lifecycleRules() {
       id: "log-scaduti",
       enabled: true,
       conditions: { prefix: "" },
-      deleteObjectsTransition: {
-        condition: { type: "Age", maxAge: retentionDays * 86_400 },
-      },
-      abortMultipartUploadsTransition: {
-        condition: { type: "Age", maxAge: 86_400 },
-      },
+      deleteObjectsTransition: { condition: { type: "Age", maxAge: retentionDays * 86_400 } },
+      abortMultipartUploadsTransition: { condition: { type: "Age", maxAge: 86_400 } },
     },
   ];
 }
 
 /** Descrizione stampabile del piano, con le credenziali sostituite. */
 export function plan(target) {
-  const body = jobBody(target, {
-    accessKeyId: "<chiave>",
-    secretAccessKey: "<segreto>",
-  });
+  const body = jobBody(target, { accessKeyId: "<chiave>", secretAccessKey: "<segreto>" });
   return {
     worker: target.worker,
-    bucket: {
-      name: target.bucket,
-      jurisdiction: "eu",
-      lifecycle: lifecycleRules(),
-    },
-    job: {
-      ...body,
-      destination_conf: describeDestination(body.destination_conf),
-    },
+    bucket: { name: target.bucket, jurisdiction: "eu", lifecycle: lifecycleRules() },
+    job: { ...body, destination_conf: describeDestination(body.destination_conf) },
   };
 }
 
@@ -168,15 +150,15 @@ const sameList = (a, b) =>
   Array.isArray(a) && Array.isArray(b) && [...a].sort().join() === [...b].sort().join();
 
 /**
- * Controlli del readback: bucket UE senza accesso pubblico con la sola regola a 90 giorni, un
- * solo job verso il bucket con filtro, campi e destinazione attesi, Worker che invia gli eventi.
+ * Controlli del readback: bucket UE senza accesso pubblico con la sola regola a 90 giorni, un solo
+ * job verso il bucket con filtro, campi e destinazione attesi, Worker che invia gli eventi.
  */
 export function checkReadback(target, state) {
   const rule = state.lifecycle?.rules ?? [];
   const jobs = (state.jobs ?? []).filter(
     (job) =>
-      job.name === target.job ||
-      describeDestination(job.destination_conf)?.bucket === target.bucket,
+      job.name === target.job
+      || describeDestination(job.destination_conf)?.bucket === target.bucket,
   );
   const job = jobs[0];
   const options = job?.output_options ?? {};
@@ -190,11 +172,11 @@ export function checkReadback(target, state) {
     ],
     [
       "lifecycle a 90 giorni",
-      rule.length === 1 &&
-        rule[0].enabled === true &&
-        (rule[0].conditions?.prefix ?? "") === "" &&
-        rule[0].deleteObjectsTransition?.condition?.type === "Age" &&
-        rule[0].deleteObjectsTransition.condition.maxAge === retentionDays * 86_400,
+      rule.length === 1
+        && rule[0].enabled === true
+        && (rule[0].conditions?.prefix ?? "") === ""
+        && rule[0].deleteObjectsTransition?.condition?.type === "Age"
+        && rule[0].deleteObjectsTransition.condition.maxAge === retentionDays * 86_400,
     ],
     ["un solo job verso il bucket", jobs.length === 1],
     ["job attivo", job?.enabled === true && job?.dataset === dataset],
@@ -208,8 +190,8 @@ export function checkReadback(target, state) {
     // Un errore passato non conta se un invio riuscito lo segue.
     [
       "job senza errori",
-      Boolean(job) &&
-        (!job.last_error || (Boolean(job.last_complete) && job.last_complete > job.last_error)),
+      Boolean(job)
+        && (!job.last_error || (Boolean(job.last_complete) && job.last_complete > job.last_error)),
     ],
     ["Worker con Logpush", state.worker?.logpush === true],
   ];
@@ -217,11 +199,7 @@ export function checkReadback(target, state) {
     ok: checks.every(([, ok]) => ok),
     checks: Object.fromEntries(checks),
     job: job
-      ? {
-          id: job.id,
-          lastComplete: job.last_complete ?? null,
-          lastError: job.last_error ?? null,
-        }
+      ? { id: job.id, lastComplete: job.last_complete ?? null, lastError: job.last_error ?? null }
       : null,
   };
 }
@@ -248,15 +226,15 @@ export function parseObject(bytes) {
 }
 
 /**
- * Marcatore di Logpush oltre i 16.384 caratteri per invocazione: può seguire l'inizio di un
- * evento applicativo, che resta ammesso soltanto senza spazi, `@` o altro testo libero.
+ * Marcatore di Logpush oltre i 16.384 caratteri per invocazione: può seguire l'inizio di un evento
+ * applicativo, che resta ammesso soltanto senza spazi, `@` o altro testo libero.
  */
 const truncated = /^[\w":,.{}-]*<<<Logpush: [a-z ]+ truncated>>>$/u;
 const scalar = /^[\w.:-]{1,64}$/u;
 
 /**
- * Evento applicativo di un messaggio di `Logs`: un solo argomento, oggetto JSON con evento e
- * chiavi degli elenchi chiusi e valori scalari brevi. `null` per tutto il resto.
+ * Evento applicativo di un messaggio di `Logs`: un solo argomento, oggetto JSON con evento e chiavi
+ * degli elenchi chiusi e valori scalari brevi. `null` per tutto il resto.
  */
 export function applicationEvent(entry) {
   const parts = Array.isArray(entry?.Message) ? entry.Message : [entry?.Message];
@@ -322,16 +300,16 @@ export function errorsByCode(records, operations) {
   for (const record of records)
     for (const event of eventsOf(record))
       if (
-        event.event === "application_error" &&
-        (!operations || operations.includes(event.operation))
+        event.event === "application_error"
+        && (!operations || operations.includes(event.operation))
       )
         increment(counts, errorKey(event));
   return sorted(counts);
 }
 
 /**
- * Invocazioni non riuscite per tipo, esito e versione: eccezioni non gestite, invocazioni
- * annullate e scritture interrotte, il cui testo resta fuori dall'archivio.
+ * Invocazioni non riuscite per tipo, esito e versione: eccezioni non gestite, invocazioni annullate
+ * e scritture interrotte, il cui testo resta fuori dall'archivio.
  */
 export function failedInvocations(records) {
   const counts = new Map();
@@ -507,10 +485,7 @@ async function main() {
       .sort()
       .at(-1);
     if (!key) throw new Error("Nessun oggetto esportato negli ultimi due giorni.");
-    const result = {
-      object: key,
-      ...verifyRecords(readObject(target, key), target.worker),
-    };
+    const result = { object: key, ...verifyRecords(readObject(target, key), target.worker) };
     print(result);
     process.exitCode = result.ok ? 0 : 1;
     return;
@@ -531,11 +506,7 @@ async function main() {
     throw new Error(
       `Comandi: plan, apply, readback, verify, ${Object.keys(queries).join(", ")}, correlation`,
     );
-  print({
-    worker: target.worker,
-    days,
-    rows: queries[name](readDays(target, days)),
-  });
+  print({ worker: target.worker, days, rows: queries[name](readDays(target, days)) });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]))

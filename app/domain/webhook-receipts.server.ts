@@ -119,9 +119,9 @@ export async function enqueueReceipt(env: Env, receiptId: string, now: Date) {
 const lostMilliseconds = 2 * 60 * 60_000;
 
 /**
- * Riprende la finestra fra claim D1 e accettazione Queue, anche senza retry provider, e le
- * ricevute accettate il cui messaggio è andato perso. La ricevuta non scaduta è il checkpoint:
- * il consumer rivalida consenso, ambiente e finestra prima di ogni effetto.
+ * Riprende la finestra fra claim D1 e accettazione Queue, anche senza retry provider, e le ricevute
+ * accettate il cui messaggio è andato perso. La ricevuta non scaduta è il checkpoint: il consumer
+ * rivalida consenso, ambiente e finestra prima di ogni effetto.
  */
 export async function recoverWebhookIngress(env: Env, now = new Date()) {
   const { results } = await env.DB.prepare(`SELECT id FROM webhook_receipts

@@ -2,8 +2,10 @@ import { cn } from "cn";
 import { useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 
+import { useCopy, useLinks } from "~/components/copy-context";
 import { StatusAlert } from "~/components/status";
 import { CopyButton } from "~/components/tax-code";
+import { useDate } from "~/components/time-zone";
 import { buttonLink } from "~/components/ui/button-variants";
 import {
   Sheet,
@@ -13,13 +15,15 @@ import {
   SheetTitle,
 } from "~/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+
 import { appHref } from "../../app-links";
-import { formatAmount, type Language } from "../../i18n";
 import { buyerNameView, contactText } from "../../contact";
-import { exportOrderHref, exportSection } from "../../orders/export-scope";
-import { itemPrice, marketplaceLabel, type OrderView } from "../../view-models";
 import { countryName } from "../../format";
+import { formatAmount, type Language } from "../../i18n";
+import { ebayListingHref, ebayOrderHref } from "../../orders/ebay-links";
+import { exportOrderHref, exportSection } from "../../orders/export-scope";
 import type { OrdersAccount, SecondaryActions } from "../../orders/page-data";
+import { itemPrice, marketplaceLabel, type OrderView } from "../../view-models";
 import { BuyerAddress, EmailLink, ItemThumbnail, PhoneNumber } from "./card";
 import { FiscalCodes, FiscalNotes, MissingOrderHelp, type FiscalProps } from "./fiscal";
 import {
@@ -29,23 +33,18 @@ import {
   missingContact,
   orderLinkSelector,
 } from "./labels";
-import { ebayListingHref, ebayOrderHref } from "../../orders/ebay-links";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
-import { useDate } from "~/components/time-zone";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 /**
- * Spiegazioni complete del dato, suggerimento e richiesta all'acquirente,
- * nel riquadro in cima al pannello insieme al codice.
+ * Spiegazioni complete del dato, suggerimento e richiesta all'acquirente, nel riquadro in cima al
+ * pannello insieme al codice.
  */
 function FiscalDetail({
   order,
   account,
   ebayDown,
   templates,
-}: Pick<FiscalProps, "order" | "account" | "ebayDown"> & {
-  templates: Record<Language, string>;
-}) {
+}: Pick<FiscalProps, "order" | "account" | "ebayDown"> & { templates: Record<Language, string> }) {
   const { t } = useCopy();
   const date = useDate();
   return (
@@ -254,7 +253,7 @@ function OrderDetail({ order }: { order: OrderView }) {
               <div className="flex items-start gap-3">
                 {/* La miniatura dell'ordine appartiene all'articolo solo se è l'unico. */}
                 <ItemThumbnail src={order.items.length === 1 ? order.thumbnail : undefined} />
-                <p className="min-w-0 leading-relaxed text-pretty [overflow-wrap:anywhere] font-medium">
+                <p className="min-w-0 leading-relaxed font-medium text-pretty [overflow-wrap:anywhere]">
                   {item.title}
                 </p>
               </div>
@@ -296,10 +295,10 @@ function openedFromList(state: unknown) {
 }
 
 /**
- * Pannello del dettaglio con indirizzo proprio; chiuderlo torna all'elenco con gli stessi
- * criteri. Aperto dall'elenco, la chiusura torna alla sua voce della cronologia, così Indietro
- * non riapre il pannello; da un collegamento diretto o dopo una ricarica senza quella voce
- * sostituisce il dettaglio con l'elenco.
+ * Pannello del dettaglio con indirizzo proprio; chiuderlo torna all'elenco con gli stessi criteri.
+ * Aperto dall'elenco, la chiusura torna alla sua voce della cronologia, così Indietro non riapre il
+ * pannello; da un collegamento diretto o dopo una ricarica senza quella voce sostituisce il
+ * dettaglio con l'elenco.
  */
 export function OrderSheet({
   detail,

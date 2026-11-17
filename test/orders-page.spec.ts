@@ -1,22 +1,28 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { unlockOrders } from "../app/domain/grants.server";
-import { visibleOrderFacets } from "../app/domain/orders.server";
-import { indexOrderSearch } from "../app/domain/maintenance.server";
+
+import { appCopy } from "../app/app-copy";
 import { createAuth } from "../app/auth.server";
-import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
-import { action as storesAction, loader as loadStores } from "../app/routes/stores";
-import { action as startStoreLink } from "../app/routes/store-link";
-import { listNotifications } from "../app/domain/notifications.server";
+import { parseChangelog, releaseChangelog, withChanges } from "../app/changelog";
+import { unlockOrders } from "../app/domain/grants.server";
+import { indexOrderSearch } from "../app/domain/maintenance.server";
 import {
   dismissNotifications,
   markNotificationsRead,
   restoreNotifications,
 } from "../app/domain/notification-reads.server";
+import { listNotifications } from "../app/domain/notifications.server";
+import { requestOrderRead } from "../app/domain/order-sync.server";
+import { visibleOrderFacets } from "../app/domain/orders.server";
 import { completeRegistration, marketingTextVersions } from "../app/domain/registration.server";
+import { setSwitch } from "../app/domain/service-settings.server";
+import { ebayOutage, listStores } from "../app/domain/stores.server";
+import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
+import { action as startStoreLink } from "../app/routes/store-link";
+import { action as storesAction, loader as loadStores } from "../app/routes/stores";
 import { loader as loadWhatsNew } from "../app/routes/whats-new";
-import versionedChangelog from "../CHANGELOG.md?raw";
-import { parseChangelog, releaseChangelog, withChanges } from "../app/changelog";
+import { settle } from "../app/settle.server";
+import { fiscalSituation, itemPrice } from "../app/view-models";
 import {
   hasWhatsNew,
   whatsNewReleases,
@@ -24,8 +30,8 @@ import {
   whatsNewProblems,
   whatsNewView,
 } from "../app/whats-new.server";
-import { ebayOutage, listStores } from "../app/domain/stores.server";
-import { setSwitch } from "../app/domain/service-settings.server";
+import versionedChangelog from "../CHANGELOG.md?raw";
+import { verifiedSession } from "./fixtures/account-fixtures";
 import {
   insertCredentials,
   insertEntitlement,
@@ -36,11 +42,8 @@ import {
   resetDatabase,
   seed,
 } from "./fixtures/database-fixtures";
-import { verifiedSession } from "./fixtures/account-fixtures";
-import { fiscalSituation, itemPrice } from "../app/view-models";
-import { appCopy } from "../app/app-copy";
-import { settle } from "../app/settle.server";
-import { requestOrderRead } from "../app/domain/order-sync.server";
+import { searchOrders, searchRequest } from "./fixtures/order-search-fixtures";
+import { queued } from "./fixtures/queue-fixture";
 import {
   areaShell,
   callRoute,
@@ -48,9 +51,6 @@ import {
   routePage,
   routeResponse,
 } from "./fixtures/route-fixtures";
-import { queued } from "./fixtures/queue-fixture";
-
-import { searchOrders, searchRequest } from "./fixtures/order-search-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -1055,10 +1055,7 @@ describe("pagina Ordini reale", () => {
     expect((await ordersPage(cookie)).page.onboarding.every((step) => step.done)).toBe(true);
     expect(await proposal()).toBe(true);
     const answer = (path: string, value: string) =>
-      routeData(unlockAction, path, {
-        cookie,
-        fields: { intent: "marketing", value },
-      });
+      routeData(unlockAction, path, { cookie, fields: { intent: "marketing", value } });
     await expect(answer("/app/ordini", "forse")).resolves.toMatchObject({ ok: false });
     expect(await answer("/app/ordini", "false")).toEqual({
       ok: true,

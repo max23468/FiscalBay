@@ -16,15 +16,15 @@ import {
   stripeEnvironment,
   stripeSecretKey,
 } from "../integrations/stripe.server";
+import { dayMilliseconds } from "../time";
 import { freeQuotaSettings } from "./grants.server";
 import { utc } from "./order-observation.server";
-import { dayMilliseconds } from "../time";
 
 /**
  * Vista commerciale della console (§6, §15): posti lifetime, incassi e loro storni, promozioni e
  * quota base del Free, listino. Gli incassi sono quelli che FiscalBay registra dalle fatture
- * verificate: fee e payout restano su Stripe. Le configurazioni valgono soltanto da adesso in
- * poi e non cambiano cicli iniziati, abbonamenti o diritti acquistati.
+ * verificate: fee e payout restano su Stripe. Le configurazioni valgono soltanto da adesso in poi e
+ * non cambiano cicli iniziati, abbonamenti o diritti acquistati.
  */
 
 export type LifetimeSeats = {
@@ -183,20 +183,16 @@ export async function listPromotions(db: D1Database, now = new Date()): Promise<
 }
 
 export const promotionSchema = z
-  .object({
-    startsAt: utc,
-    endsAt: utc.nullable(),
-    quota: z.coerce.number().int().min(1).max(100),
-  })
+  .object({ startsAt: utc, endsAt: utc.nullable(), quota: z.coerce.number().int().min(1).max(100) })
   .refine(({ startsAt, endsAt }) => endsAt === null || Date.parse(endsAt) > Date.parse(startsAt));
 
 export type PromotionResult = "done" | "invalid" | "overlap" | "not_found" | "started";
 
 /**
- * Nuova promozione o modifica di una non conclusa. Non parte mai nel passato; di una promozione
- * già iniziata si cambiano soltanto quota e fine, e la fine non torna nel passato: i cicli
- * iniziati conservano la versione in vigore al loro inizio. Senza fine dura finché non si
- * termina o non riceve una fine.
+ * Nuova promozione o modifica di una non conclusa. Non parte mai nel passato; di una promozione già
+ * iniziata si cambiano soltanto quota e fine, e la fine non torna nel passato: i cicli iniziati
+ * conservano la versione in vigore al loro inizio. Senza fine dura finché non si termina o non
+ * riceve una fine.
  */
 export async function savePromotion(
   db: D1Database,

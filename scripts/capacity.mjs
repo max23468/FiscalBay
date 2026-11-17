@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  * Misure di capacità sul dataset di riferimento, a richiesta e fuori dal gate.
+ *
  * - `costs`: suite Workers locale (`vitest.capacity.config.ts`) con righe D1, query, messaggi e
  *   chiamate eBay per operazione, valori esatti e ripetibili.
  * - `latency`: build servita da `vite preview` con lo stesso dataset nella D1 locale: tempi delle
@@ -8,15 +9,16 @@
  *   chiamata parte verso eBay: i token del dataset non si aprono. `vite preview` non espone il
  *   cron: il suo costo viene dalla suite, il suo tempo dai Workers Logs (`metrics-query.mjs`).
  * - `remote`: lo stesso dataset nella D1 del test, con i negozi sintetici mai dovuti al cron; tre
- *   accessi con una password generata e mai salvata, le stesse prove delle pagine sul dominio
- *   test, poi CPU, durata e righe D1 della finestra dalla GraphQL Analytics API; infine la
- *   pulizia di ogni riga `cap-` con la verifica tabella per tabella. Solo sul test.
+ *   accessi con una password generata e mai salvata, le stesse prove delle pagine sul dominio test,
+ *   poi CPU, durata e righe D1 della finestra dalla GraphQL Analytics API; infine la pulizia di
+ *   ogni riga `cap-` con la verifica tabella per tabella. Solo sul test.
  * - `account`: consumo degli ultimi 30 giorni dell'account Cloudflare condiviso, per Worker, D1 e
- *   coda, dalla GraphQL Analytics API con un token di sola lettura (Account Analytics Read).
- * Senza argomenti esegue `costs` e `latency` e scrive `reports/capacity/summary.md`, con la
- * proiezione mensile del caso di riferimento confrontata con le quote incluse di Workers Paid.
+ *   coda, dalla GraphQL Analytics API con un token di sola lettura (Account Analytics Read). Senza
+ *   argomenti esegue `costs` e `latency` e scrive `reports/capacity/summary.md`, con la proiezione
+ *   mensile del caso di riferimento confrontata con le quote incluse di Workers Paid.
  *
- * Uso: node scripts/capacity.mjs [costs|latency|remote|remote-clean|account] [--prebuilt] [--days 30]
+ * Uso: node scripts/capacity.mjs [costs|latency|remote|remote-clean|account] [--prebuilt] [--days
+ * 30]
  */
 import { execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -26,6 +28,9 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { legalVersions } from "../app/domain/registration.server.ts";
+import { taskPeriods } from "../app/domain/work-timing.ts";
+import { hashPassword } from "../app/password.server.ts";
 import {
   capacityStatements,
   capacityStoreStatements,
@@ -38,11 +43,8 @@ import {
   userOf,
   workspaceId,
 } from "../benchmarks/capacity-dataset.ts";
-import { hashPassword } from "../app/password.server.ts";
-import { legalVersions } from "../app/domain/registration.server.ts";
-import { taskPeriods } from "../app/domain/work-timing.ts";
-import { signedSessionToken } from "../e2e/local-account.ts";
 import { databases } from "../cloudflare.config.ts";
+import { signedSessionToken } from "../e2e/local-account.ts";
 import { d1Query, keychain } from "./lib/provider.mjs";
 import { workerOf } from "./lib/worker.mjs";
 import { applyLocalMigrations, executeLocal } from "./local-d1.mjs";
@@ -63,9 +65,9 @@ export const included = {
 };
 
 /**
- * Modello mensile del caso di riferimento (§36): cadenze dei piani, cron ogni dieci minuti e
- * cento ordini al mese per negozio. Le visite sono un'ipotesi dichiarata, da sostituire con le
- * misure reali quando esistono.
+ * Modello mensile del caso di riferimento (§36): cadenze dei piani, cron ogni dieci minuti e cento
+ * ordini al mese per negozio. Le visite sono un'ipotesi dichiarata, da sostituire con le misure
+ * reali quando esistono.
  */
 export const referenceModel = {
   days: 30,
@@ -119,14 +121,14 @@ export function serverTiming(header) {
 }
 
 /**
- * Consumo mensile del caso di riferimento dai costi per operazione: ogni voce riporta valore,
- * quota inclusa e quota usata. Il cron usa il turno con tutti i negozi dovuti, un limite superiore.
+ * Consumo mensile del caso di riferimento dai costi per operazione: ogni voce riporta valore, quota
+ * inclusa e quota usata. Il cron usa il turno con tutti i negozi dovuti, un limite superiore.
  */
 export function monthlyProjection(costs, model = referenceModel) {
   const stores = model.premiumStores + model.freeStores;
   const turns =
-    (model.premiumStores * model.premiumTurnsPerDay + model.freeStores * model.freeTurnsPerDay) *
-    model.days;
+    (model.premiumStores * model.premiumTurnsPerDay + model.freeStores * model.freeTurnsPerDay)
+    * model.days;
   const idle = costs["store-sync-idle"];
   const fresh = costs["store-sync-new-orders"];
   const newOrders = stores * model.newOrdersPerStoreMonth;
@@ -141,10 +143,10 @@ export function monthlyProjection(costs, model = referenceModel) {
   ]);
   const visitRequests = visits.reduce((total, [, count]) => total + count, 0);
   const sum = (key) =>
-    model.cronRuns * costs["cron-due"][key] +
-    turns * idle[key] +
-    newOrders * perOrder(key) +
-    visits.reduce((total, [cost, count]) => total + cost[key] * count, 0);
+    model.cronRuns * costs["cron-due"][key]
+    + turns * idle[key]
+    + newOrders * perOrder(key)
+    + visits.reduce((total, [cost, count]) => total + cost[key] * count, 0);
   // Negozi accodati per turno del cron: i Pro a ogni turno, i Free a uno su tre.
   const dispatched = model.premiumStores + model.freeStores / 3;
   // Messaggi della coda: gruppi del cron, un turno per periodo di ogni compito e, come limite
@@ -170,13 +172,13 @@ export function monthlyProjection(costs, model = referenceModel) {
   ];
   const ebayDaily = {
     fulfillment:
-      turns / model.days +
-      (newOrders / model.days) *
-        ((fresh.ebayCalls["fulfillment-detail"] ?? 0) / fresh.fresh +
-          ((fresh.ebayCalls["fulfillment-list"] ?? 0) - fresh.turns) / fresh.fresh),
+      turns / model.days
+      + (newOrders / model.days)
+        * ((fresh.ebayCalls["fulfillment-detail"] ?? 0) / fresh.fresh
+          + ((fresh.ebayCalls["fulfillment-list"] ?? 0) - fresh.turns) / fresh.fresh),
     getOrders:
-      stores * model.tradingPassesPerDay +
-      (newOrders / model.days) * ((fresh.ebayCalls.GetOrders ?? 0) / fresh.fresh),
+      stores * model.tradingPassesPerDay
+      + (newOrders / model.days) * ((fresh.ebayCalls.GetOrders ?? 0) / fresh.fresh),
     getItem: (newOrders / model.days) * ((fresh.ebayCalls.GetItem ?? 0) / fresh.fresh),
   };
   return {
@@ -359,8 +361,8 @@ async function measureLatency({ prebuilt }) {
   rmSync(".cloudflare/state", { recursive: true, force: true });
   applyLocalMigrations();
   executeLocal(
-    [...capacityStatements(referenceShape, legalVersions), searchIndexStatement()].join(";\n") +
-      ";",
+    [...capacityStatements(referenceShape, legalVersions), searchIndexStatement()].join(";\n")
+      + ";",
   );
   execFileSync(process.execPath, ["scripts/local-preview.mjs"], {
     stdio: "inherit",
@@ -407,8 +409,8 @@ const measuredWorkspaces = {
 };
 
 /**
- * Pagina Ordini e suggerimenti di ricerca per ogni spazio: a freddo, venti in sequenza e dieci
- * in parallelo per tre volte. `cookies` porta la sessione di ciascuno spazio.
+ * Pagina Ordini e suggerimenti di ricerca per ogni spazio: a freddo, venti in sequenza e dieci in
+ * parallelo per tre volte. `cookies` porta la sessione di ciascuno spazio.
  */
 async function measurePages(base, cookies) {
   const results = [];
@@ -447,8 +449,8 @@ async function measurePages(base, cookies) {
 
 /**
  * Query sulla D1 del test con la CLI `cf`; restituisce le righe di ogni istruzione. Un errore
- * dell'API si ripete fino a tre volte: la pulizia è ripetibile, mentre un caricamento già
- * applicato fallisce sulle chiavi e la prova si ferma ripulendo.
+ * dell'API si ripete fino a tre volte: la pulizia è ripetibile, mentre un caricamento già applicato
+ * fallisce sulle chiavi e la prova si ferma ripulendo.
  */
 const testQuery = (sql) => d1Query(databases.test.id, sql, { stderr: "pipe" });
 
@@ -460,8 +462,8 @@ const datasetStores = () => [
 
 /**
  * Righe con un identificativo `cap-` in ogni tabella che porta spazio, negozio, utente o ordine,
- * con un'istruzione per colonna e venti istruzioni per chiamata: D1 limita i termini di una
- * `UNION ALL`.
+ * con un'istruzione per colonna e venti istruzioni per chiamata: D1 limita i termini di una `UNION
+ * ALL`.
  */
 export function leftoverSql(columns) {
   const blocks = [];
@@ -660,8 +662,8 @@ export function accountUsage(data) {
 }
 
 /**
- * Token di sola lettura delle metriche: `CLOUDFLARE_API_TOKEN` oppure la voce del Portachiavi
- * del token del test, con Account Analytics Read sull'account condiviso. Mai stampato.
+ * Token di sola lettura delle metriche: `CLOUDFLARE_API_TOKEN` oppure la voce del Portachiavi del
+ * token del test, con Account Analytics Read sull'account condiviso. Mai stampato.
  */
 function analyticsToken() {
   if (process.env.CLOUDFLARE_API_TOKEN) return process.env.CLOUDFLARE_API_TOKEN;

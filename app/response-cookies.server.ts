@@ -15,8 +15,8 @@ export function queueResponseCookies(headers: Headers): void {
 }
 
 /**
- * Esegue la richiesta e aggiunge alla risposta i cookie accodati. Un cookie che la risposta
- * imposta già, come la sessione nuova di un accesso o quella chiusa da un'uscita, prevale.
+ * Esegue la richiesta e aggiunge alla risposta i cookie accodati. Un cookie che la risposta imposta
+ * già, come la sessione nuova di un accesso o quella chiusa da un'uscita, prevale.
  */
 export async function withResponseCookies(run: () => Promise<Response>): Promise<Response> {
   const pending = new Headers();

@@ -1,5 +1,4 @@
 import { env } from "cloudflare:workers";
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const background = vi.hoisted(() => {
@@ -19,35 +18,20 @@ async function drainBackground() {
 afterEach(drainBackground);
 
 import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
-
 import { createAuth, readSession } from "../app/auth.server";
-
 import { completeRegistration } from "../app/domain/registration.server";
-
 import { adminAccess, recentSignIn } from "../app/domain/sessions.server";
-
 import { withResponseCookies } from "../app/response-cookies.server";
-
 import { loader as adminLoader } from "../app/routes/admin";
-
 import { loader as exportFileLoader } from "../app/routes/export-file";
-
 import { action as notificationsAction } from "../app/routes/notifications";
-
-import { action as unlockAction } from "../app/routes/orders";
-
 import { action as exportAction } from "../app/routes/order-export";
-
 import { action as searchAction } from "../app/routes/order-search";
-
+import { action as unlockAction } from "../app/routes/orders";
 import { action as securityRouteAction, loader as securityLoader } from "../app/routes/settings";
-
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
-
 import { action as storeLinkAction } from "../app/routes/store-link";
-
 import { sessionCookie } from "./fixtures/account-fixtures";
-
 import { routeData, routeResponse, pagePath } from "./fixtures/route-fixtures";
 
 describe("Sessioni, revoche e area admin", () => {
@@ -177,10 +161,7 @@ describe("Sessioni, revoche e area admin", () => {
       const out = await routeResponse(
         securityRouteAction,
         pagePath(prefix, "/app/impostazioni/account"),
-        {
-          cookie: user.cookie,
-          fields: { intent: "riautentica", returnTo: target },
-        },
+        { cookie: user.cookie, fields: { intent: "riautentica", returnTo: target } },
       );
       const destination = new URL(out.headers.get("location")!, origin);
       expect(destination.pathname).toBe(pagePath(prefix, "/accesso"));
@@ -324,10 +305,7 @@ describe("Sessioni, revoche e area admin", () => {
         env,
         new Request(`${origin}/accesso`, { method: "POST", headers }),
         "/sign-in/email",
-        {
-          email: "inoltro@example.invalid",
-          password: "Password-sintetica-123!",
-        },
+        { email: "inoltro@example.invalid", password: "Password-sintetica-123!" },
       );
     const agentOf = async (response: Response) => {
       const token = decodeURIComponent(sessionCookie(response).split("=")[1]!).split(".")[0];

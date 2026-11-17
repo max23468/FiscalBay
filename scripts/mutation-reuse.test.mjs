@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
+
 import {
   addedTests,
   affectingSources,
@@ -15,20 +20,12 @@ import {
   pullRequestProof,
   reusePlan,
 } from "./mutation-reuse.mjs";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 
 describe("mutation incrementale della prova del candidato", () => {
   it("riconosce i job di mutation della qualifica e della campagna", () => {
     assert.deepEqual(
       mutationJob("Qualifica candidato / Mutation / app/domain/orders.server.ts 2/3"),
-      {
-        target: "app/domain/orders.server.ts",
-        part: 2,
-        parts: 3,
-      },
+      { target: "app/domain/orders.server.ts", part: 2, parts: 3 },
     );
     assert.deepEqual(mutationJob("app/markup.ts 1/1"), {
       target: "app/markup.ts",

@@ -3,8 +3,8 @@ import { useNavigation } from "react-router";
 
 /**
  * Barra sul bordo inferiore dell'intestazione mentre la pagina successiva si carica. Compare
- * soltanto se l'attesa supera 150 ms, così le navigazioni rapide non lampeggiano; all'arrivo
- * si completa e svanisce. Il contenitore deve essere posizionato.
+ * soltanto se l'attesa supera 150 ms, così le navigazioni rapide non lampeggiano; all'arrivo si
+ * completa e svanisce. Il contenitore deve essere posizionato.
  */
 export function NavigationProgress() {
   const loading = useNavigation().state === "loading";

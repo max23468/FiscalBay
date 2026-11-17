@@ -105,11 +105,11 @@ export function checkData(rows, now) {
       area: "Incidenti",
       item: "valutazione degli incidenti in corso",
       ok:
-        Number.isFinite(lastSlot) &&
-        lastSlot + 2 * taskPeriods.owner_incidents >= now.getTime() &&
-        (Boolean(task?.done_at) ||
-          Date.parse(task?.locked_until ?? "") > now.getTime() ||
-          Date.parse(task?.queued_at ?? "") + taskPeriods.owner_incidents >= now.getTime()),
+        Number.isFinite(lastSlot)
+        && lastSlot + 2 * taskPeriods.owner_incidents >= now.getTime()
+        && (Boolean(task?.done_at)
+          || Date.parse(task?.locked_until ?? "") > now.getTime()
+          || Date.parse(task?.queued_at ?? "") + taskPeriods.owner_incidents >= now.getTime()),
     },
     {
       area: "Registrazioni",
@@ -134,8 +134,8 @@ export function checkData(rows, now) {
       item: "avanzamento degli spazi",
       ok: true,
       detail:
-        steps.map(({ step, count }) => `${step} ${count}`).join(", ") ||
-        "nessun passaggio nella finestra",
+        steps.map(({ step, count }) => `${step} ${count}`).join(", ")
+        || "nessun passaggio nella finestra",
     },
     {
       area: "Stripe",
@@ -171,9 +171,9 @@ export function checkData(rows, now) {
 }
 
 /**
- * Voci delle invocazioni dalla query `invocations`: i conteggi sono stime pesate. Le risposte 5xx
- * e le invocazioni fallite di coda e cron si guardano sempre nei primi giorni; un messaggio
- * rimesso in coda è il ritardo ordinario di un provider e si riporta soltanto.
+ * Voci delle invocazioni dalla query `invocations`: i conteggi sono stime pesate. Le risposte 5xx e
+ * le invocazioni fallite di coda e cron si guardano sempre nei primi giorni; un messaggio rimesso
+ * in coda è il ritardo ordinario di un provider e si riporta soltanto.
  */
 export function checkInvocations(rows) {
   const total = (filter) =>

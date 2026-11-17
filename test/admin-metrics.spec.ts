@@ -1,18 +1,12 @@
 import { env } from "cloudflare:workers";
-
 import { describe, expect, it, vi } from "vitest";
 
 import { listAnomalies } from "../app/domain/admin-operations.server";
-
 import { quotaAnomalies, readEbayQuotas } from "../app/domain/ebay-quotas.server";
-
 import { readTechnicalMetrics } from "../app/domain/technical-metrics.server";
-
 import { cpuValues, metricQueries, metricSql, pageCpuQuery } from "../app/metrics-queries";
-
-import { now } from "./fixtures/database-fixtures";
-
 import { at, hour, later, admin, audit, act, setupScenarios } from "./fixtures/admin-scenarios";
+import { now } from "./fixtures/database-fixtures";
 
 setupScenarios();
 
@@ -20,18 +14,12 @@ describe("quote delle API eBay", () => {
   const daily = (name: string, used: number, reset = "2026-09-14T07:00:00.000Z", limit = 5000) => ({
     name,
     rates: [
-      {
-        count: used,
-        limit,
-        remaining: limit - used,
-        reset,
-        timeWindow: 86_400,
-      },
+      { count: used, limit, remaining: limit - used, reset, timeWindow: 86_400 },
       { count: 1, limit: 300, remaining: 299, reset: now, timeWindow: 300 },
     ],
   });
 
-  /** eBay sintetico: token dell'applicazione e quote di Trading e Fulfillment. */
+  /** EBay sintetico: token dell'applicazione e quote di Trading e Fulfillment. */
   function analytics(
     trading: ReturnType<typeof daily>[],
     fulfillment = [daily("sell.fulfillment", 10)],
@@ -167,10 +155,7 @@ describe("quote delle API eBay", () => {
     );
     await env.DB.prepare("DELETE FROM admin_audit").run();
     expect(await act(cookie, { intent: "quota-attention", soglia: "60", motivo: "Prova" })).toEqual(
-      {
-        ok: true,
-        notice: "Operazione registrata.",
-      },
+      { ok: true, notice: "Operazione registrata." },
     );
     expect(await orders()).toMatchObject({ over: true });
     expect(await quotaAnomalies(env.DB, at(now))).toHaveLength(1);

@@ -1,4 +1,3 @@
-import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-observation.server";
 import { buyerNameView } from "../contact";
 import {
   maxListedOrders,
@@ -16,9 +15,10 @@ import {
   type EbayEnvironment,
 } from "../view-models";
 import { orderAccessSql } from "./grants.server";
-import { consultableStore, orderLineageSql, storeLabelSql } from "./store-state.server";
+import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-observation.server";
 import { orderSuggestions } from "./order-suggestions.server";
 import { sqlList } from "./sql.server";
+import { consultableStore, orderLineageSql, storeLabelSql } from "./store-state.server";
 
 export type PaymentState = PaymentStatus | "unknown";
 export type ShippingState = ShippingStatus | "unknown";
@@ -54,8 +54,8 @@ export function shippingState(
 }
 
 /**
- * Stati originali della fonte, la loro forma normalizzata e righe dell'ordine; null dove la
- * fonte non li ha forniti.
+ * Stati originali della fonte, la loro forma normalizzata e righe dell'ordine; null dove la fonte
+ * non li ha forniti.
  */
 export type OrderSummary = {
   buyer: BuyerSnapshot | null;
@@ -90,9 +90,9 @@ export type VisibleOrder = {
   provisional: boolean;
   summary: OrderSummary;
   /**
-   * Situazione fiscale calcolata dalla stessa espressione SQL dei filtri. Un ordine senza
-   * controllo fiscale e senza lettura in attesa non è stato verificato: risulta una lettura non
-   * riuscita, da riprovare.
+   * Situazione fiscale calcolata dalla stessa espressione SQL dei filtri. Un ordine senza controllo
+   * fiscale e senza lettura in attesa non è stato verificato: risulta una lettura non riuscita, da
+   * riprovare.
    */
   fiscalState: FiscalSituation;
   taxVerification: "unchecked" | "checking" | "completed" | "error";
@@ -118,21 +118,22 @@ export type VisibleOrder = {
 /**
  * Chiave dello stesso dato letto da Trading e da Fulfillment: tipo, Paese e valore normalizzati
  * come in `buyerTaxKey`, così il CF o la Partita IVA riportati da entrambe le fonti compaiono una
- * volta. Fulfillment qualifica il CF soltanto con il proprio nome `CODICE_FISCALE`; un'altra
- * fonte resta distinta. null per un identificativo che non si confronta.
+ * volta. Fulfillment qualifica il CF soltanto con il proprio nome `CODICE_FISCALE`; un'altra fonte
+ * resta distinta. null per un identificativo che non si confronta.
  */
 function sourceTaxKey(tax: VisibleOrder["taxIdentifiers"][number]): string | null {
   const read =
-    tax.source === "ebay_trading_get_orders" ||
-    (tax.source === "ebay_fulfillment" &&
-      (taxIdentifierType(tax.type, tax.issuingCountry) !== "CF" || tax.type === "CODICE_FISCALE"));
+    tax.source === "ebay_trading_get_orders"
+    || (tax.source === "ebay_fulfillment"
+      && (taxIdentifierType(tax.type, tax.issuingCountry) !== "CF"
+        || tax.type === "CODICE_FISCALE"));
   return read ? buyerTaxKey(tax) : null;
 }
 
 /**
  * Tipo dell'identificativo come in `taxIdentifierType`, dagli stessi elenchi: CF e Partita IVA
- * italiani, anche con Paese omesso dove la fonte lo ammette; gli altri restano distinti per tipo
- * e Paese.
+ * italiani, anche con Paese omesso dove la fonte lo ammette; gli altri restano distinti per tipo e
+ * Paese.
  */
 const taxKind = (table: string) => `CASE
   WHEN ${table}.issuing_country IS NOT NULL AND ${table}.issuing_country <> 'IT'
@@ -194,9 +195,7 @@ const latestCheckSql = (column: "availability" | "verification") =>
      WHERE ${orderLineageSql("o.id")}
      ORDER BY tc.observed_at DESC, tc.source LIMIT 1)`;
 
-/**
- * Verifica fiscale dell'ordine: lettura non riuscita, in corso, conclusa o mai avvenuta.
- */
+/** Verifica fiscale dell'ordine: lettura non riuscita, in corso, conclusa o mai avvenuta. */
 const verificationSql = `CASE
   WHEN EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id AND r.detail_error IS NOT NULL)
     OR ${latestCheckSql("verification")} = 'error' THEN 'error'
@@ -223,8 +222,8 @@ const fiscalSql = (access: string) => `CASE
     ELSE 'error' END END`;
 
 /**
- * Testo cercabile di un ordine che la manutenzione non ha ancora indicizzato: le stesse parti
- * di `orderSearchText`, con le sole minuscole ASCII di SQLite.
+ * Testo cercabile di un ordine che la manutenzione non ha ancora indicizzato: le stesse parti di
+ * `orderSearchText`, con le sole minuscole ASCII di SQLite.
  */
 const unindexedSearchSql = `lower(o.ebay_order_id || ' ' || COALESCE(json_extract(o.buyer_json, '$.name'), '')
   || ' ' || COALESCE(json_extract(o.buyer_json, '$.username'), '') || ' '
@@ -232,8 +231,8 @@ const unindexedSearchSql = `lower(o.ebay_order_id || ' ' || COALESCE(json_extrac
        FROM order_items WHERE order_id = o.id), ''))`;
 
 /**
- * La parola `token.value` manca dall'ordine: né nel testo cercabile né, se autorizzati, nei
- * valori fiscali, confrontati anche senza spazi. Un valore da sbloccare non trova l'ordine.
+ * La parola `token.value` manca dall'ordine: né nel testo cercabile né, se autorizzati, nei valori
+ * fiscali, confrontati anche senza spazi. Un valore da sbloccare non trova l'ordine.
  */
 const tokenMissingSql = `instr(COALESCE(o.search_text, ${unindexedSearchSql}), token.value) = 0
   AND NOT (${accessSql} AND EXISTS (SELECT 1 FROM tax_identifiers t
@@ -244,9 +243,9 @@ const tokenMissingSql = `instr(COALESCE(o.search_text, ${unindexedSearchSql}), t
  * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?5, criteri da ?6,
  * acquisti non pagati ?12, istantanea da ?13 e posizione nell'elenco da ?15. Un ordine senza
  * istante d'ingresso negli elenchi è stato letto prima che venisse registrato e vale come già
- * presente. Ogni percorso (elenco, conteggio, facet, suggerimenti) applica gli stessi controlli
- * di negozio e conservazione. Un acquisto non pagato resta fuori, salvo con
- * il filtro «Non pagato» o quando l'elenco lo mostra (D180).
+ * presente. Ogni percorso (elenco, conteggio, facet, suggerimenti) applica gli stessi controlli di
+ * negozio e conservazione. Un acquisto non pagato resta fuori, salvo con il filtro «Non pagato» o
+ * quando l'elenco lo mostra (D180).
  */
 // `+o.merged_into` esclude quell'indice: il piano parte dai negozi dello spazio e legge i loro
 // ordini per negozio, invece di scorrere gli ordini non uniti di tutti gli spazi.
@@ -298,9 +297,9 @@ function visibleOrdersParams(
 }
 
 /**
- * Ordini consultabili dei criteri, o fra quelli indicati, contati per ciascun inizio di periodo:
- * il conteggio di un inizio comprende gli ordini creati da quell'istante. Senza inizi conta
- * l'intero insieme. Una sola lettura, con la situazione fiscale dei filtri.
+ * Ordini consultabili dei criteri, o fra quelli indicati, contati per ciascun inizio di periodo: il
+ * conteggio di un inizio comprende gli ordini creati da quell'istante. Senza inizi conta l'intero
+ * insieme. Una sola lettura, con la situazione fiscale dei filtri.
  */
 export async function visibleOrderTallies(
   db: D1Database,
@@ -366,8 +365,8 @@ export async function countVisibleOrders(
 
 /**
  * Primo termine dei dati consultabili all'istante `now` fra gli ordini indicati: la fine della
- * conservazione di un ordine o di uno sblocco con scadenza propria. Oltre quel termine un file
- * che li contiene mostrerebbe dati non più consultabili. null senza ordini.
+ * conservazione di un ordine o di uno sblocco con scadenza propria. Oltre quel termine un file che
+ * li contiene mostrerebbe dati non più consultabili. null senza ordini.
  */
 export async function visibleOrdersTerm(
   db: D1Database,
@@ -451,9 +450,9 @@ export type OrderSearchMatch = {
 };
 
 /**
- * Primi ordini della ricerca e loro numero, con lo stesso filtro dell'elenco: la barra
- * superiore propone ciò che «Vedi tutti» mostra, senza leggere gli ordini completi. Dagli Ordini
- * valgono anche i loro filtri.
+ * Primi ordini della ricerca e loro numero, con lo stesso filtro dell'elenco: la barra superiore
+ * propone ciò che «Vedi tutti» mostra, senza leggere gli ordini completi. Dagli Ordini valgono
+ * anche i loro filtri.
  */
 export async function searchVisibleOrders(
   db: D1Database,
@@ -501,8 +500,8 @@ export async function searchVisibleOrders(
 /**
  * Ordini consultabili dello spazio dell'utente, dal più recente per data ordine, fino a `limit`.
  * Con `ids` si leggono soltanto quelli indicati; i criteri filtrano nella stessa query, con gli
- * stessi controlli di spazio, negozio e conservazione. `provisional` ammette anche gli acquisti
- * non pagati, come il filtro «Non pagato».
+ * stessi controlli di spazio, negozio e conservazione. `provisional` ammette anche gli acquisti non
+ * pagati, come il filtro «Non pagato».
  */
 export async function listVisibleOrders(
   db: D1Database,
@@ -666,9 +665,9 @@ export async function listVisibleOrders(
       const previous = primary.get(key);
       const updated = !!previous?.updated || tax.updated;
       if (
-        !previous ||
-        (fulfillment(tax) && !fulfillment(previous)) ||
-        (tax.source === previous.source && tax.issuingCountry === "IT")
+        !previous
+        || (fulfillment(tax) && !fulfillment(previous))
+        || (tax.source === previous.source && tax.issuingCountry === "IT")
       ) {
         tax.updated = updated;
         primary.set(key, tax);
@@ -692,8 +691,8 @@ export async function listVisibleOrders(
     visible
       .filter(
         (order) =>
-          (order.fiscalState === "missing" || order.fiscalState === "foreign") &&
-          !order.provisional,
+          (order.fiscalState === "missing" || order.fiscalState === "foreign")
+          && !order.provisional,
       )
       .map((order) => order.id),
     ebayEnvironment,

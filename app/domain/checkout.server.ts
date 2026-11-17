@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 
 import { appCopy } from "../app-copy";
+import { appUrl, planPath } from "../app-links";
 import {
   firstChargeAt,
   priceGeneration,
@@ -24,9 +25,10 @@ import {
   stripeId,
   stripeSecretKey,
 } from "../integrations/stripe.server";
+import { dayMilliseconds } from "../time";
 import { purchasesOpenSql } from "./admission-state.server";
-import { checkoutRereadDays, reconcileSubscription, workspaceCustomerSql } from "./billing.server";
 import { openSubscriptionSql } from "./billing-subscriptions.server";
+import { checkoutRereadDays, reconcileSubscription, workspaceCustomerSql } from "./billing.server";
 import { entitlementInForce, paidCoverageSql, storeReadSql } from "./grants.server";
 import {
   bindLifetimeSession,
@@ -36,8 +38,6 @@ import {
   renewsDuringCheckout,
   reserveLifetime,
 } from "./lifetime.server";
-import { dayMilliseconds } from "../time";
-import { appUrl, planPath } from "../app-links";
 
 /** Offerte in vendita: il lifetime con la prenotazione atomica di uno dei venti posti. */
 export const checkoutOffers = [
@@ -64,12 +64,12 @@ function trialEndsSql(workspace: string, at: string) {
 }
 
 /**
- * Acquisto possibile dopo il primo collegamento e la prima lettura riuscita di un negozio,
- * anche senza ordini. Un diritto in corso diverso dalla prova lo ferma; durante la prova
- * l'acquisto resta possibile e ne conserva i giorni residui (`trialEndsAt`). Lo ferma anche un
- * abbonamento che può ancora incassare, come un pagamento da confermare o un rinnovo da
- * regolarizzare, o un lifetime pagato e in attesa della conferma; un lifetime rimborsato no.
- * Senza capacità per nuovi Premium gli acquisti sono sospesi.
+ * Acquisto possibile dopo il primo collegamento e la prima lettura riuscita di un negozio, anche
+ * senza ordini. Un diritto in corso diverso dalla prova lo ferma; durante la prova l'acquisto resta
+ * possibile e ne conserva i giorni residui (`trialEndsAt`). Lo ferma anche un abbonamento che può
+ * ancora incassare, come un pagamento da confermare o un rinnovo da regolarizzare, o un lifetime
+ * pagato e in attesa della conferma; un lifetime rimborsato no. Senza capacità per nuovi Premium
+ * gli acquisti sono sospesi.
  */
 export async function purchaseState(db: D1Database, userId: string, now = new Date()) {
   const row = await db
@@ -118,10 +118,10 @@ export type CheckoutResult =
     };
 
 /**
- * Hosted Checkout nel percorso Managed Payments. Prima della vendita il prezzo su Stripe
- * deve coincidere con il listino e avere la copertura fiscale; una sessione aperta fuori da
- * Managed Payments viene chiusa subito. Il pagamento non attribuisce alcun diritto: lo fa
- * soltanto la conferma verificata sul server.
+ * Hosted Checkout nel percorso Managed Payments. Prima della vendita il prezzo su Stripe deve
+ * coincidere con il listino e avere la copertura fiscale; una sessione aperta fuori da Managed
+ * Payments viene chiusa subito. Il pagamento non attribuisce alcun diritto: lo fa soltanto la
+ * conferma verificata sul server.
  */
 export async function startCheckout(
   env: Env,
@@ -199,8 +199,8 @@ const logRelease = (request: Request) => (error: unknown) =>
   logFailure({ request, error, operation: "checkout" });
 
 /**
- * Durata della sessione di mensile e annuale, come per il lifetime: una sessione abbandonata
- * non resta in grado di incassare per un giorno.
+ * Durata della sessione di mensile e annuale, come per il lifetime: una sessione abbandonata non
+ * resta in grado di incassare per un giorno.
  */
 const subscriptionCheckoutMs = 60 * 60 * 1000;
 
@@ -212,10 +212,10 @@ const recentCheckoutMs = checkoutRereadDays * dayMilliseconds;
 
 /**
  * Chiude le sessioni ancora aperte dello spazio prima di aprirne una nuova, così una sola può
- * incassare: quella di mensile o annuale e, per un abbonamento, quella del lifetime, che libera
- * il posto. Una sessione già conclusa si riconcilia subito (`settled`), così il nuovo acquisto
- * si decide sullo stato aggiornato; `claim` è il turno letto. "busy" quando un'altra richiesta
- * dello stesso spazio sta creando la sua sessione, di qualunque offerta: il turno in
+ * incassare: quella di mensile o annuale e, per un abbonamento, quella del lifetime, che libera il
+ * posto. Una sessione già conclusa si riconcilia subito (`settled`), così il nuovo acquisto si
+ * decide sullo stato aggiornato; `claim` è il turno letto. "busy" quando un'altra richiesta dello
+ * stesso spazio sta creando la sua sessione, di qualunque offerta: il turno in
  * `subscription_checkouts` è unico per lo spazio e lo prende anche il lifetime.
  */
 export async function closeOpenCheckouts(
@@ -265,8 +265,8 @@ export async function closeOpenCheckouts(
 }
 
 /**
- * Prende il turno dello spazio per una nuova sessione al posto di quello letto (`previous`):
- * fra richieste concorrenti ne vince una. Null se un'altra lo ha già preso.
+ * Prende il turno dello spazio per una nuova sessione al posto di quello letto (`previous`): fra
+ * richieste concorrenti ne vince una. Null se un'altra lo ha già preso.
  */
 async function claimCheckout(
   db: D1Database,
@@ -308,12 +308,11 @@ async function releaseClaim(db: D1Database, workspaceId: string, claim: string) 
 }
 
 /**
- * Lifetime: il posto si prenota prima della sessione, che scade con la prenotazione, e la
- * sessione si lega al posto prima che il cliente ne riceva l'indirizzo. Una sessione
- * precedente dello stesso spazio si chiude prima di aprirne un'altra, così un posto ha sempre
- * una sola sessione che può incassare; se era già stata completata, il suo esito prevale. Chi
- * passa dall'abbonamento paga il listino corrente meno il periodo pagato non usato, come
- * coupon sul solo prodotto lifetime.
+ * Lifetime: il posto si prenota prima della sessione, che scade con la prenotazione, e la sessione
+ * si lega al posto prima che il cliente ne riceva l'indirizzo. Una sessione precedente dello stesso
+ * spazio si chiude prima di aprirne un'altra, così un posto ha sempre una sola sessione che può
+ * incassare; se era già stata completata, il suo esito prevale. Chi passa dall'abbonamento paga il
+ * listino corrente meno il periodo pagato non usato, come coupon sul solo prodotto lifetime.
  */
 async function startLifetimeCheckout(
   env: Env,
@@ -443,9 +442,9 @@ async function listedPrice(
 }
 
 /**
- * Apre la sessione e ne consegna l'indirizzo soltanto se Stripe l'ha aperta in Managed Payments
- * e la richiesta tiene ancora il proprio turno: altrimenti la chiude, oppure libera il turno
- * rimasto senza sessione. Ritorno e annullamento portano alla pagina del piano.
+ * Apre la sessione e ne consegna l'indirizzo soltanto se Stripe l'ha aperta in Managed Payments e
+ * la richiesta tiene ancora il proprio turno: altrimenti la chiude, oppure libera il turno rimasto
+ * senza sessione. Ritorno e annullamento portano alla pagina del piano.
  */
 async function openManagedSession(
   env: Env,

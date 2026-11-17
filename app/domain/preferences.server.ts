@@ -12,8 +12,8 @@ import { marketingTextVersions, type MarketingSource } from "./registration.serv
 
 /**
  * Preferenze dell'account: ogni valore ha una sola fonte, la riga di `user_preferences`, e un
- * valore assente vale il predefinito. La conferma dello sblocco resta in `unlock_preferences` e
- * il consenso marketing in `marketing_consents`, con la prova di ogni scelta.
+ * valore assente vale il predefinito. La conferma dello sblocco resta in `unlock_preferences` e il
+ * consenso marketing in `marketing_consents`, con la prova di ogni scelta.
  */
 export interface Preferences {
   /** Lingua scelta; null finché l'utente non ne sceglie una e vale quella dell'indirizzo. */
@@ -75,8 +75,8 @@ export async function savePreference(
   const column = columns[change.name];
   // Tema del sistema e fuso automatico non si conservano: valgono già senza riga.
   const value =
-    (change.name === "theme" && change.value === defaultDisplay.theme) ||
-    (change.name === "timeZone" && change.value === "auto")
+    (change.name === "theme" && change.value === defaultDisplay.theme)
+    || (change.name === "timeZone" && change.value === "auto")
       ? null
       : change.value;
   await db
@@ -89,8 +89,8 @@ export async function savePreference(
 }
 
 /**
- * Testi del modello inviati con Salva: obbligatori ed entro la lunghezza massima. Un testo
- * uguale al predefinito non si conserva, così segue le revisioni del testo predefinito.
+ * Testi del modello inviati con Salva: obbligatori ed entro la lunghezza massima. Un testo uguale
+ * al predefinito non si conserva, così segue le revisioni del testo predefinito.
  */
 export function parseTemplates(form: FormData): Record<Language, string | null> | null {
   const read = (language: Language) => {
@@ -140,9 +140,9 @@ export async function marketingConsent(db: D1Database, userId: string): Promise<
 }
 
 /**
- * Proposta separata del consenso dopo i primi passi (§14): soltanto a chi in registrazione non
- * ha aderito e da allora non ha fatto altre scelte. Una risposta alla proposta, o una scelta
- * nelle Impostazioni, registra una nuova prova e la proposta non torna.
+ * Proposta separata del consenso dopo i primi passi (§14): soltanto a chi in registrazione non ha
+ * aderito e da allora non ha fatto altre scelte. Una risposta alla proposta, o una scelta nelle
+ * Impostazioni, registra una nuova prova e la proposta non torna.
  */
 export async function marketingProposal(db: D1Database, userId: string): Promise<boolean> {
   const row = await db

@@ -1,13 +1,13 @@
-import { languageFromPath, type Language } from "./i18n";
-import { it, type AppCopy } from "./copy/copy-it";
 import { en } from "./copy/copy-en";
+import { it, type AppCopy } from "./copy/copy-it";
+import { languageFromPath, type Language } from "./i18n";
 
 export type { AppCopy };
 
 /**
- * Testi dell'interfaccia per lingua. Il server ha entrambe le lingue; il browser scarica
- * soltanto quella della pagina, prima dell'idratazione e prima di una navigazione che la
- * cambia: gli import statici qui sopra restano nel solo bundle del server.
+ * Testi dell'interfaccia per lingua. Il server ha entrambe le lingue; il browser scarica soltanto
+ * quella della pagina, prima dell'idratazione e prima di una navigazione che la cambia: gli import
+ * statici qui sopra restano nel solo bundle del server.
  */
 const copies: Partial<Record<Language, AppCopy>> = import.meta.env.SSR ? { it, en } : {};
 

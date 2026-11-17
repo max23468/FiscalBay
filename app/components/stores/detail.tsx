@@ -1,10 +1,11 @@
 import { Bell, History, Link2, RefreshCw } from "lucide-react";
-import { formatNumber } from "../../format";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
+import { useCopy, useLinks } from "~/components/copy-context";
 import { PremiumNote, StatusAlert, StatusBadge } from "~/components/status";
 import { useDate } from "~/components/time-zone";
+import { buttonLink } from "~/components/ui/button-variants";
 import {
   Sheet,
   SheetContent,
@@ -12,20 +13,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "~/components/ui/sheet";
-import { buttonLink } from "~/components/ui/button-variants";
-import { useCopy, useLinks } from "~/components/copy-context";
+
 import { appHref } from "../../app-links";
+import { formatNumber } from "../../format";
 import { type StoreView } from "../../view-models";
 import { ReconnectButton, StoreActions } from "./actions";
-import {
-  FeedbackSummary,
-  LastSync,
-  RecentList,
-  StoreSection,
-  StoreSubtitle,
-  StoreTile,
-  type SectionProps,
-} from "./store";
 import {
   connectionStatus,
   consentExpired,
@@ -37,6 +29,15 @@ import {
   syncDescription,
   type StoresPageData,
 } from "./state";
+import {
+  FeedbackSummary,
+  LastSync,
+  RecentList,
+  StoreSection,
+  StoreSubtitle,
+  StoreTile,
+  type SectionProps,
+} from "./store";
 
 /** Pannello del negozio con URL proprio; resta visibile mentre si chiude. */
 export function StoreSheet({ data }: { data: StoresPageData }) {
@@ -154,8 +155,10 @@ function StoreDetail({ store, data }: { store: StoreView; data: StoresPageData }
         ebayDown={ebayDownFor(data, store)}
         connectHref={data.connectHref}
         renewsAlone={
-          !!data.subscriptionRenews &&
-          data.stores.every((other) => other.id === store.id || other.connection === "disconnected")
+          !!data.subscriptionRenews
+          && data.stores.every(
+            (other) => other.id === store.id || other.connection === "disconnected",
+          )
         }
       />
     </div>

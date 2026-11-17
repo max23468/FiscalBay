@@ -1,7 +1,7 @@
 /**
- * Testi cifrati con una chiave AES-GCM derivata dal segreto server, una per scopo: non
- * coincidono con le chiavi di Better Auth. Il vincolo entra nei dati autenticati, così un
- * testo copiato in un altro contesto non si apre.
+ * Testi cifrati con una chiave AES-GCM derivata dal segreto server, una per scopo: non coincidono
+ * con le chiavi di Better Auth. Il vincolo entra nei dati autenticati, così un testo copiato in un
+ * altro contesto non si apre.
  */
 
 export function base64Url(bytes: Uint8Array): string {

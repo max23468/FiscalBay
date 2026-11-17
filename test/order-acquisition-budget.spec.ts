@@ -1,5 +1,4 @@
 import { env } from "cloudflare:workers";
-
 import { expect, it, vi } from "vitest";
 
 import {
@@ -10,17 +9,10 @@ import {
   quotaUsageStatements,
   workerShare,
 } from "../app/domain/order-acquisition-context.server";
-
 import { acquireOrders } from "../app/domain/order-acquisition.server";
-
 import { recordOrderObservation } from "../app/domain/order-import.server";
-
 import { insertEntitlement } from "./fixtures/database-fixtures";
-
 import { access, order } from "./fixtures/ebay-client-fixtures";
-
-import { observation } from "./fixtures/order-import-scenarios";
-
 import {
   acquire,
   calls,
@@ -28,6 +20,7 @@ import {
   grantedAt,
   setupScenarios,
 } from "./fixtures/order-acquisition-scenarios";
+import { observation } from "./fixtures/order-import-scenarios";
 
 setupScenarios();
 
@@ -236,9 +229,7 @@ it.each([
 
 it("conta le immagini già lette nell'esecuzione per il budget del giorno", async () => {
   await quota("GetItem", 49);
-  const two = ebay({
-    orders: [foreign(18), foreign(19, "12-34567-89013", "110000000002")],
-  });
+  const two = ebay({ orders: [foreign(18), foreign(19, "12-34567-89013", "110000000002")] });
   expect(await acquire(two)).toBe("complete");
   expect(calls(two, "GetItem")).toBe(1);
 });
@@ -260,9 +251,7 @@ const coverage = () =>
 
 it("chiede a Trading la lettura fiscale soltanto entro i novanta giorni", async () => {
   await coverage();
-  const fetcher = ebay({
-    orders: [foreign(89), foreign(90, "12-34567-89013", "110000000002")],
-  });
+  const fetcher = ebay({ orders: [foreign(89), foreign(90, "12-34567-89013", "110000000002")] });
   expect(await acquire(fetcher)).toBe("complete");
   const requested = fetcher.mock.calls
     .filter(([, init]) => new Headers(init?.headers).get("x-ebay-api-call-name") === "GetOrders")
@@ -450,19 +439,16 @@ const tradingOrders =
   (...ids: string[]) =>
   () =>
     new Response(
-      `<GetOrdersResponse><Ack>Success</Ack><HasMoreOrders>false</HasMoreOrders><OrderArray>` +
-        ids.map((id) => `<Order><OrderID>${id}</OrderID></Order>`).join("") +
-        `</OrderArray></GetOrdersResponse>`,
+      `<GetOrdersResponse><Ack>Success</Ack><HasMoreOrders>false</HasMoreOrders><OrderArray>`
+        + ids.map((id) => `<Order><OrderID>${id}</OrderID></Order>`).join("")
+        + `</OrderArray></GetOrdersResponse>`,
     );
 
 it("una lettura Trading senza il dato fiscale non toglie quello già letto", async () => {
   const unpaid = foreign(1);
   const first = ebay({ orders: [{ ...unpaid, orderPaymentStatus: "PENDING" }] });
   expect(await acquire(first)).toBe("complete");
-  const next = {
-    ...first.orders[0]!,
-    lastModifiedDate: "2026-09-02T00:30:00.000Z",
-  };
+  const next = { ...first.orders[0]!, lastModifiedDate: "2026-09-02T00:30:00.000Z" };
   const absent = ebay({ orders: [next], trading: tradingOrders(next.orderId) });
   expect(await acquire(absent, "2026-09-02T01:00:00.000Z")).toBe("complete");
   expect(calls(absent, "GetOrders")).toBe(1);

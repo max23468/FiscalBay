@@ -1,8 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-import { canonicalPath } from "./i18n";
 import { pricingPath } from "./app-links";
 import { arrivalSource } from "./arrival-source.server";
+import { canonicalPath } from "./i18n";
 
 /** Pagine pubbliche servite dalla cache breve: le più visitate, che leggono il listino. */
 const cachedPages = new Set(["/", pricingPath]);
@@ -28,17 +28,17 @@ export function skipPageCache() {
 export const pageCacheSeconds = 60;
 
 /**
- * Soltanto la pagina intera chiesta da un visitatore senza cookie e senza parametri: senza
- * sessione né scelta «Visita il sito» la risposta è la stessa per tutti, mentre ogni cookie,
- * anche estraneo, la fa leggere di nuovo. Le navigazioni interne (`.data`) non passano di qui.
+ * Soltanto la pagina intera chiesta da un visitatore senza cookie e senza parametri: senza sessione
+ * né scelta «Visita il sito» la risposta è la stessa per tutti, mentre ogni cookie, anche estraneo,
+ * la fa leggere di nuovo. Le navigazioni interne (`.data`) non passano di qui.
  */
 function cacheable(request: Request) {
   const url = new URL(request.url);
   return (
-    request.method === "GET" &&
-    !request.headers.has("cookie") &&
-    !url.search &&
-    cachedPages.has(canonicalPath(url.pathname))
+    request.method === "GET"
+    && !request.headers.has("cookie")
+    && !url.search
+    && cachedPages.has(canonicalPath(url.pathname))
   );
 }
 
@@ -57,10 +57,10 @@ export function pageCacheKey(request: Request, version: string | undefined, appO
 const browserCacheHeader = "x-fiscalbay-browser-cache";
 
 /**
- * Home e Prezzi per chi non ha sessione (§23): una copia per indirizzo, versione del Worker e provenienza resta
- * nella cache di Cloudflare per un minuto, così un picco di visite non legge ogni volta il
- * database. Il browser riceve la regola della route, mai quella della copia: `no-store` per la
- * home, che dopo l'accesso porta agli Ordini, e la riconvalida a ogni visita per Prezzi.
+ * Home e Prezzi per chi non ha sessione (§23): una copia per indirizzo, versione del Worker e
+ * provenienza resta nella cache di Cloudflare per un minuto, così un picco di visite non legge ogni
+ * volta il database. Il browser riceve la regola della route, mai quella della copia: `no-store`
+ * per la home, che dopo l'accesso porta agli Ordini, e la riconvalida a ogni visita per Prezzi.
  */
 export async function withPageCache(
   request: Request,

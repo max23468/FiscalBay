@@ -9,21 +9,22 @@ import {
 } from "react-router";
 
 import { onScrollEnd } from "~/components/scroll-end";
+
 import { snapshotParam } from "../../orders/order-criteria";
-import type { OrderView } from "../../view-models";
 import type { OrdersPageData } from "../../orders/page-data";
+import type { OrderView } from "../../view-models";
 
 /** Distanza dall'inizio della pagina entro cui l'utente è considerato in cima alla lista. */
 const topThreshold = 120;
 
 /**
- * L'indirizzo riceve l'istantanea dell'elenco quando c'è qualcosa da tenere fermo: l'utente
- * lontano dalla cima, una selezione o un dettaglio (`held`), ordini in arrivo. Così ricarica,
- * dettaglio e Indietro ritrovano gli stessi ordini nello stesso ordine, e in cima l'indirizzo
- * resta pulito. I nuovi ordini entrano subito se stanno tutti sopra il primo mostrato e
- * l'utente è in cima alla lista senza selezionare né leggere un dettaglio; altrimenti resta
- * l'indicatore, così nulla si sposta mentre legge, il pannello aperto non si chiude e un
- * ordine recuperato dallo storico non entra fra quelli già letti.
+ * L'indirizzo riceve l'istantanea dell'elenco quando c'è qualcosa da tenere fermo: l'utente lontano
+ * dalla cima, una selezione o un dettaglio (`held`), ordini in arrivo. Così ricarica, dettaglio e
+ * Indietro ritrovano gli stessi ordini nello stesso ordine, e in cima l'indirizzo resta pulito. I
+ * nuovi ordini entrano subito se stanno tutti sopra il primo mostrato e l'utente è in cima alla
+ * lista senza selezionare né leggere un dettaglio; altrimenti resta l'indicatore, così nulla si
+ * sposta mentre legge, il pannello aperto non si chiude e un ordine recuperato dallo storico non
+ * entra fra quelli già letti.
  */
 export function useListSnapshot(data: OrdersPageData, held: boolean) {
   const navigate = useNavigate();
@@ -43,9 +44,9 @@ export function useListSnapshot(data: OrdersPageData, held: boolean) {
   // sostituzione, che altrimenti annullerebbe la navigazione appena avviata.
   const router = useContext(UNSAFE_DataRouterContext)?.router;
   const settled = () =>
-    !router ||
-    (router.state.navigation.state === "idle" &&
-      [...router.state.fetchers.values()].every((fetcher) => fetcher.state === "idle"));
+    !router
+    || (router.state.navigation.state === "idle"
+      && [...router.state.fetchers.values()].every((fetcher) => fetcher.state === "idle"));
   const shown = `${location.pathname}${location.search}`;
   const current = () =>
     settled() && `${window.location.pathname}${window.location.search}` === shown;
@@ -77,12 +78,12 @@ export function useListSnapshot(data: OrdersPageData, held: boolean) {
   });
   const insertAtTop = useEffectEvent(() => {
     if (
-      freshHref &&
-      incomingAtTop &&
-      !scrolling.current &&
-      window.scrollY < topThreshold &&
-      !held &&
-      current()
+      freshHref
+      && incomingAtTop
+      && !scrolling.current
+      && window.scrollY < topThreshold
+      && !held
+      && current()
     )
       void navigate(freshHref, { replace: true, preventScrollReset: true });
   });
@@ -109,9 +110,9 @@ export function useNewOrders(orders: OrderView[], snapshot: string, criteria: st
     added: new Set<string>(),
   }));
   if (
-    list.snapshot === snapshot &&
-    list.criteria === criteria &&
-    orders.every((order) => list.seen.has(order.id))
+    list.snapshot === snapshot
+    && list.criteria === criteria
+    && orders.every((order) => list.seen.has(order.id))
   )
     return list.added;
   const added = new Set(list.added);

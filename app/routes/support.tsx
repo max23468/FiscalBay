@@ -4,11 +4,12 @@ import { FaqList } from "~/components/faq-list";
 import { siteColumn } from "~/components/site-column";
 import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { buttonLink } from "~/components/ui/button-variants";
+
 import { appCopy, supportEmail } from "../app-copy";
 import { faqPath, supportPath, supportSettingsPath } from "../app-links";
 import { localizedPath } from "../i18n";
-import { publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
+import { publicPage, publicPageHeaders } from "../site.server";
 import type { Route } from "./+types/support";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -32,8 +33,8 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
 
 /**
  * Supporto pubblico (§14): domande sull'uso e contatti, senza modulo anonimo. Il modulo con il
- * riepilogo diagnostico sta nell'app, dove la richiesta porta l'account; senza sessione
- * l'indirizzo dell'app passa dall'accesso. Le domande prima di iniziare stanno nella FAQ.
+ * riepilogo diagnostico sta nell'app, dove la richiesta porta l'account; senza sessione l'indirizzo
+ * dell'app passa dall'accesso. Le domande prima di iniziare stanno nella FAQ.
  */
 export default function Support({ loaderData }: Route.ComponentProps) {
   const { language, signedIn } = loaderData;

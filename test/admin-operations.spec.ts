@@ -1,17 +1,12 @@
 import { env } from "cloudflare:workers";
-
 import { describe, expect, it, vi } from "vitest";
 
 import { listAudit } from "../app/domain/admin-audit.server";
-
 import { consoleSummary } from "../app/domain/admin-directory.server";
-
 import { listAnomalies, receiptStates, taskStates } from "../app/domain/admin-operations.server";
-
 import { requeueTask } from "../app/domain/scheduled-work.server";
-
 import { verifiedSession } from "./fixtures/account-fixtures";
-
+import { at, hour, later, setupScenarios } from "./fixtures/admin-scenarios";
 import {
   insertCredentials,
   insertEntitlement,
@@ -20,10 +15,7 @@ import {
   insertWorkspace,
   now,
 } from "./fixtures/database-fixtures";
-
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
-
-import { at, hour, later, setupScenarios } from "./fixtures/admin-scenarios";
 
 setupScenarios();
 
@@ -171,9 +163,7 @@ describe("anomalie e lavori", () => {
     const stalledLater = at(later(3 * hour));
     expect(
       (await taskStates(env.DB, stalledLater)).find((t) => t.task === "billing"),
-    ).toMatchObject({
-      stalled: true,
-    });
+    ).toMatchObject({ stalled: true });
     expect(await requeueTask(queueEnv, "billing", stalledLater)).toBe("queued");
     expect(send).toHaveBeenLastCalledWith({ task: "billing", slot: "2026-09-13T23:00:00.000Z" });
   });

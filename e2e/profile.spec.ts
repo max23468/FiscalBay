@@ -136,9 +136,7 @@ test.describe("area reale", () => {
         });
         const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
         try {
-          await page.goto(pagePath(prefix, "/app/impostazioni/account"), {
-            waitUntil: "commit",
-          });
+          await page.goto(pagePath(prefix, "/app/impostazioni/account"), { waitUntil: "commit" });
           await expect(first).toBeDisabled();
         } finally {
           continueHydration();

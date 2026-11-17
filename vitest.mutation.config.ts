@@ -1,6 +1,8 @@
 import { relative } from "node:path";
+
 import { defineConfig } from "vitest/config";
 import { BaseSequencer, type TestSpecification } from "vitest/node";
+
 import cloudflare from "./vitest.cloudflare.config";
 import unit from "./vitest.unit.config";
 

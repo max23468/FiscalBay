@@ -7,9 +7,8 @@ import {
 } from "../../domain/order-observation.server";
 import { parseMinor } from "../../money";
 import { dayMilliseconds } from "../../time";
-import { upstreamJson } from "../http.server";
+import { upstreamJson, UpstreamError } from "../http.server";
 import { ebayApiUrl, type EbayAccess } from "./environment.server";
-import { UpstreamError } from "../http.server";
 
 type Amount = { value: string; currency: string };
 type Contact = {
@@ -91,8 +90,8 @@ const observableOrderSchema = z.looseObject({
 
 /**
  * Lettura Fulfillment come osservazione validata del modello ordini, con importi esatti. I campi
- * non previsti, inclusi i dati fiscali, non entrano nell'osservazione. `observedAt` distingue
- * i campi mascherati per l'età dell'ordine da quelli assenti.
+ * non previsti, inclusi i dati fiscali, non entrano nell'osservazione. `observedAt` distingue i
+ * campi mascherati per l'età dell'ordine da quelli assenti.
  */
 export function fulfillmentObservation(payload: unknown, observedAt: string): OrderObservation {
   if (!observableOrderSchema.safeParse(payload).success)
@@ -248,7 +247,5 @@ export async function readFulfillmentOrder(
         .parse(tax.marketplaceId);
     }
   }
-  return upstreamJson(access.fetcher, url.href, fulfillmentOrderSchema, {
-    headers,
-  });
+  return upstreamJson(access.fetcher, url.href, fulfillmentOrderSchema, { headers });
 }

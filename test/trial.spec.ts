@@ -1,9 +1,12 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { appCopy } from "../app/app-copy";
 import { orderAllowance, startTrial } from "../app/domain/grants.server";
 import { listVisibleOrders } from "../app/domain/orders.server";
 import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
 import { action as securityAction, loader as loadSettings } from "../app/routes/settings";
+import { verifiedSession } from "./fixtures/account-fixtures";
 import {
   insertEntitlement,
   insertStore,
@@ -12,8 +15,6 @@ import {
   resetDatabase,
   seed,
 } from "./fixtures/database-fixtures";
-import { verifiedSession } from "./fixtures/account-fixtures";
-import { appCopy } from "../app/app-copy";
 import { callRoute, routePage } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);

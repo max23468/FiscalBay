@@ -7,11 +7,11 @@ import { providerStatus, readUpstream, UpstreamError, type StatusClassifier } fr
 import { applicationToken, type EbayAccess, type EbayConfiguration } from "./environment.server";
 
 /**
- * Sottoscrizione `ORDER_CONFIRMATION` del venditore (D235). Il topic è dell'utente: si crea con
- * il suo token, che deve portare `commerce.notification.subscription` oltre alla lettura degli
- * ordini, verso la destinazione dell'applicazione registrata sull'ingresso dell'ambiente.
- * eBay ammette una sola sottoscrizione per venditore e topic, anche fra test e Production che
- * condividono il keyset: soltanto la Production la sposta su di sé.
+ * Sottoscrizione `ORDER_CONFIRMATION` del venditore (D235). Il topic è dell'utente: si crea con il
+ * suo token, che deve portare `commerce.notification.subscription` oltre alla lettura degli ordini,
+ * verso la destinazione dell'applicazione registrata sull'ingresso dell'ambiente. eBay ammette una
+ * sola sottoscrizione per venditore e topic, anche fra test e Production che condividono il keyset:
+ * soltanto la Production la sposta su di sé.
  */
 const topicId = "ORDER_CONFIRMATION";
 // L'ingresso legge la versione 1.0 dello schema.
@@ -89,8 +89,8 @@ function parse<Schema extends z.ZodType>(schema: Schema, text: string): z.infer<
 }
 
 /**
- * Destinazione dell'applicazione sull'ingresso dell'ambiente, letta con il token
- * dell'applicazione; null se non è registrata o non è abilitata.
+ * Destinazione dell'applicazione sull'ingresso dell'ambiente, letta con il token dell'applicazione;
+ * null se non è registrata o non è abilitata.
  */
 export async function orderEventsDestination(
   env: { APP_ORIGIN: string },
@@ -133,9 +133,9 @@ const expectedRefusals: StatusClassifier = (response, text, now) =>
   response.status === 409 || response.status === 403 ? null : providerStatus(response, text, now);
 
 /**
- * Sottoscrive il venditore all'ingresso dell'ambiente. Una sottoscrizione già esistente si
- * rilegge: spenta si riaccende, su un'altra destinazione si sposta soltanto in Production.
- * Un consenso senza lo scope delle notifiche, precedente a D235, dà `unauthorized`.
+ * Sottoscrive il venditore all'ingresso dell'ambiente. Una sottoscrizione già esistente si rilegge:
+ * spenta si riaccende, su un'altra destinazione si sposta soltanto in Production. Un consenso senza
+ * lo scope delle notifiche, precedente a D235, dà `unauthorized`.
  */
 export async function subscribeOrderEvents(
   env: { APP_ORIGIN: string },

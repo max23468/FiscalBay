@@ -3,15 +3,15 @@
  * Rilegge le notifiche eBay dell'applicazione sul keyset Production e le confronta con il codice:
  * email di avviso configurata, destinazione abilitata su `APP_ORIGIN` più `/webhooks/ebay` e una
  * sottoscrizione abilitata, su quella destinazione, per ogni topic dell'applicazione gestito
- * dall'ingresso (D215). Con `--apply` crea le sottoscrizioni mancanti, abilita quelle disattivate
- * e sposta sulla destinazione dell'ambiente quelle che puntano altrove: il keyset è condiviso fra
- * test e Production ed eBay ammette una sola sottoscrizione per topic, quindi al cutover la
- * stessa chiamata con `--mode live` le porta su `fiscalbay.it`. Senza destinazione la crea, se il
- * processo ha `EBAY_NOTIFICATION_VERIFICATION_TOKEN`, ed eBay la verifica con il challenge del
- * Worker. Con `--test` chiede a eBay una consegna di prova per ogni topic.
+ * dall'ingresso (D215). Con `--apply` crea le sottoscrizioni mancanti, abilita quelle disattivate e
+ * sposta sulla destinazione dell'ambiente quelle che puntano altrove: il keyset è condiviso fra
+ * test e Production ed eBay ammette una sola sottoscrizione per topic, quindi al cutover la stessa
+ * chiamata con `--mode live` le porta su `fiscalbay.it`. Senza destinazione la crea, se il processo
+ * ha `EBAY_NOTIFICATION_VERIFICATION_TOKEN`, ed eBay la verifica con il challenge del Worker. Con
+ * `--test` chiede a eBay una consegna di prova per ogni topic.
  *
- * Il keyset arriva dal Portachiavi; il resoconto riporta soltanto l'esito di ogni controllo,
- * senza email, token o identificativi.
+ * Il keyset arriva dal Portachiavi; il resoconto riporta soltanto l'esito di ogni controllo, senza
+ * email, token o identificativi.
  *
  * Uso: node scripts/ebay-notifications.mjs [--mode live] [--apply] [--test]
  */
@@ -64,8 +64,8 @@ export async function applicationToken({ clientId, clientSecret }, fetcher = fet
 }
 
 /**
- * Chiamata alla Notification API; l'errore porta soltanto metodo, percorso e codice eBay, mai
- * il token o il corpo della risposta.
+ * Chiamata alla Notification API; l'errore porta soltanto metodo, percorso e codice eBay, mai il
+ * token o il corpo della risposta.
  */
 export function notificationRequest(token, fetcher = fetch) {
   return async (method, resource, body) => {
@@ -122,18 +122,18 @@ export function checkNotifications({ alertEmail, destination, subscriptions }) {
       return {
         item: `sottoscrizione ${topic}`,
         ok:
-          Boolean(destination) &&
-          subscription?.status === "ENABLED" &&
-          subscription.destinationId === destination.destinationId &&
-          subscription.payload?.schemaVersion === schemaVersion,
+          Boolean(destination)
+          && subscription?.status === "ENABLED"
+          && subscription.destinationId === destination.destinationId
+          && subscription.payload?.schemaVersion === schemaVersion,
       };
     }),
   ];
 }
 
 /**
- * Crea la destinazione mancante e allinea le sottoscrizioni dell'applicazione; ripeterlo non
- * cambia nulla. Una destinazione disattivata o sospesa da eBay si sistema dal portale.
+ * Crea la destinazione mancante e allinea le sottoscrizioni dell'applicazione; ripeterlo non cambia
+ * nulla. Una destinazione disattivata o sospesa da eBay si sistema dal portale.
  */
 export async function applyNotifications(request, endpoint, state, verificationToken) {
   let { destination } = state;
@@ -157,17 +157,17 @@ export async function applyNotifications(request, endpoint, state, verificationT
     };
     if (!subscription) await request("POST", "subscription", { topicId: topic, ...wanted });
     else if (
-      subscription.status !== "ENABLED" ||
-      subscription.destinationId !== destination.destinationId ||
-      subscription.payload?.schemaVersion !== schemaVersion
+      subscription.status !== "ENABLED"
+      || subscription.destinationId !== destination.destinationId
+      || subscription.payload?.schemaVersion !== schemaVersion
     )
       await request("PUT", `subscription/${subscription.subscriptionId}`, wanted);
   }
 }
 
 /**
- * Consegna di prova di ogni topic dell'applicazione, soltanto verso la destinazione
- * dell'ambiente: una sottoscrizione che punta altrove non riceve prove da qui.
+ * Consegna di prova di ogni topic dell'applicazione, soltanto verso la destinazione dell'ambiente:
+ * una sottoscrizione che punta altrove non riceve prove da qui.
  */
 export async function testNotifications(request, { destination, subscriptions }) {
   const results = [];
@@ -177,8 +177,8 @@ export async function testNotifications(request, { destination, subscriptions })
         topicId === topic && destinationId === destination?.destinationId,
     );
     const ok =
-      Boolean(subscription) &&
-      (await request("POST", `subscription/${subscription.subscriptionId}/test`).then(
+      Boolean(subscription)
+      && (await request("POST", `subscription/${subscription.subscriptionId}/test`).then(
         () => true,
         () => false,
       ));

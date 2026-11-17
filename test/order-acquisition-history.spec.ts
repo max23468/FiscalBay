@@ -1,23 +1,16 @@
 import { env } from "cloudflare:workers";
-
 import { describe, expect, it, vi } from "vitest";
 
+import { applyFreePlans } from "../app/domain/free-store.server";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import {
   listVisibleOrders,
   searchVisibleOrders,
   visibleOrderState,
 } from "../app/domain/orders.server";
-
-import { searchTokens } from "../app/orders/order-search";
-
 import { listStores } from "../app/domain/stores.server";
-
-import { applyFreePlans } from "../app/domain/free-store.server";
-
-import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
-
+import { searchTokens } from "../app/orders/order-search";
 import {
   insertCredentials,
   insertEntitlement,
@@ -25,9 +18,7 @@ import {
   now,
   type EntitlementSource,
 } from "./fixtures/database-fixtures";
-
 import { order } from "./fixtures/ebay-client-fixtures";
-
 import {
   grantedAt,
   ebay,
@@ -100,9 +91,7 @@ describe("finestra dello storico secondo la copertura", () => {
         return requests === 3 ? new Response(null, { status: 503 }) : undefined;
       },
     });
-    await expect(acquire(failing, iso(active))).rejects.toMatchObject({
-      failure: "unavailable",
-    });
+    await expect(acquire(failing, iso(active))).rejects.toMatchObject({ failure: "unavailable" });
     const [first, applied] = historyFilters(failing);
     expect(first).toBe(`${iso(months(active, -12))}..${iso(linked - 30 * day)}`);
     const through = applied!.split("..")[0]!;
@@ -243,9 +232,7 @@ describe("finestra dello storico secondo la copertura", () => {
 
     // Con la prova eBay lo restituisce fra i modificati e torna con il termine di un anno.
     await coverage(expired, expired + 14 * day);
-    const replay = ebay({
-      orders: [{ ...kept, lastModifiedDate: iso(expired + 60_000) }],
-    });
+    const replay = ebay({ orders: [{ ...kept, lastModifiedDate: iso(expired + 60_000) }] });
     expect(await acquire(replay, iso(expired + 30 * 60_000))).toBe("complete");
     expect(await terms()).toEqual({ "12-eliminato": iso(months(linked - 20 * day, 12)) });
   });
@@ -344,9 +331,9 @@ describe("finestra dello storico secondo la copertura", () => {
 it("rimanda il dettaglio dopo un errore dell'ordine e lo chiude dopo l'ultimo tentativo", async () => {
   const rejected = () =>
     new Response(
-      `<GetOrdersResponse><Ack>Failure</Ack><Errors><ErrorCode>10007</ErrorCode>` +
-        `<SeverityCode>Error</SeverityCode><ErrorClassification>RequestError</ErrorClassification>` +
-        `</Errors></GetOrdersResponse>`,
+      `<GetOrdersResponse><Ack>Failure</Ack><Errors><ErrorCode>10007</ErrorCode>`
+        + `<SeverityCode>Error</SeverityCode><ErrorClassification>RequestError</ErrorClassification>`
+        + `</Errors></GetOrdersResponse>`,
     );
   const orders = [order({ lineItems: [] })];
   const detail = () =>
@@ -702,11 +689,7 @@ it("distingue gli errori del dettaglio che fermano l'esecuzione da quelli dell'o
     ).run();
     at += 60_000;
     expect(await acquire(ebay({ fail }), new Date(at).toISOString())).toBe("complete");
-    expect(await detail()).toEqual({
-      detail_for: null,
-      detail_error: error,
-      detail_attempts: 1,
-    });
+    expect(await detail()).toEqual({ detail_for: null, detail_error: error, detail_attempts: 1 });
   }
   // Il limite di eBay sull'intera origine ferma l'esecuzione senza consumare tentativi.
   await env.DB.prepare(
@@ -805,8 +788,8 @@ it("il lavoro periodico accoda ogni negozio dovuto, con un budget ciascuno, isol
         Object.groupBy(
           fetcher.mock.calls.filter(
             ([, init]) =>
-              !new Headers(init?.headers).get("authorization")?.startsWith("Basic ") &&
-              tokenOf(init) !== "token-applicazione",
+              !new Headers(init?.headers).get("authorization")?.startsWith("Basic ")
+              && tokenOf(init) !== "token-applicazione",
           ),
           ([, init]) => tokenOf(init) ?? "",
         ),
@@ -853,19 +836,14 @@ it("il lavoro periodico accoda ogni negozio dovuto, con un budget ciascuno, isol
       await env.DB.prepare(
         "SELECT store_id, rejected_at FROM ebay_store_credentials WHERE rejected_at IS NOT NULL",
       ).all(),
-    ).toMatchObject({
-      results: [{ store_id: "s-b", rejected_at: "2026-09-02T00:00:00.000Z" }],
-    });
+    ).toMatchObject({ results: [{ store_id: "s-b", rejected_at: "2026-09-02T00:00:00.000Z" }] });
 
     // Al turno successivo; in pausa o con il token in scadenza un negozio non si legge.
     await insertStorePause({ storeId: "s-c" }).run();
     const later = ebay({ orders: [] });
     await cronTurn(env, later, new Date("2026-09-02T01:00:00.000Z"));
     expect(Object.keys(perStore(later)).sort()).toEqual(["token-s-a", "token-s-d"]);
-    expect(await attempted()).toMatchObject({
-      "s-b": null,
-      "s-d": "2026-09-02T01:00:00.000Z",
-    });
+    expect(await attempted()).toMatchObject({ "s-b": null, "s-d": "2026-09-02T01:00:00.000Z" });
     expect(logged()).toBe(2);
     const expiring = ebay();
     expect(await cronTurn(env, expiring, new Date("2026-09-02T02:56:00.000Z"))).toEqual([]);

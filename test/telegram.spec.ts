@@ -1,13 +1,14 @@
-import { env } from "cloudflare:workers";
 import { createHash } from "node:crypto";
+
+import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { appUrl } from "../app/app-links";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { forward } from "../telegram-worker/forward";
-import { setSwitch } from "../app/domain/service-settings.server";
-import { noticesOf } from "../app/domain/telegram-deliveries.server";
 import type { VisibleOrder } from "../app/domain/orders.server";
 import * as orderReads from "../app/domain/orders.server";
+import { setSwitch } from "../app/domain/service-settings.server";
+import { noticesOf } from "../app/domain/telegram-deliveries.server";
 import {
   copyButtons,
   digestMessage,
@@ -32,6 +33,7 @@ import {
   telegramRecipient,
   telegramSettings,
 } from "../app/domain/telegram.server";
+import { formatAmount } from "../app/i18n";
 import {
   chatLabel,
   editMessage,
@@ -43,11 +45,11 @@ import {
   verifyTelegramUpdate,
   type TelegramStart,
 } from "../app/integrations/telegram.server";
-import { consumeWebhooks, receiveWebhook } from "../app/webhooks.server";
 import { ebayOrderHref } from "../app/orders/ebay-links";
-import { formatAmount } from "../app/i18n";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { loader as storesLoader } from "../app/routes/stores";
+import { consumeWebhooks, receiveWebhook } from "../app/webhooks.server";
+import { forward } from "../telegram-worker/forward";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import {
   insertOrder,
@@ -56,7 +58,6 @@ import {
   now,
   resetDatabase,
 } from "./fixtures/database-fixtures";
-import { appUrl } from "../app/app-links";
 import { queueMessage } from "./fixtures/queue-fixture";
 import { routePage } from "./fixtures/route-fixtures";
 import { fakeBot as bot } from "./fixtures/telegram-fixtures";
@@ -184,9 +185,9 @@ describe("testi dei messaggi", () => {
     expect(orderMessage(site, "it", "Europe/Rome", notice(), "new", at)).toEqual([
       {
         html:
-          "🛒 <b>Nuovo ordine</b> · Negozio &lt;A&amp;B&gt;\n🧾 <code>RSSMRA80A01H501U</code>\n\n" +
-          `<blockquote>👤 Mario Rossi\n💶 <b>${amountIt}</b>\n📦 2 × Lampada\n` +
-          "🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
+          "🛒 <b>Nuovo ordine</b> · Negozio &lt;A&amp;B&gt;\n🧾 <code>RSSMRA80A01H501U</code>\n\n"
+          + `<blockquote>👤 Mario Rossi\n💶 <b>${amountIt}</b>\n📦 2 × Lampada\n`
+          + "🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
         buttons: [[{ text: "🔗 Apri in FiscalBay", url: orderLink }, ebay], [copyCf]],
       },
     ]);
@@ -212,10 +213,10 @@ describe("testi dei messaggi", () => {
     ).toEqual([
       {
         html:
-          "🛒 <b>Nuovo ordine</b> · Negozio &lt;A&amp;B&gt;\n⏳ Codice Fiscale in verifica\n" +
-          `Se arriva, ricevi un nuovo messaggio.\n\n<blockquote>💶 <b>${amountIt}</b>\n` +
-          "📦 1 × Articolo 1\n📦 1 × Articolo 2\n📦 1 × Articolo 3\ne un altro articolo\n" +
-          "🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
+          "🛒 <b>Nuovo ordine</b> · Negozio &lt;A&amp;B&gt;\n⏳ Codice Fiscale in verifica\n"
+          + `Se arriva, ricevi un nuovo messaggio.\n\n<blockquote>💶 <b>${amountIt}</b>\n`
+          + "📦 1 × Articolo 1\n📦 1 × Articolo 2\n📦 1 × Articolo 3\ne un altro articolo\n"
+          + "🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
         buttons: [[{ text: "🔗 Apri in FiscalBay", url: `${orderLink}?environment=sandbox` }]],
         preview: "https://i.ebayimg.com/a.jpg",
       },
@@ -231,10 +232,10 @@ describe("testi dei messaggi", () => {
     );
     expect(changed).toEqual({
       html:
-        "✏️ <b>Codice Fiscale aggiornato</b> · Negozio &lt;A&amp;B&gt;\n" +
-        "🧾 P. IVA <code>IT01234567890</code>\n🧾 <code>RSSMRA80A01H501U</code>\n\n" +
-        `<blockquote>👤 Mario Rossi\n💶 <b>${amountIt}</b>\n📦 1 × Articolo 1\n` +
-        "📦 1 × Articolo 2\n📦 1 × Articolo 3\n🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
+        "✏️ <b>Codice Fiscale aggiornato</b> · Negozio &lt;A&amp;B&gt;\n"
+        + "🧾 P. IVA <code>IT01234567890</code>\n🧾 <code>RSSMRA80A01H501U</code>\n\n"
+        + `<blockquote>👤 Mario Rossi\n💶 <b>${amountIt}</b>\n📦 1 × Articolo 1\n`
+        + "📦 1 × Articolo 2\n📦 1 × Articolo 3\n🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
       buttons: [[{ text: "🔗 Apri in FiscalBay", url: orderLink }, ebay], [copyCf]],
     });
     // Con la sola Partita IVA il titolo e il pulsante la nominano; senza valori vale il CF.
@@ -286,11 +287,11 @@ describe("testi dei messaggi", () => {
     ).toEqual([
       {
         html:
-          "⚠️ <b>Tax code removed</b> · Negozio &lt;A&amp;B&gt;\n" +
-          "The code notified earlier is no longer in the order.\n➖ No tax code\n\n" +
-          `<blockquote>👤 Mario Rossi\n💶 <b>${amountEn}</b>\n📦 1 × Articolo 1\n` +
-          "📦 1 × Articolo 2\n📦 1 × Articolo 3\nand 2 more items\n" +
-          "🕑 <i>today 14:03 · 12-34567-89012</i></blockquote>",
+          "⚠️ <b>Tax code removed</b> · Negozio &lt;A&amp;B&gt;\n"
+          + "The code notified earlier is no longer in the order.\n➖ No tax code\n\n"
+          + `<blockquote>👤 Mario Rossi\n💶 <b>${amountEn}</b>\n📦 1 × Articolo 1\n`
+          + "📦 1 × Articolo 2\n📦 1 × Articolo 3\nand 2 more items\n"
+          + "🕑 <i>today 14:03 · 12-34567-89012</i></blockquote>",
         buttons: [
           [
             { text: "🔗 Open in FiscalBay", url: "https://fiscalbay.invalid/en/app/orders/o-1" },
@@ -303,10 +304,10 @@ describe("testi dei messaggi", () => {
       orderMessage(site, "en", "Europe/Rome", notice(fields), change, at)[0]!;
     expect(english({ items: items(4), values: [vat, cf] }, "available")).toEqual({
       html:
-        "✅ <b>Tax code available</b> · Negozio &lt;A&amp;B&gt;\n🧾 VAT <code>IT01234567890</code>\n" +
-        `🧾 <code>RSSMRA80A01H501U</code>\n\n<blockquote>👤 Mario Rossi\n💶 <b>${amountEn}</b>\n` +
-        "📦 1 × Articolo 1\n📦 1 × Articolo 2\n📦 1 × Articolo 3\nand one more item\n" +
-        "🕑 <i>today 14:03 · 12-34567-89012</i></blockquote>",
+        "✅ <b>Tax code available</b> · Negozio &lt;A&amp;B&gt;\n🧾 VAT <code>IT01234567890</code>\n"
+        + `🧾 <code>RSSMRA80A01H501U</code>\n\n<blockquote>👤 Mario Rossi\n💶 <b>${amountEn}</b>\n`
+        + "📦 1 × Articolo 1\n📦 1 × Articolo 2\n📦 1 × Articolo 3\nand one more item\n"
+        + "🕑 <i>today 14:03 · 12-34567-89012</i></blockquote>",
       buttons: [
         [
           { text: "🔗 Open in FiscalBay", url: "https://fiscalbay.invalid/en/app/orders/o-1" },
@@ -392,14 +393,14 @@ describe("testi dei messaggi", () => {
 
   it("negli elenchi l'ordine apre il dettaglio e mostra la variazione se non è nuovo", () => {
     expect(orderEntry(site, "it", "Europe/Rome", notice(), "changed", at)).toBe(
-      `<a href="${orderLink}">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n` +
-        "✏️ <i>Codice Fiscale aggiornato</i>\n" +
-        `👤 Mario Rossi · 💶 <b>${amountIt}</b> · <i>oggi 14:03</i>\n` +
-        "🧾 <code>RSSMRA80A01H501U</code>",
+      `<a href="${orderLink}">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n`
+        + "✏️ <i>Codice Fiscale aggiornato</i>\n"
+        + `👤 Mario Rossi · 💶 <b>${amountIt}</b> · <i>oggi 14:03</i>\n`
+        + "🧾 <code>RSSMRA80A01H501U</code>",
     );
     const plain =
-      `<a href="${orderLink}?environment=sandbox">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n` +
-      `💶 <b>${amountIt}</b> · <i>oggi 14:03</i>\n🧾 <code>RSSMRA80A01H501U</code>`;
+      `<a href="${orderLink}?environment=sandbox">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n`
+      + `💶 <b>${amountIt}</b> · <i>oggi 14:03</i>\n🧾 <code>RSSMRA80A01H501U</code>`;
     for (const change of ["new", null] as const)
       expect(
         orderEntry(
@@ -412,8 +413,8 @@ describe("testi dei messaggi", () => {
         ),
       ).toBe(plain);
     expect(orderEntry(site, "en", "Europe/Rome", notice({ values: [] }), "removed", at)).toBe(
-      '<a href="https://fiscalbay.invalid/en/app/orders/o-1">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n' +
-        `⚠️ <i>Tax code removed</i>\n👤 Mario Rossi · 💶 <b>${amountEn}</b> · <i>today 14:03</i>`,
+      '<a href="https://fiscalbay.invalid/en/app/orders/o-1">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n'
+        + `⚠️ <i>Tax code removed</i>\n👤 Mario Rossi · 💶 <b>${amountEn}</b> · <i>today 14:03</i>`,
     );
   });
 
@@ -440,8 +441,8 @@ describe("testi dei messaggi", () => {
     ).toEqual([
       {
         html:
-          "🗓 <b>Riepilogo del 25 ott</b>\n<i>Un ordine dall'ultimo riepilogo</i>\n\n" +
-          orderEntry(site, "it", "Europe/Rome", sandbox, "new", at),
+          "🗓 <b>Riepilogo del 25 ott</b>\n<i>Un ordine dall'ultimo riepilogo</i>\n\n"
+          + orderEntry(site, "it", "Europe/Rome", sandbox, "new", at),
         buttons: [
           [{ text: `📋 ${cf.value}`, copy_text: { text: cf.value } }],
           [
@@ -503,9 +504,9 @@ describe("testi dei messaggi", () => {
     };
     expect(importMessage(site, "it", "Europe/Rome", summary, at)).toEqual({
       html:
-        "📥 <b>Importazione completata</b> · Negozio &lt;A&amp;B&gt;\n" +
-        "📦 Un ordine · 🧾 <b>0</b> con Codice Fiscale o P. IVA\n🗓 dal 1 nov 2025 al 25 ott\n" +
-        "<i>Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.</i>",
+        "📥 <b>Importazione completata</b> · Negozio &lt;A&amp;B&gt;\n"
+        + "📦 Un ordine · 🧾 <b>0</b> con Codice Fiscale o P. IVA\n🗓 dal 1 nov 2025 al 25 ott\n"
+        + "<i>Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.</i>",
       buttons: [
         [{ text: "🔗 Apri gli ordini", url: "https://fiscalbay.invalid/app/ordini?negozio=s-1" }],
       ],
@@ -520,9 +521,9 @@ describe("testi dei messaggi", () => {
       ),
     ).toEqual({
       html:
-        "📥 <b>Import completed</b> · Negozio &lt;A&amp;B&gt;\n" +
-        "📦 3 orders · 🧾 <b>2</b> with a tax code or VAT\n🗓 from 1 Nov 2025 to 25 Oct\n" +
-        "<i>Imported orders get no individual messages: new orders arrive from now on.</i>",
+        "📥 <b>Import completed</b> · Negozio &lt;A&amp;B&gt;\n"
+        + "📦 3 orders · 🧾 <b>2</b> with a tax code or VAT\n🗓 from 1 Nov 2025 to 25 Oct\n"
+        + "<i>Imported orders get no individual messages: new orders arrive from now on.</i>",
       buttons: [
         [
           {
@@ -830,9 +831,7 @@ describe("ingresso del bot", () => {
           { ...start, tokenHash },
           api.fetcher,
           new Date(now),
-          {
-            reply,
-          },
+          { reply },
         );
       // Con le risposte attive partono l'aiuto e l'avviso del link non valido.
       expect(api.texts()).toHaveLength(reply ? 2 : 0);
@@ -1543,10 +1542,7 @@ describe("pagine", () => {
       value: "false",
     });
     expect(await page()).toMatchObject({
-      telegram: {
-        chat: { label: "@venditore" },
-        stores: [{ id: seller.store, enabled: false }],
-      },
+      telegram: { chat: { label: "@venditore" }, stores: [{ id: seller.store, enabled: false }] },
     });
   });
 

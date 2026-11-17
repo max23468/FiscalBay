@@ -7,19 +7,19 @@ import {
   stripeEnvironment,
   stripeSecretKey,
 } from "../integrations/stripe.server";
-import { reconcileSubscription } from "./billing.server";
-import { applyWorkspacePlan } from "./free-store.server";
-import { grantLifetime, type LifetimeGrant } from "./lifetime.server";
+import { maxGrantDays } from "../limits";
 import { dayMilliseconds } from "../time";
 import { renewingSubscriptionStatuses } from "./billing-subscriptions.server";
+import { reconcileSubscription } from "./billing.server";
+import { applyWorkspacePlan } from "./free-store.server";
 import { lifetimeInForceSql } from "./grants.server";
+import { grantLifetime, type LifetimeGrant } from "./lifetime.server";
 import { sqlList } from "./sql.server";
-import { maxGrantDays } from "../limits";
 
 /**
- * Concessioni della console amministrativa (§6.3): Premium temporaneo, estensione gratuita di
- * un abbonamento, lifetime in omaggio ed estensione dello storico. Ogni concessione registra
- * autore e motivo, non figura come incasso e non tocca quota, prova o ciclo.
+ * Concessioni della console amministrativa (§6.3): Premium temporaneo, estensione gratuita di un
+ * abbonamento, lifetime in omaggio ed estensione dello storico. Ogni concessione registra autore e
+ * motivo, non figura come incasso e non tocca quota, prova o ciclo.
  */
 
 const concession = z.object({
@@ -43,13 +43,13 @@ const grantAttempts = 3;
 
 /**
  * Premium concesso per un numero di giorni. Parte dalla fine dell'ultima copertura in corso,
- * pagata, di prova o concessa, così non consuma il periodo già pagato; con un abbonamento che
- * si rinnova ne rinvia il rinnovo, o il primo addebito scelto durante la prova, alla fine della
- * concessione, senza conguaglio. Un rinnovo già disdetto non si riattiva: la concessione
- * prolunga soltanto il diritto. Stripe si aggiorna prima della copertura: ripetuta dopo un
- * errore, la concessione calcola gli stessi istanti. La copertura si registra soltanto se
- * l'ultima copertura è ancora quella letta: due concessioni contemporanee si sommano, perché la
- * seconda rilegge la fine della prima e riparte da lì, rinvio su Stripe compreso.
+ * pagata, di prova o concessa, così non consuma il periodo già pagato; con un abbonamento che si
+ * rinnova ne rinvia il rinnovo, o il primo addebito scelto durante la prova, alla fine della
+ * concessione, senza conguaglio. Un rinnovo già disdetto non si riattiva: la concessione prolunga
+ * soltanto il diritto. Stripe si aggiorna prima della copertura: ripetuta dopo un errore, la
+ * concessione calcola gli stessi istanti. La copertura si registra soltanto se l'ultima copertura è
+ * ancora quella letta: due concessioni contemporanee si sommano, perché la seconda rilegge la fine
+ * della prima e riparte da lì, rinvio su Stripe compreso.
  */
 export async function grantPremium(
   env: Env,
@@ -58,10 +58,10 @@ export async function grantPremium(
 ): Promise<PremiumGrant> {
   const parsed = concession.safeParse(input);
   if (
-    !parsed.success ||
-    !Number.isInteger(input.days) ||
-    input.days < 1 ||
-    input.days > maxGrantDays
+    !parsed.success
+    || !Number.isInteger(input.days)
+    || input.days < 1
+    || input.days > maxGrantDays
   )
     return { result: "invalid" };
   const at = now.toISOString();
@@ -142,8 +142,8 @@ export async function grantPremium(
 }
 
 /**
- * Lifetime in omaggio: occupa uno dei venti posti e chiude l'abbonamento dello spazio. Con un
- * posto indicato lo spazio riprende quello lasciato dalla cancellazione dell'account.
+ * Lifetime in omaggio: occupa uno dei venti posti e chiude l'abbonamento dello spazio. Con un posto
+ * indicato lo spazio riprende quello lasciato dalla cancellazione dell'account.
  */
 export async function grantLifetimeConcession(
   env: Env,
@@ -152,8 +152,8 @@ export async function grantLifetimeConcession(
 ): Promise<LifetimeGrant | "invalid"> {
   const parsed = concession.safeParse(input);
   if (
-    !parsed.success ||
-    (input.slot !== undefined && (!Number.isInteger(input.slot) || input.slot < 1))
+    !parsed.success
+    || (input.slot !== undefined && (!Number.isInteger(input.slot) || input.slot < 1))
   )
     return "invalid";
   const key = stripeSecretKey(env);
@@ -164,10 +164,10 @@ export async function grantLifetimeConcession(
 export type HistoryExtensionResult = "done" | "invalid" | "not_found";
 
 /**
- * Storico oltre l'anno (§11), concesso dopo la verifica del periodo recuperabile, il
- * consenso e l'eventuale costo una tantum concordati con l'assistenza. Vale con una copertura
- * in corso e al massimo per i due anni che eBay restituisce; i termini degli ordini dello spazio
- * si riallineano subito.
+ * Storico oltre l'anno (§11), concesso dopo la verifica del periodo recuperabile, il consenso e
+ * l'eventuale costo una tantum concordati con l'assistenza. Vale con una copertura in corso e al
+ * massimo per i due anni che eBay restituisce; i termini degli ordini dello spazio si riallineano
+ * subito.
  */
 export async function grantHistoryExtension(
   db: D1Database,

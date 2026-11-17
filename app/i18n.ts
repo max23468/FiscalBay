@@ -97,7 +97,10 @@ export function localizedPath(language: Language, path = "/"): string {
   return `/en${pathname === "/" ? "" : translateSegments(pathname, true)}${rest}`;
 }
 
-/** Sezione delle Impostazioni con il nome italiano, dal parametro dell'indirizzo in una delle due lingue. */
+/**
+ * Sezione delle Impostazioni con il nome italiano, dal parametro dell'indirizzo in una delle due
+ * lingue.
+ */
 export function settingsSectionParam(value: string | undefined) {
   if (value === undefined) return undefined;
   return Object.entries(settingsSections).find(([, node]) => node.en === value)?.[0] ?? value;

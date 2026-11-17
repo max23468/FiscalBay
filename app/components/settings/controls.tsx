@@ -2,19 +2,19 @@ import { cn } from "cn";
 import { useEffect, useId, useState } from "react";
 
 import { useAction } from "~/components/action";
+import { useCopy } from "~/components/copy-context";
 import { useHydrated } from "~/components/hydrated";
+import { PremiumSelectItem } from "~/components/premium-select-item";
 import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
-import { useCopy } from "~/components/copy-context";
-import { PremiumSelectItem } from "~/components/premium-select-item";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
 /**
- * Salvataggio automatico delle scelte semplici tramite l'azione `save`: stato in
- * corso ed esito espliciti, ripristino dell'ultimo valore salvato se il server rifiuta.
+ * Salvataggio automatico delle scelte semplici tramite l'azione `save`: stato in corso ed esito
+ * espliciti, ripristino dell'ultimo valore salvato se il server rifiuta.
  */
 export function useAutoSave<T extends string | boolean>(name: string, initial: T) {
   const [value, setValue] = useState(initial);
@@ -44,8 +44,8 @@ export function useAutoSave<T extends string | boolean>(name: string, initial: T
 }
 
 /**
- * Esito del salvataggio automatico in una riga sempre riservata: comparire e sparire non
- * sposta il testo intorno. Con `inline` sta accanto al titolo del gruppo, senza riga propria.
+ * Esito del salvataggio automatico in una riga sempre riservata: comparire e sparire non sposta il
+ * testo intorno. Con `inline` sta accanto al titolo del gruppo, senza riga propria.
  */
 export function SaveStatus({ state, inline = false }: { state: SaveState; inline?: boolean }) {
   const { t } = useCopy();
@@ -142,8 +142,8 @@ export function AutoRadio({
 }
 
 /**
- * Opzioni con nome accessibile già nell'HTML del server: Base UI collega la `<label>`
- * esterna soltanto dopo l'idratazione.
+ * Opzioni con nome accessibile già nell'HTML del server: Base UI collega la `<label>` esterna
+ * soltanto dopo l'idratazione.
  */
 export function RadioOption({
   value,

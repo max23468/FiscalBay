@@ -2,14 +2,14 @@ import { env } from "cloudflare:workers";
 
 import { appCopy, type AppCopy } from "../app-copy";
 import { lifetimeSlots, priceGeneration, type LifetimeOffer } from "../catalog";
-import { planDiagnostics } from "../support";
 import { trialDays } from "../domain/grants.server";
 import { lifetimeOfferState, unusedCredit } from "../domain/lifetime.server";
 import type { ActiveSession } from "../domain/sessions.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import { appVersion } from "../domain/support.server";
-import type { Language } from "../i18n";
 import { formatDate } from "../format";
+import type { Language } from "../i18n";
+import { planDiagnostics } from "../support";
 import { dayMilliseconds } from "../time";
 import type {
   OrdersNotice,
@@ -20,14 +20,11 @@ import type {
   StoreView,
   TaxIdentifierView,
 } from "../view-models";
-
 /**
- * Scenari sintetici dell'anteprima. Nessun dato reale: nomi, codici e ordini
- * sono inventati, le email sono alias casuali di eBay o usano domini non registrati.
- * I valori da sbloccare restano in questo modulo server e arrivano al browser
- * solo dopo lo sblocco simulato.
+ * Scenari sintetici dell'anteprima. Nessun dato reale: nomi, codici e ordini sono inventati, le
+ * email sono alias casuali di eBay o usano domini non registrati. I valori da sbloccare restano in
+ * questo modulo server e arrivano al browser solo dopo lo sblocco simulato.
  */
-
 import {
   cf,
   incomingSeeds,
@@ -204,18 +201,15 @@ export function loadScenario(
   language: Language,
   unlocked: ReadonlySet<string>,
   /**
-   * `trialStarted`: la prova disponibile è stata attivata nell'anteprima; `resumed`: le letture
-   * in pausa per inattività sono state riprese.
+   * `trialStarted`: la prova disponibile è stata attivata nell'anteprima; `resumed`: le letture in
+   * pausa per inattività sono state riprese.
    */
   { trialStarted = false, resumed = false }: { trialStarted?: boolean; resumed?: boolean } = {},
 ): Scenario {
   const note = (
     key: keyof typeof text,
     extra: Omit<NotificationView, "title" | "body">,
-  ): NotificationView => ({
-    ...text[key][language],
-    ...extra,
-  });
+  ): NotificationView => ({ ...text[key][language], ...extra });
   // Fasi con le stesse parole e date assolute dell'area reale.
   const phases = appCopy[language].settings.support.diag.phases;
   const readAt = (minutes: number) => formatDate(minutesAgo(minutes), language);
@@ -315,15 +309,11 @@ export function loadScenario(
       scenario = free();
       break;
     case "proposta-consenso":
-      scenario = free({
-        marketingProposal: true,
-      });
+      scenario = free({ marketingProposal: true });
       break;
     case "fine-promozione":
       scenario = free({
-        account: account({
-          quota: { used: 7, limit: 10, cycleEndsAt, nextLimit: 5 },
-        }),
+        account: account({ quota: { used: 7, limit: 10, cycleEndsAt, nextLimit: 5 } }),
       });
       break;
     case "free-inattivo": {
@@ -378,10 +368,7 @@ export function loadScenario(
       });
       break;
     case "acquisti-sospesi":
-      scenario = free({
-        account: account({ trialAvailable: false }),
-        purchasesClosed: true,
-      });
+      scenario = free({ account: account({ trialAvailable: false }), purchasesClosed: true });
       break;
     case "quota-esaurita":
       scenario = free({
@@ -409,9 +396,7 @@ export function loadScenario(
         ),
         syncRunning: true,
         incoming: incomingSeeds.map((seed) => toOrder(seed, freeStores)),
-        diagnostics: diagnostics({
-          syncPhase: phases.running,
-        }),
+        diagnostics: diagnostics({ syncPhase: phases.running }),
       });
       break;
     case "ebay-non-disponibile":
@@ -712,10 +697,7 @@ export function loadScenario(
           { label: "stepSync", done: false },
         ],
         notifications: [],
-        diagnostics: diagnostics({
-          storeRef: null,
-          syncPhase: phases.none,
-        }),
+        diagnostics: diagnostics({ storeRef: null, syncPhase: phases.none }),
       });
       break;
     case "email-da-confermare":
@@ -763,9 +745,7 @@ export function loadScenario(
           { label: "stepSync", done: false },
         ],
         notifications: [],
-        diagnostics: diagnostics({
-          syncPhase: phases.importing,
-        }),
+        diagnostics: diagnostics({ syncPhase: phases.importing }),
       });
       break;
     case "importazione":
@@ -783,9 +763,7 @@ export function loadScenario(
         seeds: vintageSeeds.slice(0, 4),
         syncRunning: false,
         notices: [{ kind: "importing", count: 4 }],
-        diagnostics: diagnostics({
-          syncPhase: phases.importing,
-        }),
+        diagnostics: diagnostics({ syncPhase: phases.importing }),
       });
       break;
     case "nessun-ordine":
@@ -797,26 +775,13 @@ export function loadScenario(
       });
       break;
     case "caricamento":
-      scenario = free({
-        seeds: [],
-        view: "loading",
-      });
+      scenario = free({ seeds: [], view: "loading" });
       break;
     case "cancellazione-in-corso":
-      scenario = free({
-        stores: [],
-        seeds: [],
-        deleting: true,
-        notifications: [],
-      });
+      scenario = free({ stores: [], seeds: [], deleting: true, notifications: [] });
       break;
     case "servizio-non-disponibile":
-      scenario = free({
-        stores: [],
-        seeds: [],
-        unavailable: true,
-        notifications: [],
-      });
+      scenario = free({ stores: [], seeds: [], unavailable: true, notifications: [] });
       break;
     case "prova-premium":
     case "prova-in-scadenza":
@@ -849,9 +814,7 @@ export function loadScenario(
     case "prova-terminata":
       // Dopo la prova restano sbloccati gli ordini con il dato arrivato durante la prova:
       // nello scenario sono quelli già disponibili, gli altri seguono la quota del ciclo.
-      scenario = free({
-        account: account({ trialAvailable: false }),
-      });
+      scenario = free({ account: account({ trialAvailable: false }) });
       break;
     case "pagamento-in-attivazione":
     case "rinnovo-non-riuscito":
@@ -866,10 +829,7 @@ export function loadScenario(
           ...{
             "pagamento-in-attivazione": { payment: { state: "pending" as const } },
             "rinnovo-non-riuscito": {
-              payment: {
-                state: "renewal-failed" as const,
-                protectedUntil: "2026-10-02T10:00:00Z",
-              },
+              payment: { state: "renewal-failed" as const, protectedUntil: "2026-10-02T10:00:00Z" },
             },
             "pagamento-rimborsato": {
               payment: { state: "refunded" as const, renewsAt: "2026-10-13T10:00:00Z" },
@@ -884,16 +844,10 @@ export function loadScenario(
       });
       break;
     case "lifetime-esaurito":
-      scenario = free({
-        account: account({ trialAvailable: false }),
-        lifetimeSoldOut: true,
-      });
+      scenario = free({ account: account({ trialAvailable: false }), lifetimeSoldOut: true });
       break;
     case "premium":
-      scenario = premium({
-        telegramChat: "Magazzino Vintage",
-        saveFailsOnce: true,
-      });
+      scenario = premium({ telegramChat: "Magazzino Vintage", saveFailsOnce: true });
       break;
     case "telegram-bloccato":
     case "telegram-non-consegnato":
@@ -930,28 +884,21 @@ export function loadScenario(
       break;
     case "premium-a-vita-concesso":
       scenario = premium({
-        account: premiumAccount({
-          premium: { period: "lifetime", renewsAt: null, granted: true },
-        }),
+        account: premiumAccount({ premium: { period: "lifetime", renewsAt: null, granted: true } }),
         stores: [premiumStores[0]!],
         seeds: vintageSeeds,
       });
       break;
     case "premium-concesso":
       scenario = premium({
-        account: premiumAccount({
-          premium: undefined,
-          grant: { endsAt: "2026-10-27T13:00:00Z" },
-        }),
+        account: premiumAccount({ premium: undefined, grant: { endsAt: "2026-10-27T13:00:00Z" } }),
         stores: [premiumStores[0]!],
         seeds: vintageSeeds,
       });
       break;
     case "premium-a-vita":
       scenario = premium({
-        account: premiumAccount({
-          premium: { period: "lifetime", renewsAt: null },
-        }),
+        account: premiumAccount({ premium: { period: "lifetime", renewsAt: null } }),
         stores: [
           premiumStores[0]!,
           storeView("outlet", {
@@ -968,10 +915,7 @@ export function loadScenario(
           seed.id === "ord-02"
             ? {
                 ...seed,
-                fiscal: {
-                  state: "available",
-                  identifiers: [cf("RSSMRA80A41H501X", "checksum")],
-                },
+                fiscal: { state: "available", identifiers: [cf("RSSMRA80A41H501X", "checksum")] },
               }
             : seed,
         ),
@@ -1004,8 +948,8 @@ export function loadScenario(
       account: trialAccount(startedTrialEnd),
       stores: trialStores,
       notices:
-        trialStores.some((store) => store.importing) &&
-        !notices.some((notice) => notice.kind === "importing")
+        trialStores.some((store) => store.importing)
+        && !notices.some((notice) => notice.kind === "importing")
           ? [
               ...notices,
               {
@@ -1070,9 +1014,9 @@ export function previewLifetime(scenario: Scenario): LifetimeOffer | null {
   const { premium, payment } = scenario.account;
   // Il posto di un lifetime rimborsato resta occupato: non torna in vendita allo spazio.
   if (
-    premium?.period === "lifetime" ||
-    payment?.state === "pending" ||
-    (payment?.state === "refunded" && payment.lifetime)
+    premium?.period === "lifetime"
+    || payment?.state === "pending"
+    || (payment?.state === "refunded" && payment.lifetime)
   )
     return null;
   const synced = scenario.onboarding.some((step) => step.label === "stepSync" && step.done);

@@ -1,14 +1,15 @@
 /**
- * D1 locale sullo stato che usano anche `vite dev` e `vite preview`.
- * Temporaneo: `cf --local` stampa l'esito ma non termina (cloudflare/cf#64, cloudflare/cf#25),
- * quindi qui resta Wrangler, con una configurazione minima ricavata da `cloudflare.config.ts`.
- * Da rimuovere quando `cf d1 ... --local` termina da solo.
+ * D1 locale sullo stato che usano anche `vite dev` e `vite preview`. Temporaneo: `cf --local`
+ * stampa l'esito ma non termina (cloudflare/cf#64, cloudflare/cf#25), quindi qui resta Wrangler,
+ * con una configurazione minima ricavata da `cloudflare.config.ts`. Da rimuovere quando `cf d1 ...
+ * --local` termina da solo.
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { databases } from "../cloudflare.config.ts";
 
 const state = ".cloudflare/state";
@@ -49,6 +50,7 @@ export const applyLocalMigrations = () => wrangler(["d1", "migrations", "apply",
  * che gli account sintetici superano. In locale il file non sospende il database come in remoto.
  * Wrangler apre lo stato da un altro processo: mentre la preview serve le prove si scrive con
  * `writeLocalDatabase` di `e2e/local-account.ts`.
+ *
  * @param {string} sql
  */
 export function executeLocal(sql) {

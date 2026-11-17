@@ -2,7 +2,13 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
 
 import { appCopy } from "../app/app-copy";
+import type { SearchResults } from "../app/components/shell-search";
+import { orderView } from "../app/domain/order-view.server";
+import { listVisibleOrders } from "../app/domain/orders.server";
 import { appVersion } from "../app/domain/support.server";
+import { formatDate, formatRelative } from "../app/format";
+import { orderCriteria } from "../app/orders/order-criteria";
+import { previewListing } from "../app/preview/order-list.server";
 import {
   loadScenario,
   previewLifetime,
@@ -10,32 +16,27 @@ import {
   scenarioIds,
   scenarioOptions,
 } from "../app/preview/scenarios.server";
-import { fiscalSituation, trialDaysLeft, trialEnding } from "../app/view-models";
-import { formatDate, formatRelative } from "../app/format";
-import { taxQuality } from "../app/tax-quality";
 import {
   readPreviewState,
   writePreviewState,
   type PreviewState,
 } from "../app/preview/state.server";
 import { action as previewRootAction, loader as previewRoot } from "../app/routes/preview";
+import {
+  action as previewOrdersAction,
+  loader as previewOrders,
+} from "../app/routes/preview-orders";
 import { action as previewSearch } from "../app/routes/preview-search";
 import {
   action as previewSettingsAction,
   loader as previewSettings,
 } from "../app/routes/preview-settings";
 import {
-  action as previewOrdersAction,
-  loader as previewOrders,
-} from "../app/routes/preview-orders";
-import {
   action as previewStoresAction,
   loader as previewStores,
 } from "../app/routes/preview-stores";
-import { previewListing } from "../app/preview/order-list.server";
-import { orderCriteria } from "../app/orders/order-criteria";
-import { listVisibleOrders } from "../app/domain/orders.server";
-import { orderView } from "../app/domain/order-view.server";
+import { taxQuality } from "../app/tax-quality";
+import { fiscalSituation, trialDaysLeft, trialEnding } from "../app/view-models";
 import {
   insertEntitlement,
   insertStore,
@@ -44,7 +45,6 @@ import {
   now,
   resetDatabase,
 } from "./fixtures/database-fixtures";
-import type { SearchResults } from "../app/components/shell-search";
 import { callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
 
 describe("stato sintetico dell'anteprima", () => {
@@ -589,9 +589,9 @@ describe("criteri dell'elenco dell'anteprima", () => {
     return orders
       .filter(
         (order) =>
-          (!criteria.storeId || order.storeId === criteria.storeId) &&
-          (!criteria.since || Date.parse(order.createdAt) >= Date.parse(criteria.since)) &&
-          (!criteria.payment || order.payment.status === criteria.payment),
+          (!criteria.storeId || order.storeId === criteria.storeId)
+          && (!criteria.since || Date.parse(order.createdAt) >= Date.parse(criteria.since))
+          && (!criteria.payment || order.payment.status === criteria.payment),
       )
       .map(({ id }) => id)
       .sort();
@@ -809,10 +809,7 @@ describe("cancellazione dell'account nell'anteprima", () => {
       const response = await routeResponse(
         previewSettingsAction,
         "/anteprima/impostazioni/privacy",
-        {
-          cookie,
-          fields: { intent: "riautentica", returnTo },
-        },
+        { cookie, fields: { intent: "riautentica", returnTo } },
       );
       expect(response.headers.get("location")).toBe(location);
     }

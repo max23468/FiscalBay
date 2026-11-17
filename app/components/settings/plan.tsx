@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useLocation } from "react-router";
 
 import { useAction } from "~/components/action";
+import { useCopy } from "~/components/copy-context";
 import { PremiumNote, StatusAlert } from "~/components/status";
 import { useDate } from "~/components/time-zone";
 import {
@@ -16,7 +17,7 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
-import { useCopy } from "~/components/copy-context";
+
 import type { AppCopy } from "../../app-copy";
 import { planChoice, planChoiceParam } from "../../app-links";
 import {
@@ -37,8 +38,8 @@ import { AutoSwitch, Group, SimpleSelect } from "./controls";
 
 /**
  * La prova dice quando finisce e cosa resta dopo, in evidenza negli ultimi giorni. L'acquisto
- * compare quando il server lo ammette: mensile e annuale si pagano alla fine della prova,
- * che conserva i suoi giorni.
+ * compare quando il server lo ammette: mensile e annuale si pagano alla fine della prova, che
+ * conserva i suoi giorni.
  */
 function TrialPlan({
   trial,
@@ -90,10 +91,10 @@ function TrialPlan({
 }
 
 /**
- * Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo, salvo quello in
- * omaggio, che non ha acquisti su Stripe; dopo la disdetta l'abbonamento indica la fine del
- * periodo pagato. Un Premium concesso senza abbonamento indica la sua fine, senza gestione su
- * Stripe. Senza lifetime resta possibile passare a vita.
+ * Il lifetime conserva l'accesso ai documenti senza presentare un rinnovo, salvo quello in omaggio,
+ * che non ha acquisti su Stripe; dopo la disdetta l'abbonamento indica la fine del periodo pagato.
+ * Un Premium concesso senza abbonamento indica la sua fine, senza gestione su Stripe. Senza
+ * lifetime resta possibile passare a vita.
  */
 function PremiumPlan({
   account,
@@ -142,8 +143,8 @@ function PremiumPlan({
 }
 
 /**
- * Rinnovo, eventuale cambio programmato, fine dopo la disdetta, acquisto una tantum o fine di
- * una concessione.
+ * Rinnovo, eventuale cambio programmato, fine dopo la disdetta, acquisto una tantum o fine di una
+ * concessione.
  */
 function PremiumStatus({
   premium,
@@ -169,8 +170,8 @@ function PremiumStatus({
 }
 
 /**
- * Cambio della periodicità del rinnovo: vale dalla fine del periodo pagato, senza conguaglio,
- * e resta annullabile fino ad allora. Il cambio programmato si legge già nella data di rinnovo.
+ * Cambio della periodicità del rinnovo: vale dalla fine del periodo pagato, senza conguaglio, e
+ * resta annullabile fino ad allora. Il cambio programmato si legge già nella data di rinnovo.
  */
 function RenewalPeriod({
   period,
@@ -236,8 +237,8 @@ function TrialOffer() {
 }
 
 /**
- * Acquisto dalla pagina del piano: stato di mensile e annuale per lo spazio, offerte in vendita
- * e offerta lifetime, null quando non si propone.
+ * Acquisto dalla pagina del piano: stato di mensile e annuale per lo spazio, offerte in vendita e
+ * offerta lifetime, null quando non si propone.
  */
 export interface PurchaseView {
   state: PurchaseState;
@@ -256,8 +257,8 @@ export interface FreeStoreView {
 }
 
 /**
- * Scelta del negozio attivo, soltanto nel Free (D155). La sostituzione chiede conferma: il
- * negozio lasciato va in pausa e la prossima resta possibile solo dopo 90 giorni.
+ * Scelta del negozio attivo, soltanto nel Free (D155). La sostituzione chiede conferma: il negozio
+ * lasciato va in pausa e la prossima resta possibile solo dopo 90 giorni.
  */
 function FreeStoreChoice({ freeStore, now }: { freeStore: FreeStoreView; now: string }) {
   const { t } = useCopy();
@@ -314,9 +315,9 @@ function FreeStoreChoice({ freeStore, now }: { freeStore: FreeStoreView; now: st
 }
 
 /**
- * Il ritorno da Stripe non prova il pagamento: il piano cambia con la conferma. Un pagamento
- * che Stripe non ha ancora confermato resta in attivazione anche senza il ritorno; un rinnovo
- * non riuscito riporta al Free e indica fino a quando il prezzo resta protetto.
+ * Il ritorno da Stripe non prova il pagamento: il piano cambia con la conferma. Un pagamento che
+ * Stripe non ha ancora confermato resta in attivazione anche senza il ritorno; un rinnovo non
+ * riuscito riporta al Free e indica fino a quando il prezzo resta protetto.
  */
 function CheckoutReturn({
   checkout,
@@ -411,8 +412,8 @@ function RefundNotice({ payment }: { payment: AccountView["payment"] }) {
 }
 
 /**
- * Sblocchi del ciclo Free in corso e conferma prima dello sblocco, che li protegge e sta
- * accanto al loro conteggio.
+ * Sblocchi del ciclo Free in corso e conferma prima dello sblocco, che li protegge e sta accanto al
+ * loro conteggio.
  */
 function FreeUnlocks({
   quota,
@@ -540,8 +541,8 @@ export function PlanSection({
 
 /**
  * Acquisto con i pagamenti attivi. Mensile e annuale si fermano con un diritto in corso diverso
- * dalla prova; il lifetime resta finché ci sono posti, anche per chi ha già un abbonamento, che
- * con il lifetime si chiude detraendo dal prezzo il periodo pagato non usato.
+ * dalla prova; il lifetime resta finché ci sono posti, anche per chi ha già un abbonamento, che con
+ * il lifetime si chiude detraendo dal prezzo il periodo pagato non usato.
  */
 function PurchaseOptions({
   billing,
@@ -628,9 +629,9 @@ function useHighlightedOffer(): PremiumOffer {
 }
 
 /**
- * Prezzo, totale con l'IVA italiana e nota di ogni offerta, vuota quando il prezzo dice già
- * tutto. Mensile e annuale aggiungono il primo addebito della prova; il lifetime la detrazione
- * del periodo pagato non usato e la chiusura dell'abbonamento.
+ * Prezzo, totale con l'IVA italiana e nota di ogni offerta, vuota quando il prezzo dice già tutto.
+ * Mensile e annuale aggiungono il primo addebito della prova; il lifetime la detrazione del periodo
+ * pagato non usato e la chiusura dell'abbonamento.
  */
 function offerTexts(
   t: AppCopy,

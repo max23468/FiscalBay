@@ -1,7 +1,6 @@
 import { KeyRound } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { maxPasskeyName } from "../../limits";
 import { useSubmit } from "react-router";
 
 import { useCopy, useLinks } from "~/components/copy-context";
@@ -9,10 +8,12 @@ import { useHydrated } from "~/components/hydrated";
 import { Button } from "~/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
-import type { SignInMethods } from "../../domain/sign-in-methods.server";
+
 import { deviceName } from "../../account/device-name";
 import { loadPasskeyClient } from "../../account/passkey";
 import { passkeyFailure, type PasskeyFailure } from "../../account/passkey-error";
+import type { SignInMethods } from "../../domain/sign-in-methods.server";
+import { maxPasskeyName } from "../../limits";
 
 /** Nome della passkey modificato sul posto; annullando, il focus torna a «Rinomina». */
 export function PasskeyRename({

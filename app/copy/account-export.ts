@@ -39,10 +39,7 @@ export const accountExportCopy = {
         telegramTimeZone: "Fuso del riepilogo",
       },
     },
-    signIn: {
-      file: "accessi.csv",
-      header: ["Metodo", "Nome", "Creato il"],
-    },
+    signIn: { file: "accessi.csv", header: ["Metodo", "Nome", "Creato il"] },
     stores: {
       file: "negozi.csv",
       header: [
@@ -56,10 +53,7 @@ export const accountExportCopy = {
         "Notifiche Telegram",
       ],
     },
-    plan: {
-      file: "piano.csv",
-      header: ["Voce", "Tipo", "Dal", "Al", "Stato"],
-    },
+    plan: { file: "piano.csv", header: ["Voce", "Tipo", "Dal", "Al", "Stato"] },
     configurations: {
       file: "configurazioni-esportazione.csv",
       header: ["Nome", "Formato", "Una riga per", "Colonne"],
@@ -102,10 +96,7 @@ export const accountExportCopy = {
         telegramTimeZone: "Digest time zone",
       },
     },
-    signIn: {
-      file: "sign-in.csv",
-      header: ["Method", "Name", "Created on"],
-    },
+    signIn: { file: "sign-in.csv", header: ["Method", "Name", "Created on"] },
     stores: {
       file: "stores.csv",
       header: [
@@ -119,10 +110,7 @@ export const accountExportCopy = {
         "Telegram notifications",
       ],
     },
-    plan: {
-      file: "plan.csv",
-      header: ["Item", "Type", "From", "To", "Status"],
-    },
+    plan: { file: "plan.csv", header: ["Item", "Type", "From", "To", "Status"] },
     configurations: {
       file: "export-configurations.csv",
       header: ["Name", "Format", "One row per", "Columns"],

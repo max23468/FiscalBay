@@ -1,22 +1,15 @@
-import { env } from "cloudflare:workers";
-
 import { generateKeyPairSync, sign } from "node:crypto";
 
+import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, expect, vi } from "vitest";
 
-import { receiveWebhook } from "../../app/webhooks.server";
-
-import { sealToken } from "../../app/integrations/ebay/seller-credentials.server";
-
-import worker from "../../workers/app";
-
 import { acquireOrders } from "../../app/domain/order-acquisition.server";
-
 import { ebayConfiguration } from "../../app/integrations/ebay/environment.server";
-
-import { fakeQueue, queued } from "./queue-fixture";
-
+import { sealToken } from "../../app/integrations/ebay/seller-credentials.server";
+import { receiveWebhook } from "../../app/webhooks.server";
+import worker from "../../workers/app";
 import { insertCredentials, insertWorkspace, resetDatabase } from "./database-fixtures";
+import { fakeQueue, queued } from "./queue-fixture";
 
 export const now = new Date("2026-10-11T12:00:00.000Z");
 

@@ -1,8 +1,10 @@
 import { data, isRouteErrorResponse, redirect } from "react-router";
 
-import { SettingsPage } from "~/components/settings/page";
 import { NotFoundState } from "~/components/not-found";
+import { SettingsPage } from "~/components/settings/page";
+
 import { appCopy, pageTitle } from "../app-copy";
+import { isSettingsSection, mergedSectionUrl } from "../area-sections";
 import { languageFromPath, settingsSectionParam } from "../i18n";
 import { previewSettingsPage } from "../preview/settings-page.server";
 import {
@@ -11,7 +13,6 @@ import {
   simulateAction,
   simulateSecurity,
 } from "../preview/state.server";
-import { isSettingsSection, mergedSectionUrl } from "../area-sections";
 import type { Route } from "./+types/preview-settings";
 
 export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptors {

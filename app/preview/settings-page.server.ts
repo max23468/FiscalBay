@@ -1,12 +1,16 @@
 import { env } from "cloudflare:workers";
 
 import type { SettingsPageData } from "~/components/settings/page";
+
 import { accessNotice } from "../access-notice";
 import { appCopy, type AppCopy } from "../app-copy";
 import { previewOrdersPath } from "../app-links";
+import { settingsSections, type SettingsSection } from "../area-sections";
 import { checkoutReturn, premiumOffers, purchaseStateFrom } from "../catalog";
 import { exportFileMilliseconds } from "../domain/export-files.server";
 import { exportDateTime, exportFileName } from "../domain/order-export.server";
+import { localizedPath } from "../i18n";
+import { botUrl } from "../integrations/telegram.server";
 import { minorToDecimal } from "../money";
 import {
   exportSampleSize,
@@ -15,8 +19,6 @@ import {
   type ExportSample,
   type ExportSampleOrder,
 } from "../orders/export-columns";
-import { localizedPath } from "../i18n";
-import { botUrl } from "../integrations/telegram.server";
 import {
   exportContext as exportContextView,
   exportScope,
@@ -30,15 +32,14 @@ import {
   detectedTimeZone,
   effectiveTimeZone,
 } from "../preferences";
-import { settingsSections, type SettingsSection } from "../area-sections";
 import { orderPeriods, orderPeriodStart, type OrderPeriod, type OrderView } from "../view-models";
 import { previewListing, previewSearchScope, previewTally } from "./order-list.server";
 import { previewLifetime } from "./scenarios.server";
 import type { pageScenario } from "./state.server";
 
 /**
- * Righe del file di un ordine sintetico, con le colonne dell'area reale: identificativi soltanto
- * se disponibili, situazione fiscale con il testo della pagina Ordini.
+ * Righe del file di un ordine sintetico, con le colonne dell'area reale: identificativi soltanto se
+ * disponibili, situazione fiscale con il testo della pagina Ordini.
  */
 function previewRecords(
   order: OrderView,
@@ -133,8 +134,8 @@ function previewSample(orders: OrderView[], t: AppCopy, timeZone: string): Expor
 
 /**
  * Ordini dell'esportazione nell'anteprima: l'ambito ricevuto dagli Ordini, contato con le regole
- * del loro elenco, cioè ordini presenti e, per i filtri, la stessa istantanea e la stessa
- * ricerca. Senza ambito, ogni periodo.
+ * del loro elenco, cioè ordini presenti e, per i filtri, la stessa istantanea e la stessa ricerca.
+ * Senza ambito, ogni periodo.
  */
 async function previewExport(
   { scenario, language }: Awaited<ReturnType<typeof pageScenario>>,
@@ -207,11 +208,7 @@ export async function previewSettingsPage(
     confirmUnlock: state.confirmUnlock !== false,
     section,
     sections: settingsSections,
-    services: {
-      billing: true,
-      billingPortal: true,
-      telegram: true,
-    },
+    services: { billing: true, billingPortal: true, telegram: true },
     account,
     termsUpdate: false,
     // Durante la prova l'acquisto resta possibile; lo ferma un abbonamento che può ancora
@@ -219,9 +216,9 @@ export async function previewSettingsPage(
     purchase: {
       state: purchaseStateFrom({
         covered:
-          (account.plan === "premium" && !account.trial) ||
-          (!!account.payment &&
-            !(account.payment.state === "refunded" && account.payment.lifetime)),
+          (account.plan === "premium" && !account.trial)
+          || (!!account.payment
+            && !(account.payment.state === "refunded" && account.payment.lifetime)),
         open: !scenario.purchasesClosed,
         synced: scenario.onboarding.some((step) => step.label === "stepSync" && step.done),
       }),

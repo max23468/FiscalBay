@@ -2,9 +2,10 @@ import { Moon, Sun, SunMoon } from "lucide-react";
 import { useEffect } from "react";
 import { Form, useLocation } from "react-router";
 
+import { useCopy, useLinks } from "~/components/copy-context";
 import { useHydrated } from "~/components/hydrated";
 import { RadioGroup } from "~/components/ui/radio-group";
-import { useCopy, useLinks } from "~/components/copy-context";
+
 import { appHref, languagePath } from "../../app-links";
 import { languageNames, languages } from "../../i18n";
 import { timeZones, zoneLabel, type Theme, type TimeZoneChoice } from "../../preferences";
@@ -18,8 +19,8 @@ function applyTheme(theme: Theme) {
 }
 
 /**
- * Lingua dell'account: nell'area reale la scelta si salva e riapre la pagina nella nuova
- * lingua; l'anteprima risponde dalla sua radice cambiando soltanto l'indirizzo.
+ * Lingua dell'account: nell'area reale la scelta si salva e riapre la pagina nella nuova lingua;
+ * l'anteprima risponde dalla sua radice cambiando soltanto l'indirizzo.
  */
 function LanguageChoice() {
   const { links, preview } = useLinks();
@@ -39,7 +40,7 @@ function LanguageChoice() {
           value={code}
           lang={code}
           aria-pressed={links.language === code}
-          className="inline-flex items-center rounded-md px-2.5 py-1.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-pressed:bg-secondary aria-pressed:font-medium aria-pressed:text-foreground pointer-coarse:min-h-11"
+          className="inline-flex items-center rounded-md px-2.5 py-1.5 text-muted-foreground transition-colors duration-(--duration-quick) outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-pressed:bg-secondary aria-pressed:font-medium aria-pressed:text-foreground pointer-coarse:min-h-11"
         >
           {languageNames[code]}
         </button>

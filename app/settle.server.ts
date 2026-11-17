@@ -1,8 +1,8 @@
 import { logFailure } from "./errors";
 
 /**
- * Rilegge uno stato finché non è confermato o finché scade l'attesa, sempre entro il tempo
- * dello streaming della pagina. Restituisce l'ultima lettura, confermata o no.
+ * Rilegge uno stato finché non è confermato o finché scade l'attesa, sempre entro il tempo dello
+ * streaming della pagina. Restituisce l'ultima lettura, confermata o no.
  */
 export async function settle<T>(
   read: () => Promise<T>,

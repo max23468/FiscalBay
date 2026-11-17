@@ -1,5 +1,3 @@
-import { storeAccess, type ActiveStore } from "./order-acquisition.server";
-import { switchOnSql } from "./service-settings.server";
 import { logFailure } from "../errors";
 import type { EbayAccess } from "../integrations/ebay/environment.server";
 import {
@@ -7,6 +5,8 @@ import {
   subscribeOrderEvents,
   unsubscribeOrderEvents,
 } from "../integrations/ebay/order-events.server";
+import { storeAccess, type ActiveStore } from "./order-acquisition.server";
+import { switchOnSql } from "./service-settings.server";
 
 // Un tentativo non concluso, o una sottoscrizione rimasta all'altro ambiente, si riprova dopo un
 // giorno: la lettura periodica resta la fonte degli ordini nel frattempo.
@@ -16,11 +16,10 @@ const retryMilliseconds = 24 * 60 * 60_000;
 const recheckMilliseconds = 7 * retryMilliseconds;
 
 /**
- * Dopo una lettura riuscita, sottoscrive il negozio a `ORDER_CONFIRMATION` una volta per
- * consenso (D235) e ricontrolla ogni settimana quella attiva. Il tentativo si prenota in D1
- * prima delle chiamate, così letture concorrenti
- * non lo ripetono; esito ed errori non fermano la lettura. Un consenso senza lo scope delle
- * notifiche resta senza eventi fino al ricollegamento.
+ * Dopo una lettura riuscita, sottoscrive il negozio a `ORDER_CONFIRMATION` una volta per consenso
+ * (D235) e ricontrolla ogni settimana quella attiva. Il tentativo si prenota in D1 prima delle
+ * chiamate, così letture concorrenti non lo ripetono; esito ed errori non fermano la lettura. Un
+ * consenso senza lo scope delle notifiche resta senza eventi fino al ricollegamento.
  */
 export async function ensureOrderEvents(
   env: Env,

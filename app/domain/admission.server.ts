@@ -1,41 +1,41 @@
 import { logFailure } from "../errors";
-import type { Language } from "../i18n";
 import { displayTimeZone, formatDate } from "../format";
+import type { Language } from "../i18n";
+import { dayMilliseconds } from "../time";
 import { purchasesOpenSql, waitingSql, waitlistOnSql } from "./admission-state.server";
 import { activeEntitlementSql } from "./grants.server";
 import { emailLanguageSql } from "./sign-in-methods.server";
 import { unpausedStore } from "./store-state.server";
-import { dayMilliseconds } from "../time";
 
 /**
  * Ammissione al servizio e inattività del Free (§5, Q569).
  *
- * Due interruttori in `admission_settings`, decisi dall'owner sulla capacità disponibile: la
- * lista d'attesa per i nuovi Free e gli acquisti aperti. La lista d'attesa vale per chi
- * completa la registrazione mentre è attiva e non tocca gli account esistenti. Chi è in attesa
- * può collegare un negozio e ottenere la prima lettura soltanto se gli acquisti sono aperti, per
- * scegliere Premium o la prova; nessuna lettura periodica o a richiesta e nessuno sblocco del
- * Free finché non viene ammesso. Spegnere la lista d'attesa ammette tutti.
+ * Due interruttori in `admission_settings`, decisi dall'owner sulla capacità disponibile: la lista
+ * d'attesa per i nuovi Free e gli acquisti aperti. La lista d'attesa vale per chi completa la
+ * registrazione mentre è attiva e non tocca gli account esistenti. Chi è in attesa può collegare un
+ * negozio e ottenere la prima lettura soltanto se gli acquisti sono aperti, per scegliere Premium o
+ * la prova; nessuna lettura periodica o a richiesta e nessuno sblocco del Free finché non viene
+ * ammesso. Spegnere la lista d'attesa ammette tutti.
  *
  * Inattività: l'attività umana verificata è una pagina dell'area aperta con una sessione; la
  * sincronizzazione automatica non conta. Dopo 30 giorni senza attività lo spazio Free riceve un
- * preavviso via email e dopo altri 7 le letture dei suoi negozi entrano in pausa `inactivity`.
- * Una copertura in corso, pagata, lifetime, concessa o di prova, non va mai in pausa per sola
+ * preavviso via email e dopo altri 7 le letture dei suoi negozi entrano in pausa `inactivity`. Una
+ * copertura in corso, pagata, lifetime, concessa o di prova, non va mai in pausa per sola
  * inattività. La ripresa è self-service da Negozi e non tocca quota, ciclo, prova o promozione.
  */
 
 /**
- * Letture periodiche, a richiesta e per evento ammesse: una copertura in corso, oppure uno
- * spazio fuori dalla lista d'attesa. La prima lettura al collegamento segue `linkReadAdmitted`.
+ * Letture periodiche, a richiesta e per evento ammesse: una copertura in corso, oppure uno spazio
+ * fuori dalla lista d'attesa. La prima lettura al collegamento segue `linkReadAdmitted`.
  */
 export function servedSql(workspace: string, at: string) {
   return `(${activeEntitlementSql(workspace, at)} OR NOT ${waitingSql(workspace)})`;
 }
 
 /**
- * Lettura al collegamento: sempre per uno spazio servito; in lista d'attesa soltanto la prima,
- * cioè finché il negozio non ha una lettura riuscita in questo spazio. Uno storico eliminato
- * conta come già letto: scollegare, eliminare i dati e ricollegare non ripete la prima lettura.
+ * Lettura al collegamento: sempre per uno spazio servito; in lista d'attesa soltanto la prima, cioè
+ * finché il negozio non ha una lettura riuscita in questo spazio. Uno storico eliminato conta come
+ * già letto: scollegare, eliminare i dati e ricollegare non ripete la prima lettura.
  */
 export async function linkReadAdmitted(db: D1Database, storeId: string, now: Date) {
   const row = await db
@@ -65,8 +65,8 @@ export async function admission(db: D1Database, userId: string): Promise<Admissi
 }
 
 /**
- * Collegamento di un negozio ammesso: account fuori dalla lista d'attesa, acquisti aperti per
- * il percorso verso Premium, oppure una copertura già in corso.
+ * Collegamento di un negozio ammesso: account fuori dalla lista d'attesa, acquisti aperti per il
+ * percorso verso Premium, oppure una copertura già in corso.
  */
 export async function storeLinkAdmitted(db: D1Database, userId: string, now = new Date()) {
   const row = await db
@@ -84,8 +84,8 @@ const activityStep = 60 * 60_000;
 
 /**
  * Scritture che una pagina dell'area deve fare prima di leggere, in una sola lettura: il
- * riallineamento dopo un cambiamento del piano e la registrazione dell'attività, dovuta una
- * volta l'ora o per ammettere chi era in attesa con la lista spenta.
+ * riallineamento dopo un cambiamento del piano e la registrazione dell'attività, dovuta una volta
+ * l'ora o per ammettere chi era in attesa con la lista spenta.
  */
 export async function pendingVisitWrites(db: D1Database, userId: string, now = new Date()) {
   const member = `FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
@@ -120,10 +120,9 @@ export async function recordActivity(db: D1Database, userId: string, now = new D
 }
 
 /**
- * Ripresa dopo la pausa per inattività, confermata dall'utente: toglie la pausa a tutti i
- * negozi dello spazio, registra l'attività e chiede subito una lettura, che recupera quanto è
- * ancora disponibile nella finestra del piano. Quota, ciclo, prova e promozione restano come
- * erano.
+ * Ripresa dopo la pausa per inattività, confermata dall'utente: toglie la pausa a tutti i negozi
+ * dello spazio, registra l'attività e chiede subito una lettura, che recupera quanto è ancora
+ * disponibile nella finestra del piano. Quota, ciclo, prova e promozione restano come erano.
  */
 export async function resumeAfterInactivity(db: D1Database, userId: string, now = new Date()) {
   const at = now.toISOString();
@@ -169,9 +168,9 @@ type NoticeRow = {
 };
 
 /**
- * Invia i preavvisi e registra quelli riusciti o destinati a un indirizzo soppresso; gli altri
- * li riprova l'esecuzione seguente. Il modulo email porta con sé i testi dell'interfaccia: si
- * carica soltanto qui, fuori dall'avvio di cron, coda e webhook.
+ * Invia i preavvisi e registra quelli riusciti o destinati a un indirizzo soppresso; gli altri li
+ * riprova l'esecuzione seguente. Il modulo email porta con sé i testi dell'interfaccia: si carica
+ * soltanto qui, fuori dall'avvio di cron, coda e webhook.
  */
 async function sendNotices(env: Env, rows: NoticeRow[], now: Date) {
   const { EmailError, sendInactivityNotice } = await import("../account-email.server");
@@ -217,9 +216,9 @@ async function sendNotices(env: Env, rows: NoticeRow[], now: Date) {
  * Compito orario dell'inattività. Nell'ordine: uno spazio senza attività registrata la riceve
  * adesso; gli spazi Free ammessi senza attività da 30 giorni e senza un preavviso per questo
  * periodo ricevono l'email e il preavviso si registra soltanto se l'invio riesce, a lotti in cui
- * gli invii non riusciti passano dopo quelli ancora da tentare; dopo 7 giorni dal preavviso
- * senza nuova attività le letture dei negozi entrano in pausa. Con la lista
- * d'attesa spenta chi era in attesa viene ammesso.
+ * gli invii non riusciti passano dopo quelli ancora da tentare; dopo 7 giorni dal preavviso senza
+ * nuova attività le letture dei negozi entrano in pausa. Con la lista d'attesa spenta chi era in
+ * attesa viene ammesso.
  */
 export async function applyInactivity(env: Env, now = new Date()) {
   const db = env.DB;

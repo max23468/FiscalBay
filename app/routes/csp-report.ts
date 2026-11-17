@@ -13,8 +13,8 @@ export const loader = postOnly;
 
 /**
  * Segnalazioni delle violazioni della CSP e di Trusted Types inviate dal browser: filtro per IP,
- * corpo limitato, soli documenti dell'origine e campi ridotti nei log del Worker. Nessuna
- * scrittura su D1; un corpo non valido non lascia traccia.
+ * corpo limitato, soli documenti dell'origine e campi ridotti nei log del Worker. Nessuna scrittura
+ * su D1; un corpo non valido non lascia traccia.
  */
 export async function action({ request }: Route.ActionArgs) {
   const wait = await requestLimitWait(env, request, "reports", "csp-report");

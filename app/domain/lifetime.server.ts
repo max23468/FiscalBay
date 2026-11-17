@@ -10,6 +10,13 @@ import {
   stripeEnvironment,
   stripeId,
 } from "../integrations/stripe.server";
+import { inSequence } from "../sequence";
+import { purchasesOpenSql } from "./admission-state.server";
+import {
+  recordUnallocatedLifetime,
+  resolveBillingIncident,
+  reconcileBillingIncidents,
+} from "./billing-incidents.server";
 import {
   endOpenSubscriptions,
   isRenewingSubscription,
@@ -17,16 +24,9 @@ import {
   openSubscriptionSql,
   openSubscriptionStatuses,
 } from "./billing-subscriptions.server";
-import { purchasesOpenSql } from "./admission-state.server";
 import { entitlementInForce, lifetimeInForceSql, storeReadSql } from "./grants.server";
 import { erasedCustomerSql, paymentReversal, reversalStatements } from "./refunds.server";
-import { inSequence } from "../sequence";
 import { sqlList } from "./sql.server";
-import {
-  recordUnallocatedLifetime,
-  resolveBillingIncident,
-  reconcileBillingIncidents,
-} from "./billing-incidents.server";
 
 /**
  * Posti ancora liberi per il sito pubblico: un posto prenotato da un Checkout aperto non è in
@@ -40,14 +40,14 @@ export async function lifetimeSlotsLeft(db: D1Database) {
 }
 
 /**
- * Durata della sessione Checkout e della prenotazione: Stripe accetta da 30 minuti a 24 ore.
- * Un'ora lascia il tempo di pagare senza tenere fermo a lungo uno degli ultimi posti.
+ * Durata della sessione Checkout e della prenotazione: Stripe accetta da 30 minuti a 24 ore. Un'ora
+ * lascia il tempo di pagare senza tenere fermo a lungo uno degli ultimi posti.
  */
 const reservationMs = 60 * 60 * 1000;
 
 /**
- * Rinnovo troppo vicino: se arrivasse prima del pagamento, il cliente pagherebbe un nuovo
- * periodo che il credito calcolato oggi non conta.
+ * Rinnovo troppo vicino: se arrivasse prima del pagamento, il cliente pagherebbe un nuovo periodo
+ * che il credito calcolato oggi non conta.
  */
 const renewalMarginMs = 10 * 60 * 1000;
 
@@ -58,16 +58,16 @@ const freeSlotWhere = "slot NOT IN (SELECT slot FROM lifetime_allocations)";
 
 /**
  * Netto del listino per una periodicità della generazione dell'abbonamento. Null per una
- * generazione che il catalogo non conosce: quando ne arriva una nuova, quella precedente
- * resta nel catalogo finché esistono abbonamenti che la usano.
+ * generazione che il catalogo non conosce: quando ne arriva una nuova, quella precedente resta nel
+ * catalogo finché esistono abbonamenti che la usano.
  */
 function generationNet(generation: string, offer: PremiumOffer) {
   return generation === priceGeneration.id ? priceGeneration.net[offer] : null;
 }
 
 /**
- * Valore netto del periodo pagato non ancora usato, in centesimi, proporzionale al tempo
- * residuo sull'istante UTC. I giorni di prova e le concessioni non sono periodo pagato.
+ * Valore netto del periodo pagato non ancora usato, in centesimi, proporzionale al tempo residuo
+ * sull'istante UTC. I giorni di prova e le concessioni non sono periodo pagato.
  */
 export function unusedCredit(net: number, period: { startsAt: string; endsAt: string }, now: Date) {
   const start = Date.parse(period.startsAt);
@@ -78,8 +78,8 @@ export function unusedCredit(net: number, period: { startsAt: string; endsAt: st
 }
 
 /**
- * Credito ridotto alla parte del pagamento non rimborsata: un rimborso parziale del periodo
- * non torna una seconda volta come detrazione.
+ * Credito ridotto alla parte del pagamento non rimborsata: un rimborso parziale del periodo non
+ * torna una seconda volta come detrazione.
  */
 export function refundedShare(credit: number, paid: number | null, refunded: number | null) {
   if (!refunded || !paid) return credit;
@@ -92,8 +92,8 @@ type LifetimeContext = {
   /** Posto dello spazio già prenotato da una sessione precedente, non ancora completata. */
   reservation: { slot: number; reference: string | null } | null;
   /**
-   * Abbonamento che il lifetime sostituisce, con il rinnovo se ancora previsto e il cliente
-   * Stripe, salvo dopo la cancellazione dei suoi dati finanziari.
+   * Abbonamento che il lifetime sostituisce, con il rinnovo se ancora previsto e il cliente Stripe,
+   * salvo dopo la cancellazione dei suoi dati finanziari.
    */
   subscription: { customerId: string | null; renewsAt: string | null } | null;
 };
@@ -101,8 +101,8 @@ type LifetimeContext = {
 /**
  * Stato del lifetime per lo spazio dell'utente. Non si offre con un posto già attivo, con un
  * pagamento lifetime da confermare o con un primo pagamento dell'abbonamento ancora aperto; un
- * abbonamento pagato, scelto durante la prova o con un rinnovo da regolarizzare si sostituisce.
- * Il credito vale soltanto per il periodo pagato in corso, nella generazione dell'abbonamento.
+ * abbonamento pagato, scelto durante la prova o con un rinnovo da regolarizzare si sostituisce. Il
+ * credito vale soltanto per il periodo pagato in corso, nella generazione dell'abbonamento.
  */
 export async function lifetimeContext(
   db: D1Database,
@@ -228,9 +228,9 @@ export function lifetimeOfferState(input: {
 }
 
 /**
- * Prenota un posto per una nuova sessione: lo stesso posto dello spazio se ne aveva già uno
- * per una sessione ormai chiusa, altrimenti il primo libero. Restituisce il posto, o null se
- * non ce ne sono o se una richiesta concorrente dello stesso spazio l'ha già preso.
+ * Prenota un posto per una nuova sessione: lo stesso posto dello spazio se ne aveva già uno per una
+ * sessione ormai chiusa, altrimenti il primo libero. Restituisce il posto, o null se non ce ne sono
+ * o se una richiesta concorrente dello stesso spazio l'ha già preso.
  */
 export async function reserveLifetime(
   db: D1Database,
@@ -279,8 +279,8 @@ export async function bindLifetimeSession(
 }
 
 /**
- * Libera una prenotazione senza sessione registrata: nessun cliente ne ha ricevuto
- * l'indirizzo, quindi nessuna sessione può incassare per essa.
+ * Libera una prenotazione senza sessione registrata: nessun cliente ne ha ricevuto l'indirizzo,
+ * quindi nessuna sessione può incassare per essa.
  */
 export async function releaseUnboundReservation(
   db: D1Database,
@@ -317,14 +317,14 @@ export function isLifetimeSession(session: Stripe.Checkout.Session) {
 }
 
 /**
- * Rilegge una sessione lifetime e ne applica lo stato corrente. Pagata: posto attivo, diritto
- * senza scadenza con la prova dell'incasso e chiusura dell'abbonamento sostituito. Completata
- * con il pagamento in conferma: il posto resta. Scaduta, o con il pagamento asincrono fallito:
- * il posto si libera. Ripetuta produce lo stesso risultato; un pagamento confermato senza
- * posto, dopo una liberazione, occupa il primo libero o, a posti finiti, un posto oltre il
- * ventesimo. Uno spazio che ha già un altro posto non ne riceve un secondo: l'incasso si segnala
- * all'assistenza senza diritto né rimborso. Un rimborso totale o una disputa persa revocano il
- * diritto e il posto resta occupato.
+ * Rilegge una sessione lifetime e ne applica lo stato corrente. Pagata: posto attivo, diritto senza
+ * scadenza con la prova dell'incasso e chiusura dell'abbonamento sostituito. Completata con il
+ * pagamento in conferma: il posto resta. Scaduta, o con il pagamento asincrono fallito: il posto si
+ * libera. Ripetuta produce lo stesso risultato; un pagamento confermato senza posto, dopo una
+ * liberazione, occupa il primo libero o, a posti finiti, un posto oltre il ventesimo. Uno spazio
+ * che ha già un altro posto non ne riceve un secondo: l'incasso si segnala all'assistenza senza
+ * diritto né rimborso. Un rimborso totale o una disputa persa revocano il diritto e il posto resta
+ * occupato.
  */
 export async function reconcileLifetime(
   env: Env,
@@ -460,9 +460,9 @@ const lifetimeChecks = 5;
 /**
  * Passo del cron per i posti: prenotazioni scadute o in attesa di un pagamento asincrono si
  * rileggono da Stripe; una prenotazione mai legata a una sessione si libera alla scadenza; un
- * lifetime in vigore con un abbonamento ancora aperto lo chiude; un lifetime venduto e non
- * revocato si rilegge una volta al giorno, per un rimborso o una disputa di cui il webhook non
- * è arrivato. Ogni elemento registra il proprio errore senza fermare gli altri.
+ * lifetime in vigore con un abbonamento ancora aperto lo chiude; un lifetime venduto e non revocato
+ * si rilegge una volta al giorno, per un rimborso o una disputa di cui il webhook non è arrivato.
+ * Ogni elemento registra il proprio errore senza fermare gli altri.
  */
 export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, now = new Date()) {
   await reconcileBillingIncidents(env, stripe, now);
@@ -569,11 +569,10 @@ async function seatSaleReversed(
 }
 
 /**
- * Riprende per lo spazio il posto attivo rimasto senza spazio dopo la cancellazione
- * dell'account dello stesso cliente: non consuma un altro dei venti posti. Il diritto porta
- * autore e motivo e, per un posto venduto, il riferimento della vendita, così rimborsi e
- * dispute della vendita originale lo revocano ancora. Ordini, sblocchi e prova dello spazio
- * cancellato non tornano.
+ * Riprende per lo spazio il posto attivo rimasto senza spazio dopo la cancellazione dell'account
+ * dello stesso cliente: non consuma un altro dei venti posti. Il diritto porta autore e motivo e,
+ * per un posto venduto, il riferimento della vendita, così rimborsi e dispute della vendita
+ * originale lo revocano ancora. Ordini, sblocchi e prova dello spazio cancellato non tornano.
  */
 async function recoverLifetimeSeat(
   env: Env,
@@ -609,14 +608,14 @@ async function recoverLifetimeSeat(
 }
 
 /**
- * Lifetime in omaggio, dalla console amministrativa: consuma uno dei venti posti, registra
- * autore e motivo e chiude l'abbonamento dello spazio come un acquisto. Posto e diritto sono
- * un unico commit; uno spazio con una prenotazione aperta aspetta l'esito del suo checkout.
- * Uno spazio che ha già un posto con il lifetime revocato, per rimborso o disputa persa, lo
- * riceve di nuovo sullo stesso posto, senza consumarne un altro: il posto resta della vendita
- * originale e il nuovo diritto porta autore e motivo dell'omaggio. Con `slot` lo spazio riprende
- * invece il posto rimasto senza spazio dopo la cancellazione dell'account dello stesso cliente,
- * se la sua vendita non è stata rimborsata né persa in disputa.
+ * Lifetime in omaggio, dalla console amministrativa: consuma uno dei venti posti, registra autore e
+ * motivo e chiude l'abbonamento dello spazio come un acquisto. Posto e diritto sono un unico
+ * commit; uno spazio con una prenotazione aperta aspetta l'esito del suo checkout. Uno spazio che
+ * ha già un posto con il lifetime revocato, per rimborso o disputa persa, lo riceve di nuovo sullo
+ * stesso posto, senza consumarne un altro: il posto resta della vendita originale e il nuovo
+ * diritto porta autore e motivo dell'omaggio. Con `slot` lo spazio riprende invece il posto rimasto
+ * senza spazio dopo la cancellazione dell'account dello stesso cliente, se la sua vendita non è
+ * stata rimborsata né persa in disputa.
  */
 export async function grantLifetime(
   env: Env,

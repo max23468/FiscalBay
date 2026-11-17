@@ -1,17 +1,11 @@
 import { env } from "cloudflare:workers";
-
 import { expect, it, vi } from "vitest";
 
 import { unlockOrders } from "../app/domain/grants.server";
-
-import { listVisibleOrders } from "../app/domain/orders.server";
-
 import { recordOrderObservation } from "../app/domain/order-import.server";
-
 import { type OrderObservation } from "../app/domain/order-observation.server";
-
+import { listVisibleOrders } from "../app/domain/orders.server";
 import { now, resetOrderFixtures } from "./fixtures/database-fixtures";
-
 import {
   target,
   line,
@@ -138,11 +132,7 @@ it("un campo omesso e uno nullo sono lo stesso dato e non creano versioni", asyn
     source: "ebay_fulfillment" as const,
     complete: true,
     values: [
-      {
-        type: "VAT_ID",
-        ...(issuingCountry === null && { issuingCountry }),
-        value: "01234567890",
-      },
+      { type: "VAT_ID", ...(issuingCountry === null && { issuingCountry }), value: "01234567890" },
     ],
   });
   const explicit = (lastModifiedTime: string) =>
@@ -307,10 +297,7 @@ it("mantiene il testo cercabile dagli ultimi campi scritti, senza contarlo come 
 
 it("scarta la lettura tardiva della stessa fonte prima di scrivere", async () => {
   await recordOrderObservation(env.DB, target(), observation());
-  const late = observation({
-    lastModifiedTime: "2026-09-10T10:59:59Z",
-    paymentStatus: "PENDING",
-  });
+  const late = observation({ lastModifiedTime: "2026-09-10T10:59:59Z", paymentStatus: "PENDING" });
   const batch = vi.spyOn(env.DB, "batch");
   try {
     expect(await recordOrderObservation(env.DB, target(), late)).toEqual({ outcome: "stale" });
@@ -603,10 +590,7 @@ it("aggancia singoli provvisori tardivi al combinato senza duplicare o ridurre l
       await recordOrderObservation(
         env.DB,
         target(),
-        provisional({
-          externalOrderId: `P-${key}`,
-          items: [line(key)],
-        }),
+        provisional({ externalOrderId: `P-${key}`, items: [line(key)] }),
       ),
     ).toMatchObject({ outcome: "unchanged", orderId: (result as { orderId: string }).orderId });
   }

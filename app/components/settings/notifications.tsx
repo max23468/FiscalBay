@@ -2,13 +2,14 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 
 import { useAction, useNotice } from "~/components/action";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { RadioGroup } from "~/components/ui/radio-group";
 import { Switch } from "~/components/ui/switch";
-import { useCopy, useLinks } from "~/components/copy-context";
+
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
 import { telegramDigestTimes, telegramLinkMinutes, zoneLabel } from "../../preferences";
@@ -88,8 +89,8 @@ function useLinkWait(linkedAt: string | null, t: AppCopy) {
 }
 
 /**
- * Apre il bot con un nuovo deep link. Il modulo apre una nuova scheda, così la pagina resta qui
- * ad aspettare il collegamento; nell'anteprima l'azione è simulata.
+ * Apre il bot con un nuovo deep link. Il modulo apre una nuova scheda, così la pagina resta qui ad
+ * aspettare il collegamento; nell'anteprima l'azione è simulata.
  */
 function ConnectButton({
   label,

@@ -1,7 +1,7 @@
 /**
- * Un passo alla volta, nell'ordine dato, con i risultati nello stesso ordine: ogni passo parte
- * alla fine del precedente e un errore ferma quelli successivi. Serve dove l'ordine conta o
- * dove un provider va chiamato una volta per volta.
+ * Un passo alla volta, nell'ordine dato, con i risultati nello stesso ordine: ogni passo parte alla
+ * fine del precedente e un errore ferma quelli successivi. Serve dove l'ordine conta o dove un
+ * provider va chiamato una volta per volta.
  */
 export function inSequence<T, R>(
   items: readonly T[],

@@ -1,6 +1,7 @@
 import { CirclePause, Unplug } from "lucide-react";
 
 import type { StatusIconType } from "~/components/status";
+
 import type { AppCopy } from "../../app-copy";
 import {
   marketplaceLabel,
@@ -85,7 +86,7 @@ export function notificationsLabel(store: StoreView, t: AppCopy, detail = false)
   return detail ? t.stores.notificationsHeldHint : t.stores.notificationsHeld;
 }
 
-/** eBay non risponde, o le letture sono sospese, nell'ambiente del negozio. */
+/** EBay non risponde, o le letture sono sospese, nell'ambiente del negozio. */
 export function ebayDownFor(data: StoresPageData, store: StoreView) {
   return data.ebayDown.includes(store.sandbox ? "sandbox" : "production");
 }
@@ -112,16 +113,16 @@ export function syncDescription(store: StoreView, ebayDown: string | null, t: Ap
 /** Autorizzazione eBay scaduta: da ricollegare, o con la scadenza già passata. */
 export function consentExpired(store: StoreView, now: string) {
   return (
-    store.connection === "reconnect_required" ||
-    (store.consentExpiresAt !== null && store.consentExpiresAt <= now)
+    store.connection === "reconnect_required"
+    || (store.consentExpiresAt !== null && store.consentExpiresAt <= now)
   );
 }
 
 /** Autorizzazione eBay da rinnovare o lettura bloccata da un problema del negozio. */
 export function needsReconnect(store: StoreView) {
   return (
-    store.issue !== undefined ||
-    store.connection === "reconnect_required" ||
-    store.connection === "error"
+    store.issue !== undefined
+    || store.connection === "reconnect_required"
+    || store.connection === "error"
   );
 }

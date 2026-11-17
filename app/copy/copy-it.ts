@@ -1,10 +1,10 @@
-import { legalDate, plural } from "./format";
 import type { ExitReason } from "../exit-reasons";
+import { legalDate, plural } from "./format";
 
 /**
  * Conteggi con il separatore delle migliaia anche a quattro cifre, come `formatNumber`. Il formato
- * nasce al primo uso: creato al caricamento renderebbe il modulo non eliminabile dai bundle che
- * non usano i testi.
+ * nasce al primo uso: creato al caricamento renderebbe il modulo non eliminabile dai bundle che non
+ * usano i testi.
  */
 let groupedFormat: Intl.NumberFormat | undefined;
 const grouped = (value: number) =>
@@ -21,8 +21,8 @@ const inactivityTitle = "Letture in pausa per inattività";
 const contactSupport = "Contatta l’assistenza";
 
 /**
- * Periodi di Premium, nella pagina del piano e nel riepilogo diagnostico. Stringhe e non un
- * oggetto condiviso: un oggetto usato in due punti terrebbe i testi nel bundle del browser.
+ * Periodi di Premium, nella pagina del piano e nel riepilogo diagnostico. Stringhe e non un oggetto
+ * condiviso: un oggetto usato in due punti terrebbe i testi nel bundle del browser.
  */
 const premiumMonthly = "Pro mensile";
 const premiumAnnual = "Pro annuale";
@@ -34,12 +34,7 @@ const privacyTitle = "Informativa privacy";
 
 export const it = {
   /** Etichette generiche, uguali in ogni pagina. */
-  common: {
-    cancel: "Annulla",
-    save: "Salva",
-    saving: "Salvataggio…",
-    contactSupport,
-  },
+  common: { cancel: "Annulla", save: "Salva", saving: "Salvataggio…", contactSupport },
   shell: {
     notFound: {
       order: {
@@ -612,11 +607,7 @@ export const it = {
       freeStoreConfirm: "Rendi attivo",
       freeStoreChanged: "Negozio attivo aggiornato.",
       freeStoreUnavailable: "Il negozio attivo non si può sostituire ora.",
-      premiumPeriod: {
-        monthly: premiumMonthly,
-        annual: premiumAnnual,
-        lifetime: premiumLifetime,
-      },
+      premiumPeriod: { monthly: premiumMonthly, annual: premiumAnnual, lifetime: premiumLifetime },
       premiumLifetime: "Acquisto una tantum, senza rinnovi.",
       premiumLifetimeGranted: "Concesso da FiscalBay, senza rinnovi.",
       grantEnds: (date: string) => `Pro concesso fino al ${date}.`,
@@ -1016,10 +1007,7 @@ export const it = {
   },
   authError: {
     title: "Accesso non completato",
-    registrationRestricted: {
-      title: "Registrazione riservata",
-      body: registrationRestricted,
-    },
+    registrationRestricted: { title: "Registrazione riservata", body: registrationRestricted },
     body: "Riprova con il metodo di accesso che usi di solito.",
     back: "Torna all’accesso",
     ebayWithoutEmail: {

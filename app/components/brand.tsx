@@ -1,9 +1,9 @@
 import { cn } from "cn";
 
 /**
- * Le tre righe della tessera del logo (blu, verde, rossa) con le proporzioni
- * 224:156:72. Ferme indicano uno stato, animate una sincronizzazione.
- * Con la riduzione del movimento restano ferme e intere.
+ * Le tre righe della tessera del logo (blu, verde, rossa) con le proporzioni 224:156:72. Ferme
+ * indicano uno stato, animate una sincronizzazione. Con la riduzione del movimento restano ferme e
+ * intere.
  */
 const lines = [
   { color: "bg-brand-blue dark:bg-brand-sky", width: "w-full" },
@@ -31,8 +31,8 @@ export function LedgerIndicator({
             "block h-[3px] origin-left rounded-full",
             line.color,
             line.width,
-            active &&
-              "animate-[ledger-sync_1.4s_var(--ease-smooth-out)_infinite] motion-reduce:animate-none",
+            active
+              && "animate-[ledger-sync_1.4s_var(--ease-smooth-out)_infinite] motion-reduce:animate-none",
           )}
           style={active ? { animationDelay: `${index * 120}ms` } : undefined}
         />
@@ -42,8 +42,8 @@ export function LedgerIndicator({
 }
 
 /**
- * Illustrazione geometrica degli stati vuoti: la tessera inclinata di 8°,
- * con contorno e chip neutri e la sola riga blu come accento.
+ * Illustrazione geometrica degli stati vuoti: la tessera inclinata di 8°, con contorno e chip
+ * neutri e la sola riga blu come accento.
  */
 function TesseraArt({ className }: { className?: string }) {
   return (
@@ -87,10 +87,10 @@ const mutedFill = "fill-muted-foreground/25";
 export type EmptyArtKind = "first-use" | "all-clear" | "no-results" | "not-found";
 
 /**
- * Illustrazioni degli stati vuoti, tutte costruite sulla tessera del logo:
- * tessere che trovano ordine al primo utilizzo, tessera frontale con le tre
- * righe del marchio quando tutto è aggiornato, lente per la ricerca senza
- * risultati, punto interrogativo per un indirizzo che non esiste.
+ * Illustrazioni degli stati vuoti, tutte costruite sulla tessera del logo: tessere che trovano
+ * ordine al primo utilizzo, tessera frontale con le tre righe del marchio quando tutto è
+ * aggiornato, lente per la ricerca senza risultati, punto interrogativo per un indirizzo che non
+ * esiste.
  */
 export function EmptyArt({ kind, className }: { kind: EmptyArtKind; className?: string }) {
   if (kind === "first-use") {

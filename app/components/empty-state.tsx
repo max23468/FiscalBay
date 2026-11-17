@@ -5,9 +5,9 @@ import { EmptyArt, type EmptyArtKind } from "~/components/brand";
 type Variant = Exclude<EmptyArtKind, "no-results"> | "search";
 
 /**
- * Stato vuoto: illustrazione contestuale, titolo, conseguenza e azioni.
- * Le varianti ampie (primo utilizzo, tutto aggiornato, pagina inesistente)
- * occupano il posto dell'elenco; la ricerca resta compatta accanto al proprio contesto.
+ * Stato vuoto: illustrazione contestuale, titolo, conseguenza e azioni. Le varianti ampie (primo
+ * utilizzo, tutto aggiornato, pagina inesistente) occupano il posto dell'elenco; la ricerca resta
+ * compatta accanto al proprio contesto.
  */
 export function EmptyState({
   title,

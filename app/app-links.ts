@@ -1,6 +1,6 @@
-import { canonicalPath, localizedPath, type Language } from "./i18n";
-import { premiumOffers, type PremiumOffer } from "./catalog";
 import type { AreaPath } from "./area-sections";
+import { premiumOffers, type PremiumOffer } from "./catalog";
+import { canonicalPath, localizedPath, type Language } from "./i18n";
 import type { EbayEnvironment } from "./view-models";
 
 export interface AppLinks {
@@ -18,8 +18,8 @@ export function appHref({ language, base }: AppLinks, path: AreaPath = "") {
 export const authErrorPath = "/auth/error";
 
 /**
- * Ambiente eBay scelto nell'indirizzo, sul solo dominio di test: assente o diverso da
- * `sandbox` vale Production.
+ * Ambiente eBay scelto nell'indirizzo, sul solo dominio di test: assente o diverso da `sandbox`
+ * vale Production.
  */
 export const environmentParam = "environment";
 
@@ -145,8 +145,8 @@ export function planChoice(value: string | null | undefined): PremiumOffer | nul
 export const notificationSettingsPath = `${settingsPath}/notifiche`;
 
 /**
- * Account, fra le categorie delle Impostazioni: dati personali, email, accessi e sessioni;
- * riceve anche le azioni di sicurezza.
+ * Account, fra le categorie delle Impostazioni: dati personali, email, accessi e sessioni; riceve
+ * anche le azioni di sicurezza.
  */
 export const securityPath = `${settingsPath}/account`;
 
@@ -187,8 +187,8 @@ export const leakedPasswordField = "password-trapelata";
 export const privacySettingsPath = `${settingsPath}/privacy`;
 
 /**
- * Solo la categoria Account con i gruppi di sicurezza e Dati e privacy, mai URL esterni o azioni
- * da rieseguire.
+ * Solo la categoria Account con i gruppi di sicurezza e Dati e privacy, mai URL esterni o azioni da
+ * rieseguire.
  */
 export function securityReturnPath(language: Language, value: string | null): string | null {
   const base = localizedPath(language, securityPath);
@@ -207,8 +207,8 @@ export const storesPath = `${appBase}/negozi`;
 export const storeLinkPath = `${appBase}/negozi/collega`;
 
 /**
- * «Visita fiscalbay.it»: il parametro sulla radice diventa un cookie di sessione del browser
- * e viene tolto dall'indirizzo; `0` lo cancella ed entra nell'app.
+ * «Visita fiscalbay.it»: il parametro sulla radice diventa un cookie di sessione del browser e
+ * viene tolto dall'indirizzo; `0` lo cancella ed entra nell'app.
  */
 export const visitParam = "visita";
 export const visitCookie = "fiscalbay_visita";
@@ -217,8 +217,8 @@ export const visitCookie = "fiscalbay_visita";
 const productionHosts = new Set(["fiscalbay.it", "www.fiscalbay.it"]);
 
 /**
- * Origine di Production, riconosciuta dall'host: schema, porta, barra o punto finale non la
- * fanno passare per un ambiente di test.
+ * Origine di Production, riconosciuta dall'host: schema, porta, barra o punto finale non la fanno
+ * passare per un ambiente di test.
  */
 export function isProductionOrigin(origin: string): boolean {
   return productionHosts.has(new URL(origin).hostname.replace(/\.$/u, ""));
@@ -235,8 +235,8 @@ export function originUrl(env: { APP_ORIGIN: string }, path: string) {
 }
 
 /**
- * Indirizzo assoluto di una pagina dell'app nella lingua data, per email, Stripe e Telegram,
- * con l'ambiente eBay se non è Production e gli eventuali filtri.
+ * Indirizzo assoluto di una pagina dell'app nella lingua data, per email, Stripe e Telegram, con
+ * l'ambiente eBay se non è Production e gli eventuali filtri.
  */
 export function appUrl(
   env: { APP_ORIGIN: string },

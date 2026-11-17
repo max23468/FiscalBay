@@ -1,5 +1,3 @@
-import type { BuyerSnapshot } from "./order-observation.server";
-import type { VisibleOrder } from "./orders.server";
 import { contactsView } from "../contact";
 import { shownTaxType } from "../tax-quality";
 import type {
@@ -10,6 +8,8 @@ import type {
   ShippingStatus,
   SourceStatus,
 } from "../view-models";
+import type { BuyerSnapshot } from "./order-observation.server";
+import type { VisibleOrder } from "./orders.server";
 
 /**
  * Avvertenza su un dato disponibile, uguale nella pagina Ordini e nel file: l'ultima lettura non
@@ -137,10 +137,14 @@ export function orderView(order: VisibleOrder): OrderView {
       order.summary.orderFulfillmentStatus,
     ),
     billingAddress:
-      billing &&
-      [line, billing.city, billing.postalCode, billing.stateOrProvince, billing.countryCode].some(
-        (value) => value?.trim(),
-      )
+      billing
+      && [
+        line,
+        billing.city,
+        billing.postalCode,
+        billing.stateOrProvince,
+        billing.countryCode,
+      ].some((value) => value?.trim())
         ? {
             line,
             postalCode: billing.postalCode ?? "",
@@ -156,9 +160,9 @@ export function orderView(order: VisibleOrder): OrderView {
           maskedContacts: [
             ...(!buyer.name && buyer.masked.includes("name") ? ["name" as const] : []),
             ...(!buyer.email && buyer.masked.includes("email") ? ["email" as const] : []),
-            ...(!buyer.phone &&
-            !shipTo?.phone &&
-            (buyer.masked.includes("phone") || buyer.masked.includes("shipTo.phone"))
+            ...(!buyer.phone
+            && !shipTo?.phone
+            && (buyer.masked.includes("phone") || buyer.masked.includes("shipTo.phone"))
               ? ["phone" as const]
               : []),
             ...(!billing?.addressLine1 && buyer.masked.includes("billingAddress.addressLine1")

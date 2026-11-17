@@ -1,7 +1,7 @@
 /**
  * Frammenti delle PR in `changes/`: le voci del changelog di ciascuna PR, riunite alla build nella
- * versione in cima. JavaScript puro perché lo leggono anche gli script della CI prima di
- * installare il Node del progetto, oltre alla build e alle prove.
+ * versione in cima. JavaScript puro perché lo leggono anche gli script della CI prima di installare
+ * il Node del progetto, oltre alla build e alle prove.
  */
 
 /** Gruppi delle voci, nell'ordine della pagina, con il titolo `####` in ciascuna lingua. */
@@ -19,6 +19,7 @@ const partOrder = ["Novità", "What's new", "Altre modifiche"];
 
 /**
  * Gruppi `####` di una parte nella sua lingua, nell'ordine della pagina.
+ *
  * @param {string} partTitle
  * @returns {string[]}
  */
@@ -27,6 +28,7 @@ const groupOrder = (partTitle) =>
 
 /**
  * Indice dopo l'ultima riga non vuota fra `start` e `end`.
+ *
  * @param {string[]} lines
  * @param {number} start
  * @param {number} end
@@ -39,6 +41,7 @@ const afterContent = (lines, start, end) => {
 
 /**
  * Fine del blocco che inizia a `start`: la riga che apre un livello uguale o superiore.
+ *
  * @param {string[]} lines
  * @param {number} start
  * @param {number} end
@@ -52,6 +55,7 @@ const blockEnd = (lines, start, end, levels) => {
 
 /**
  * Voci nuove di un blocco: dopo un titolo serve una riga vuota, dopo una voce no.
+ *
  * @param {string[]} lines
  * @param {number} start
  * @param {number} end
@@ -64,17 +68,18 @@ const spaced = (lines, start, end, entries) => {
 
 /**
  * Parte `## Changelog` di un frammento di `changes/`: parti `###` della versione in preparazione,
- * con gruppi `####` e voci. Una PR aggiunge il proprio frammento invece di modificare la sezione
- * in cima, così più PR aperte non si contendono le stesse righe.
+ * con gruppi `####` e voci. Una PR aggiunge il proprio frammento invece di modificare la sezione in
+ * cima, così più PR aperte non si contendono le stesse righe.
+ *
  * @param {string} fragment
- * @returns {Array<{ title: string; groups: Array<{ title: string | null; lines: string[] }> }>}
+ * @returns {{ title: string; groups: { title: string | null; lines: string[] }[] }[]}
  */
 export function fragmentEntries(fragment) {
   const lines = fragment.split("\n");
   const start = lines.findIndex((line) => line.trim() === "## Changelog");
   if (start === -1) return [];
   const end = blockEnd(lines, start, lines.length, ["## "]);
-  /** @type {Array<{ title: string; groups: Array<{ title: string | null; lines: string[] }> }>} */
+  /** @type {{ title: string; groups: { title: string | null; lines: string[] }[] }[]} */
   const parts = [];
   for (const line of lines.slice(start + 1, end)) {
     if (line.startsWith("### ")) parts.push({ title: line.slice(4).trim(), groups: [] });
@@ -97,6 +102,7 @@ export function fragmentEntries(fragment) {
  * e gruppi mancanti si aggiungono nell'ordine della pagina. È il changelog che build, note di
  * rilascio e controlli leggono; il giorno della pubblicazione lo scrive in `CHANGELOG.md`, nella
  * versione pubblicata anche se nel frattempo ne è stata aperta un'altra.
+ *
  * @param {string} changelog
  * @param {string[]} fragments
  * @param {string} [version]

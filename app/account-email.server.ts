@@ -1,20 +1,19 @@
-import { waitUntil } from "./service-activity.server";
-import { securityRecipient } from "./domain/sign-in-methods.server";
-
 import { supportEmail } from "./app-copy";
 import { accessPath, securityPath, storesPath } from "./app-links";
 import { emailVerificationSeconds } from "./domain/email-change.server";
+import { securityRecipient } from "./domain/sign-in-methods.server";
 import { ApplicationError, logFailure } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 import { escapeMarkup as escapeHtml } from "./markup";
+import { waitUntil } from "./service-activity.server";
 
 const emailFrom = { email: "noreply@fiscalbay.it", name: "FiscalBay" };
 
 /**
- * Invio non riuscito. Il codice del provider (`E_RECIPIENT_SUPPRESSED`, `E_RATE_LIMIT_EXCEEDED`
- * e simili) è un'etichetta fissa che i log possono riportare; il messaggio no. `undeliverable`
- * distingue un indirizzo nella lista di soppressione, dopo un rimbalzo o un reclamo, da un
- * errore che un nuovo tentativo può superare.
+ * Invio non riuscito. Il codice del provider (`E_RECIPIENT_SUPPRESSED`, `E_RATE_LIMIT_EXCEEDED` e
+ * simili) è un'etichetta fissa che i log possono riportare; il messaggio no. `undeliverable`
+ * distingue un indirizzo nella lista di soppressione, dopo un rimbalzo o un reclamo, da un errore
+ * che un nuovo tentativo può superare.
  */
 export class EmailError extends ApplicationError {
   readonly undeliverable: boolean;
@@ -149,8 +148,8 @@ async function sendAccountEmail(
 }
 
 /**
- * Lingua di un link Better Auth: la pagina di ritorno (`callbackURL`) è già localizzata da
- * chi ha avviato la richiesta, quindi una pagina `/en` vuol dire inglese.
+ * Lingua di un link Better Auth: la pagina di ritorno (`callbackURL`) è già localizzata da chi ha
+ * avviato la richiesta, quindi una pagina `/en` vuol dire inglese.
  */
 export function linkLanguage(url: string): Language {
   const callback = new URL(url).searchParams.get("callbackURL");
@@ -163,8 +162,8 @@ export function linkLanguage(url: string): Language {
 }
 
 /**
- * Email dei link di Better Auth: conferma dell'indirizzo, nuova password, cambio email e
- * conferma della cancellazione dell'account.
+ * Email dei link di Better Auth: conferma dell'indirizzo, nuova password, cambio email e conferma
+ * della cancellazione dell'account.
  */
 function authEmail(
   kind: AuthEmailKind,
@@ -285,10 +284,10 @@ function withCode(email: AccountEmail, code: string, language: Language): Accoun
 }
 
 /**
- * Chi si registra con un indirizzo già usato riceve la stessa risposta di un nuovo account;
- * il titolare riceve questa email, nella lingua della pagina di registrazione. Come la conferma
- * di un nuovo indirizzo, l'invio esce dal percorso della risposta: il tempo di risposta non
- * rivela che l'indirizzo è registrato.
+ * Chi si registra con un indirizzo già usato riceve la stessa risposta di un nuovo account; il
+ * titolare riceve questa email, nella lingua della pagina di registrazione. Come la conferma di un
+ * nuovo indirizzo, l'invio esce dal percorso della risposta: il tempo di risposta non rivela che
+ * l'indirizzo è registrato.
  */
 export async function sendExistingAccountEmail(
   env: Env,
@@ -418,8 +417,8 @@ function securityEmail(event: SecurityEvent, language: Language): AccountEmail {
 
 /**
  * Avvisa il titolare di una modifica ai metodi di accesso, all'indirizzo corrente e nella lingua
- * delle sue preferenze o, se non l'ha scelta, dei Termini accettati. Fuori dal percorso della risposta: un invio fallito si registra
- * nei log senza annullare la modifica.
+ * delle sue preferenze o, se non l'ha scelta, dei Termini accettati. Fuori dal percorso della
+ * risposta: un invio fallito si registra nei log senza annullare la modifica.
  */
 export function notifySecurityEvent(env: Env, userId: string, event: SecurityEvent): void {
   waitUntil(
@@ -472,9 +471,9 @@ export async function sendInactivityNotice(
 }
 
 /**
- * Negozio da ricollegare: eBay ha rifiutato o revocato il consenso, oppure è scaduto, e le
- * letture sono ferme. Porta a Negozi, dove si ricollega; nessun dato degli acquirenti. Il compito
- * che la invia la registra soltanto se l'invio riesce.
+ * Negozio da ricollegare: eBay ha rifiutato o revocato il consenso, oppure è scaduto, e le letture
+ * sono ferme. Porta a Negozi, dove si ricollega; nessun dato degli acquirenti. Il compito che la
+ * invia la registra soltanto se l'invio riesce.
  */
 export async function sendReconnectNotice(
   env: Env,
@@ -507,8 +506,8 @@ export async function sendReconnectNotice(
 }
 
 /**
- * Cancellazione dell'account completata, alla fine del lavoro: l'indirizzo arriva dalla
- * richiesta, perché l'utente non esiste più. Il pulsante porta al sito pubblico.
+ * Cancellazione dell'account completata, alla fine del lavoro: l'indirizzo arriva dalla richiesta,
+ * perché l'utente non esiste più. Il pulsante porta al sito pubblico.
  */
 export async function sendAccountDeletedNotice(
   env: Env,

@@ -14,9 +14,9 @@ type RequestLimitRule = { limit: number; period: 10 | 60 };
 
 /**
  * Due Worker dallo stesso codice. `--mode live` seleziona Production; ogni altra modalità
- * (`production` predefinita di Vite in build, `development` in dev) resta sul Worker test,
- * così una build senza modalità esplicita non punta mai a Production.
- * Le migration D1 restano nella cartella predefinita `migrations/`.
+ * (`production` predefinita di Vite in build, `development` in dev) resta sul Worker test, così una
+ * build senza modalità esplicita non punta mai a Production. Le migration D1 restano nella cartella
+ * predefinita `migrations/`.
  */
 
 /** D1 per ambiente: gli script locali e di collaudo li leggono da qui. */
@@ -26,14 +26,14 @@ export const databases = {
 };
 
 /**
- * Archivio dei log a 90 giorni per ambiente (§31): bucket R2 UE senza binding, scritto soltanto
- * dal job Logpush di `scripts/log-archive.mjs` e letto dall'owner con la CLI.
+ * Archivio dei log a 90 giorni per ambiente (§31): bucket R2 UE senza binding, scritto soltanto dal
+ * job Logpush di `scripts/log-archive.mjs` e letto dall'owner con la CLI.
  */
 export const logArchives = { test: "fiscalbay-test-logs", live: "fiscalbay-logs" };
 
 /**
- * Zona DNS comune ai due ambienti. Header, regole WAF, rate limit, DMARC Management e
- * Certificate Transparency Monitoring si applicano con `scripts/zone-protection.mjs` (§24).
+ * Zona DNS comune ai due ambienti. Header, regole WAF, rate limit, DMARC Management e Certificate
+ * Transparency Monitoring si applicano con `scripts/zone-protection.mjs` (§24).
  */
 export const zone = "fiscalbay.it";
 
@@ -58,8 +58,8 @@ const secrets = {
 
 /**
  * Namespace del Rate Limiting nativo per ambiente (§29): l'identificativo è unico nell'account,
- * quindi test e Production non condividono i contatori. Limiti e finestre, comuni ai due
- * ambienti, stanno in `app/request-limits.json`.
+ * quindi test e Production non condividono i contatori. Limiti e finestre, comuni ai due ambienti,
+ * stanno in `app/request-limits.json`.
  */
 export const requestLimitNamespaces = {
   test: { attempts: "2910", emails: "2911", work: "2912", reports: "2913", challenges: "2914" },

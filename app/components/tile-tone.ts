@@ -1,6 +1,6 @@
 /**
- * Tinte di tessere, avatar ed etichette colorate: i colori di stato e il verde
- * del marchio. Il neutro serve alle aree di servizio, come le Impostazioni.
+ * Tinte di tessere, avatar ed etichette colorate: i colori di stato e il verde del marchio. Il
+ * neutro serve alle aree di servizio, come le Impostazioni.
  */
 export type TileTone = "blue" | "green" | "amber" | "violet" | "teal" | "rose" | "neutral";
 

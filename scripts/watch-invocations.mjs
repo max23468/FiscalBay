@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * Esegue un comando registrando con `wrangler tail` le invocazioni del Worker, e ne salva
- * un riepilogo senza header, cookie né query string: metodo, percorso, stato, esito, tempi,
- * eccezioni e fasi tracciate dal collaudo. Serve a distinguere una richiesta appesa nel Worker da una mai arrivata.
- * Uso: node scripts/watch-invocations.mjs --worker NOME --output FILE -- COMANDO [ARGOMENTI]
+ * Esegue un comando registrando con `wrangler tail` le invocazioni del Worker, e ne salva un
+ * riepilogo senza header, cookie né query string: metodo, percorso, stato, esito, tempi, eccezioni
+ * e fasi tracciate dal collaudo. Serve a distinguere una richiesta appesa nel Worker da una mai
+ * arrivata. Uso: node scripts/watch-invocations.mjs --worker NOME --output FILE -- COMANDO
+ * [ARGOMENTI]
  */
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
@@ -71,10 +72,10 @@ export function summarize(events) {
     });
   const anomalies = invocations.filter(
     (entry) =>
-      entry.outcome !== "ok" ||
-      entry.exceptions.length > 0 ||
-      !(entry.status < 500) ||
-      entry.wallMs > slowWallMs,
+      entry.outcome !== "ok"
+      || entry.exceptions.length > 0
+      || !(entry.status < 500)
+      || entry.wallMs > slowWallMs,
   );
   return { total: invocations.length, anomalies, invocations };
 }

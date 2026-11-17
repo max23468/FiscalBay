@@ -2,10 +2,14 @@ import { env } from "cloudflare:workers";
 import { Check, Store } from "lucide-react";
 import { redirect } from "react-router";
 
+import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
-import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { buttonLink } from "~/components/ui/button-variants";
+
+import { withStoreNotice } from "../access-notice";
+import { areaPage, isSameOrigin, requestedEbayEnvironment } from "../account-area.server";
+import { appCopy, pageTitle } from "../app-copy";
 import {
   accessPath,
   environmentParam,
@@ -15,22 +19,19 @@ import {
   storeLinkPath,
   storesPath,
 } from "../app-links";
-import { withStoreNotice } from "../access-notice";
-import { appCopy, pageTitle } from "../app-copy";
-import { areaPage, isSameOrigin, requestedEbayEnvironment } from "../account-area.server";
 import { readSession } from "../auth.server";
+import { storeLinkAdmitted } from "../domain/admission.server";
+import { readPreferences } from "../domain/preferences.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
+import { serviceSetting } from "../domain/service-settings.server";
 import { ebayOutages, listStores, listStoreScopes } from "../domain/stores.server";
 import { errorResponse } from "../error-response";
 import { tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
-import { storeLinkAdmitted } from "../domain/admission.server";
-import { serviceSetting } from "../domain/service-settings.server";
-import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
-import type { Route } from "./+types/store-link";
-import { readPreferences } from "../domain/preferences.server";
+import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { detectedTimeZone, effectiveTimeZone, type ShellData } from "../preferences";
+import type { Route } from "./+types/store-link";
 
 const noStore = { headers: { "cache-control": "no-store" } };
 
@@ -180,10 +181,7 @@ async function start(request: Request) {
       expectedStoreId || null,
       fromStores,
     ),
-    {
-      status: 303,
-      ...noStore,
-    },
+    { status: 303, ...noStore },
   );
 }
 

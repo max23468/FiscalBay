@@ -2,20 +2,22 @@ import { KeyRound } from "lucide-react";
 import { useState } from "react";
 import { data } from "react-router";
 
-import { AccountsView, StoresView } from "~/components/admin/directory";
 import { CommerceView } from "~/components/admin/commerce";
+import { AccountsView, StoresView } from "~/components/admin/directory";
 import { AbuseView, AuditTable, NoticesView } from "~/components/admin/governance";
-import { JobsView, PerformanceView, QuotasView } from "~/components/admin/operations";
 import { MetricsView } from "~/components/admin/metrics";
+import { JobsView, PerformanceView, QuotasView } from "~/components/admin/operations";
 import { Overview } from "~/components/admin/overview";
 import { AdminShell, type AdminSectionKey } from "~/components/admin/shell";
 import { SwitchesView } from "~/components/admin/switches";
 import { WorkspaceView } from "~/components/admin/workspace";
+import { useCopy } from "~/components/copy-context";
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { FieldError } from "~/components/ui/field";
-import { useCopy } from "~/components/copy-context";
+
+import { areaPage } from "../account-area.server";
 import { loadPasskeyClient } from "../account/passkey";
 import {
   adminSession,
@@ -26,13 +28,12 @@ import {
   sectionFrom,
   type SectionData,
 } from "../admin-console.server";
-import { adminSessionMaxAge } from "../domain/sessions.server";
-import { areaPage } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { adminCopy } from "../copy/admin-copy";
+import { adminSessionMaxAge } from "../domain/sessions.server";
 import { tracePhase } from "../errors";
-import { languageFromPath, localizedPath } from "../i18n";
 import { formatDate } from "../format";
+import { languageFromPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/admin";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {

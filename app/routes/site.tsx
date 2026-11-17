@@ -11,9 +11,8 @@ import { siteColumn } from "~/components/site-column";
 import { SiteLayout } from "~/components/site-layout";
 import { Badge } from "~/components/ui/badge";
 import { buttonLink } from "~/components/ui/button-variants";
+
 import { infoEmail } from "../app-copy";
-import { annualPaidMonths } from "../catalog";
-import { sitePages } from "../copy/site-pages.server";
 import {
   accessPath,
   comparisonGuidePath,
@@ -24,19 +23,21 @@ import {
   visitCookie,
   visitParam,
 } from "../app-links";
+import { annualPaidMonths } from "../catalog";
+import { sitePages } from "../copy/site-pages.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { botUrl } from "../integrations/telegram.server";
-import { faqItems, publicPage, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
+import { faqItems, publicPage, siteListing } from "../site.server";
 import type { Route } from "./+types/site";
 
 const noStore = { "cache-control": "no-store" };
 
 /**
- * Radice pubblica. Con la sessione porta agli Ordini, salvo la scelta «Visita fiscalbay.it»:
- * il parametro diventa un cookie di sessione del browser e l'indirizzo torna pulito, così la
- * pagina resta una sola e non c'è un ciclo fra sito e app. La risposta dipende dalla sessione:
- * soltanto la copia per chi non ha cookie passa dalla cache breve di `page-cache.server.ts`.
+ * Radice pubblica. Con la sessione porta agli Ordini, salvo la scelta «Visita fiscalbay.it»: il
+ * parametro diventa un cookie di sessione del browser e l'indirizzo torna pulito, così la pagina
+ * resta una sola e non c'è un ciclo fra sito e app. La risposta dipende dalla sessione: soltanto la
+ * copia per chi non ha cookie passa dalla cache breve di `page-cache.server.ts`.
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);

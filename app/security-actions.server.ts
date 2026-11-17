@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
 import { data, redirect } from "react-router";
-import { maxPasskeyName } from "./limits";
 
-import { notifySecurityEvent } from "./account-email.server";
 import type { AccountArea } from "./account-area.server";
+import { notifySecurityEvent } from "./account-email.server";
+import { appCopy } from "./app-copy";
 import {
   accessPath,
   accountDeletionPath,
@@ -29,16 +29,16 @@ import {
   removePasskey,
   type AccountMethod,
 } from "./domain/sign-in-methods.server";
-import { appCopy } from "./app-copy";
 import { localizedPath } from "./i18n";
+import { maxPasskeyName } from "./limits";
 import { turnstileActions } from "./turnstile";
 import { turnstileFailure } from "./turnstile.server";
 import type { ActionResult } from "./view-models";
 
 /**
- * Percorso Auth a cui l'azione della Sicurezza inoltra un invio di email o una password: il
- * filtro per IP di quel percorso si applica prima della sessione e di Turnstile, poi l'inoltro
- * è già ammesso.
+ * Percorso Auth a cui l'azione della Sicurezza inoltra un invio di email o una password: il filtro
+ * per IP di quel percorso si applica prima della sessione e di Turnstile, poi l'inoltro è già
+ * ammesso.
  */
 export function securityAuthPath(intent: string, form: FormData): string | null {
   if (intent === "password") return "/request-password-reset";
@@ -137,11 +137,11 @@ export async function securityAction(
     if (field("metodo") === "passkey") {
       const previous = field("precedente");
       const same =
-        recentSignIn(session) &&
-        !!previous &&
-        previous.length <= 128 &&
-        (previous === session.session.id ||
-          (await revokeSession(env.DB, session.user.id, previous)));
+        recentSignIn(session)
+        && !!previous
+        && previous.length <= 128
+        && (previous === session.session.id
+          || (await revokeSession(env.DB, session.user.id, previous)));
       return confirmed(same);
     }
     return confirmed(false);

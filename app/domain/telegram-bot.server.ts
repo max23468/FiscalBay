@@ -1,30 +1,6 @@
-import { activeCoverageSql, activeEntitlementSql } from "./grants.server";
-import { listVisibleOrders } from "./orders.server";
-import { serviceSetting } from "./service-settings.server";
-import { planPausedStore, reconnectStore, storeNameSql } from "./store-state.server";
-import {
-  consumeTelegramStart,
-  saveTelegramChange,
-  type TelegramChange,
-  type TelegramFilter,
-  type TelegramMode,
-  telegramPreferencesSql,
-  unknownChatReply,
-} from "./telegram.server";
-import {
-  copyButtons,
-  date,
-  escape,
-  icons,
-  orderEntry,
-  orderNotice,
-  settingsUrl,
-  splitBlocks,
-  when,
-  zoneName,
-} from "./telegram-messages.server";
 import { appUrl, ordersPath, planPath } from "../app-links";
 import type { BotCommand } from "../bot-commands";
+import { telegramBotCopy as copy } from "../copy/telegram";
 import type { Language } from "../i18n";
 import { UpstreamError } from "../integrations/http.server";
 import {
@@ -38,9 +14,33 @@ import {
   type BotMessage,
 } from "../integrations/telegram.server";
 import { telegramDigestTimes } from "../preferences";
-import type { EbayEnvironment } from "../view-models";
 import { inSequence } from "../sequence";
-import { telegramBotCopy as copy } from "../copy/telegram";
+import type { EbayEnvironment } from "../view-models";
+import { activeCoverageSql, activeEntitlementSql } from "./grants.server";
+import { listVisibleOrders } from "./orders.server";
+import { serviceSetting } from "./service-settings.server";
+import { planPausedStore, reconnectStore, storeNameSql } from "./store-state.server";
+import {
+  copyButtons,
+  date,
+  escape,
+  icons,
+  orderEntry,
+  orderNotice,
+  settingsUrl,
+  splitBlocks,
+  when,
+  zoneName,
+} from "./telegram-messages.server";
+import {
+  consumeTelegramStart,
+  saveTelegramChange,
+  type TelegramChange,
+  type TelegramFilter,
+  type TelegramMode,
+  telegramPreferencesSql,
+  unknownChatReply,
+} from "./telegram.server";
 
 /**
  * Comandi e pulsanti del bot per i venditori (D199). Ogni risposta rilegge collegamento,
@@ -197,14 +197,7 @@ function helpMessage(env: Env, language: Language): BotMessage {
 function premiumMessage(env: Env, language: Language): BotMessage {
   return {
     html: `⭐ ${escape(copy[language].premiumRequired)}`,
-    buttons: [
-      [
-        {
-          text: `⭐ ${copy[language].choosePlan}`,
-          url: appUrl(env, language, planPath),
-        },
-      ],
-    ],
+    buttons: [[{ text: `⭐ ${copy[language].choosePlan}`, url: appUrl(env, language, planPath) }]],
   };
 }
 
@@ -345,10 +338,7 @@ async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessag
       [
         coverage
           ? { text: `${marks.settings} ${text.preferences}`, callback_data: data(link, "pr") }
-          : {
-              text: `${marks.plan} ${text.choosePlan}`,
-              url: appUrl(env, link.language, planPath),
-            },
+          : { text: `${marks.plan} ${text.choosePlan}`, url: appUrl(env, link.language, planPath) },
         { text: `${icons.link} ${text.openSettings}`, url: settingsUrl(env, link.language) },
       ],
     ],
@@ -483,9 +473,9 @@ async function storesMessage(env: Env, link: Link, page: number, now: Date): Pro
 }
 
 /**
- * Ultimi ordini definitivi dei negozi inclusi, letti come nel sito dall'utente dello spazio, in
- * un solo messaggio a pagine di cinque, fino a venti: il numero dell'ordine apre il dettaglio
- * e le pagine aggiornano lo stesso messaggio.
+ * Ultimi ordini definitivi dei negozi inclusi, letti come nel sito dall'utente dello spazio, in un
+ * solo messaggio a pagine di cinque, fino a venti: il numero dell'ordine apre il dettaglio e le
+ * pagine aggiornano lo stesso messaggio.
  */
 async function latestMessage(env: Env, link: Link, offset: number, now: Date): Promise<BotMessage> {
   const text = copy[link.language];
@@ -564,10 +554,10 @@ function preferenceChange(action: string | undefined, args: string[]): TelegramC
 }
 
 /**
- * Tocco su un pulsante: la risposta immediata chiude l'attesa, poi il menu si aggiorna nello
- * stesso messaggio. Un pulsante di un collegamento sostituito o scollegato non ha effetto; senza
- * Premium il menu torna allo stato. Ogni scelta porta il valore voluto, così un tocco ripetuto
- * non la inverte.
+ * Tocco su un pulsante: la risposta immediata chiude l'attesa, poi il menu si aggiorna nello stesso
+ * messaggio. Un pulsante di un collegamento sostituito o scollegato non ha effetto; senza Premium
+ * il menu torna allo stato. Ogni scelta porta il valore voluto, così un tocco ripetuto non la
+ * inverte.
  */
 async function consumeCallback(
   env: Env,

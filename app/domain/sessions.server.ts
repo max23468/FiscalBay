@@ -6,11 +6,7 @@ import { elapsedMs } from "../time";
  * Durata delle sessioni in secondi: scadenza, rinnovo con l'uso e accesso recente. Il rinnovo
  * aggiorna anche l'ultima attività mostrata in Sicurezza, quindi avviene al più una volta l'ora.
  */
-export const sessionPolicy = {
-  expiresIn: 7 * 86_400,
-  updateAge: 3_600,
-  freshAge: 86_400,
-} as const;
+export const sessionPolicy = { expiresIn: 7 * 86_400, updateAge: 3_600, freshAge: 86_400 } as const;
 
 /** Campi della sessione Better Auth usati qui, compresi quelli aggiunti da FiscalBay. */
 export interface AuthSession {
@@ -19,8 +15,8 @@ export interface AuthSession {
 }
 
 /**
- * Token tecnico della console: l'etichetta esiste soltanto se il token non è revocato né
- * scaduto. Un token senza scadenza non apre la console.
+ * Token tecnico della console: l'etichetta esiste soltanto se il token non è revocato né scaduto.
+ * Un token senza scadenza non apre la console.
  */
 export async function agentTokenLabel(db: D1Database, tokenHash: string, now: Date) {
   const row = await db
@@ -41,9 +37,9 @@ export function recentSignIn(session: AuthSession, now = new Date()): boolean {
 }
 
 /**
- * Livello di accesso all'area admin. Il secondo fattore è la sessione aperta da una passkey
- * con verifica dell'utente: password, Google, eBay o un link email non bastano, anche se
- * l'utente ha una passkey registrata.
+ * Livello di accesso all'area admin. Il secondo fattore è la sessione aperta da una passkey con
+ * verifica dell'utente: password, Google, eBay o un link email non bastano, anche se l'utente ha
+ * una passkey registrata.
  */
 export function adminAccess(
   session: AuthSession | null,
@@ -51,8 +47,8 @@ export function adminAccess(
 ): "none" | "verify" | "granted" {
   if (!session?.user.admin) return "none";
   if (
-    !session.session.passkeyVerified ||
-    elapsedMs(session.session.createdAt, now) >= adminSessionMaxAge
+    !session.session.passkeyVerified
+    || elapsedMs(session.session.createdAt, now) >= adminSessionMaxAge
   ) {
     return "verify";
   }
@@ -60,8 +56,8 @@ export function adminAccess(
 }
 
 /**
- * Motivo per cui la sessione non può aggiungere o rimuovere passkey, oppure null. Un admin
- * deve prima accedere con passkey; gli altri utenti, con un accesso recente qualsiasi.
+ * Motivo per cui la sessione non può aggiungere o rimuovere passkey, oppure null. Un admin deve
+ * prima accedere con passkey; gli altri utenti, con un accesso recente qualsiasi.
  */
 export function passkeyChangeBlock(
   session: AuthSession,
@@ -104,8 +100,8 @@ export async function listActiveSessions(
 }
 
 /**
- * Chiude una sessione dell'utente; quella di un altro utente resta invariata. False se la
- * sessione non è sua o non esiste più.
+ * Chiude una sessione dell'utente; quella di un altro utente resta invariata. False se la sessione
+ * non è sua o non esiste più.
  */
 export async function revokeSession(db: D1Database, userId: string, id: string): Promise<boolean> {
   const result = await db

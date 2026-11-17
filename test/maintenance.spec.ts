@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { insertOrder, now, resetDatabase, seed } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
+import { insertOrder, now, resetDatabase, seed } from "./fixtures/database-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

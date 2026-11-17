@@ -1,14 +1,14 @@
-import { adminPageSize } from "../limits";
 import { stripeEnvironment } from "../integrations/stripe.server";
-import { vacantLifetimeSeats } from "./lifetime.server";
+import { adminPageSize } from "../limits";
 import { activeCoverageSql } from "./grants.server";
+import { vacantLifetimeSeats } from "./lifetime.server";
 import { storeLabelSql } from "./store-state.server";
 import { listWorkspaceStores, pauseReasonSql, type StoreStatus } from "./stores.server";
 
 /**
- * Anagrafica della console (§15): account, spazi e negozi con piano, diritti, incassi e stato
- * delle letture. Nessuna impersonazione, nessun ordine, buyer o valore fiscale: dei negozi
- * compaiono soltanto identità, collegamento e conteggi.
+ * Anagrafica della console (§15): account, spazi e negozi con piano, diritti, incassi e stato delle
+ * letture. Nessuna impersonazione, nessun ordine, buyer o valore fiscale: dei negozi compaiono
+ * soltanto identità, collegamento e conteggi.
  */
 
 /** Testo cercato: email, nome, ragione sociale, spazio, negozio o account eBay. */
@@ -72,12 +72,14 @@ export async function listAccounts(
       }
     >();
   return {
-    rows: results.slice(0, adminPageSize).map((row) => ({
-      ...row,
-      createdAt: new Date(row.createdAt).toISOString(),
-      admin: row.admin === 1,
-      waitlisted: row.waitlisted === 1,
-    })),
+    rows: results
+      .slice(0, adminPageSize)
+      .map((row) => ({
+        ...row,
+        createdAt: new Date(row.createdAt).toISOString(),
+        admin: row.admin === 1,
+        waitlisted: row.waitlisted === 1,
+      })),
     more: results.length > adminPageSize,
   };
 }
@@ -312,8 +314,8 @@ const storeHealthSql = (
     AND r.detail_error IS NOT NULL) AS detailErrors`;
 
 /**
- * Negozio con un problema, sulle colonne di `storeHealthSql`: ancora collegato, con il consenso
- * non valido, due letture fallite di seguito o dettagli non riusciti. Vale per l'elenco e per il
+ * Negozio con un problema, sulle colonne di `storeHealthSql`: ancora collegato, con il consenso non
+ * valido, due letture fallite di seguito o dettagli non riusciti. Vale per l'elenco e per il
  * conteggio della panoramica.
  */
 const storeProblemSql = `(NOT removed AND NOT disconnected
@@ -361,13 +363,15 @@ export async function listAllStores(
       }
     >();
   return {
-    rows: results.slice(0, adminPageSize).map((row) => ({
-      ...row,
-      disconnected: row.disconnected === 1,
-      removed: row.removed === 1,
-      syncing: row.syncing === 1,
-      pauses: row.pauses?.split(",").sort() ?? [],
-    })),
+    rows: results
+      .slice(0, adminPageSize)
+      .map((row) => ({
+        ...row,
+        disconnected: row.disconnected === 1,
+        removed: row.removed === 1,
+        syncing: row.syncing === 1,
+        pauses: row.pauses?.split(",").sort() ?? [],
+      })),
     more: results.length > adminPageSize,
   };
 }
@@ -380,8 +384,8 @@ export type ConsoleSummary = {
 };
 
 /**
- * Numeri chiave della panoramica: account, spazi coperti per origine e negozi che leggono,
- * con quelli che hanno un problema delle letture o del collegamento.
+ * Numeri chiave della panoramica: account, spazi coperti per origine e negozi che leggono, con
+ * quelli che hanno un problema delle letture o del collegamento.
  */
 export async function consoleSummary(db: D1Database, now = new Date()): Promise<ConsoleSummary> {
   const at = now.toISOString();

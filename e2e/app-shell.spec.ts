@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
+
 import { areas, clickHydrated, enter, open, searched, setScenario } from "./components";
+import { expect, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { whatsNew } from "./page-cases";
 import { testAccount } from "./test-account";
@@ -39,8 +40,8 @@ async function openAccountFromMenu(page: Page, base: string) {
 }
 
 /**
- * Ricerca della top bar con un solo risultato: elenco filtrato con la query cifrata
- * nell'indirizzo, poi il dettaglio dal suggerimento. Restituisce il pannello aperto.
+ * Ricerca della top bar con un solo risultato: elenco filtrato con la query cifrata nell'indirizzo,
+ * poi il dettaglio dal suggerimento. Restituisce il pannello aperto.
  */
 async function searchFromTopBar(page: Page, base: string, query: string, suggestion: RegExp) {
   const search = page.getByRole("searchbox", { name: "Cerca ordini" });
@@ -529,8 +530,8 @@ for (const language of ["it", "en"] as const) {
           await expect(card).toContainText(language === "it" ? "Partita IVA" : "VAT number");
           const unlocked = page.waitForResponse(
             (response) =>
-              /\/(?:ordini|orders)\.data$/u.test(response.url()) &&
-              response.request().method() === "POST",
+              /\/(?:ordini|orders)\.data$/u.test(response.url())
+              && response.request().method() === "POST",
           );
           await card
             .getByRole("button", {
@@ -561,12 +562,14 @@ for (const language of ["it", "en"] as const) {
           await expect(
             page.getByText(new RegExp(`^(?:\\S+ \\()?${previewLabel}\\)?$`, "u")),
           ).toBeVisible();
-          const faq = page.locator("details").filter({
-            hasText:
-              language === "it"
-                ? "Quando un ordine conta come sbloccato?"
-                : "When does an order count as unlocked?",
-          });
+          const faq = page
+            .locator("details")
+            .filter({
+              hasText:
+                language === "it"
+                  ? "Quando un ordine conta come sbloccato?"
+                  : "When does an order count as unlocked?",
+            });
           await faq.locator("summary").click();
           await expect(faq).toContainText(language === "it" ? "Partita IVA" : "VAT number");
           await expect(faq).toContainText(
@@ -608,13 +611,15 @@ for (const language of ["it", "en"] as const) {
           expect(
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
           ).toBe(true);
-          await test.info().attach("loading", {
-            body: await page.screenshot({
-              fullPage: true,
-              path: test.info().outputPath("loading.png"),
-            }),
-            contentType: "image/png",
-          });
+          await test
+            .info()
+            .attach("loading", {
+              body: await page.screenshot({
+                fullPage: true,
+                path: test.info().outputPath("loading.png"),
+              }),
+              contentType: "image/png",
+            });
           await page.goto(language === "it" ? "/termini" : "/en/terms");
           await expect(
             page.getByText(
@@ -847,9 +852,7 @@ test("negozi con problema e conferma forte dell'eliminazione", async ({ page }) 
   await expect(page.getByText(/collegamento scaduto$/u).first()).toBeVisible();
   await page
     .getByRole("navigation", { name: "Navigazione principale" })
-    .getByRole("link", {
-      name: "Negozi eBay",
-    })
+    .getByRole("link", { name: "Negozi eBay" })
     .click();
   await expect(page.getByRole("table", { name: "Elenco negozi" })).toContainText(
     "Negozio non verificabile",
@@ -1031,9 +1034,9 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
 
   await chooseScenario(page, "eBay non risponde");
   await expect(
-    page.getByRole("article", { name: "Ordine 19-62740-31885" }).getByRole("button", {
-      name: "Riprova",
-    }),
+    page
+      .getByRole("article", { name: "Ordine 19-62740-31885" })
+      .getByRole("button", { name: "Riprova" }),
   ).toBeDisabled();
   // Anche il ricollegamento del consenso in scadenza chiama eBay e resta sospeso.
   await expect(page.getByRole("button", { name: "Ricollega negozio" })).toBeDisabled();

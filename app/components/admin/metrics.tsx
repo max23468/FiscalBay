@@ -1,10 +1,9 @@
 import { cn } from "cn";
-
-import type { Language } from "../../i18n";
 import { Link } from "react-router";
 
 import type { ProductMetrics } from "../../domain/product-metrics.server";
 import { formatNumber } from "../../format";
+import type { Language } from "../../i18n";
 import { DataTable, Panel, Stat, StatGrid } from "./kit";
 import { useAdmin } from "./use-admin";
 
@@ -50,7 +49,7 @@ export function MetricsView({ metrics }: { metrics: ProductMetrics }) {
         </span>
       </nav>
       <Panel title={m.funnel}>
-        <p className="text-sm text-muted-foreground text-pretty">{m.funnelNote}</p>
+        <p className="text-sm text-pretty text-muted-foreground">{m.funnelNote}</p>
         <DataTable
           head={[m.step, m.reached, m.rate, m.base, m.median]}
           numeric={[1, 2, 4]}
@@ -76,7 +75,7 @@ export function MetricsView({ metrics }: { metrics: ProductMetrics }) {
         ) : null}
       </Panel>
       <Panel title={m.sources}>
-        <p className="text-sm text-muted-foreground text-pretty">{m.sourcesNote}</p>
+        <p className="text-sm text-pretty text-muted-foreground">{m.sourcesNote}</p>
         <DataTable
           head={[m.channel, m.signups, m.activations, m.payers]}
           numeric={[1, 2, 3]}

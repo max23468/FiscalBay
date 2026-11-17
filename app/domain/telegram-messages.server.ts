@@ -1,21 +1,21 @@
 import { appCopy } from "../app-copy";
 import { appUrl, notificationSettingsPath, ordersPath } from "../app-links";
-import { ebayOrderHref } from "../orders/ebay-links";
 import { buyerNameView } from "../contact";
+import { telegramMessageCopy as text } from "../copy/telegram";
 import { formatAmount, type Language, locales } from "../i18n";
 import type { BotButton, BotMessage } from "../integrations/telegram.server";
 import { escapeMarkup } from "../markup";
+import { ebayOrderHref } from "../orders/ebay-links";
 import { zoneLabel } from "../preferences";
+import { sha256Hex } from "../sealed.server";
 import { displayTaxValue, shownTaxType } from "../tax-quality";
+import { dayMilliseconds, localClock } from "../time";
 import type { EbayEnvironment, FiscalSituation } from "../view-models";
 import type { VisibleOrder } from "./orders.server";
-import { sha256Hex } from "../sealed.server";
-import { dayMilliseconds, localClock } from "../time";
-import { telegramMessageCopy as text } from "../copy/telegram";
 
 /**
- * Testi del bot e loro composizione in HTML. Ogni valore che arriva da eBay o dall'utente passa
- * da `escape`; il messaggio non riporta indirizzo, email o telefono dell'acquirente.
+ * Testi del bot e loro composizione in HTML. Ogni valore che arriva da eBay o dall'utente passa da
+ * `escape`; il messaggio non riporta indirizzo, email o telefono dell'acquirente.
  */
 
 /** Limite di Telegram dopo l'interpretazione dell'HTML, con un margine per i tag. */
@@ -26,9 +26,9 @@ export function escape(text: string): string {
 }
 
 /**
- * Suddivide i blocchi in messaggi entro il limite, senza spezzare un blocco che ci sta per
- * intero; un blocco più lungo si divide per righe, e una riga troppo lunga, che non contiene
- * tag, per caratteri.
+ * Suddivide i blocchi in messaggi entro il limite, senza spezzare un blocco che ci sta per intero;
+ * un blocco più lungo si divide per righe, e una riga troppo lunga, che non contiene tag, per
+ * caratteri.
  */
 export function splitBlocks(blocks: string[], limit = messageLimit): string[] {
   const parts: string[] = [];
@@ -253,14 +253,14 @@ export function orderButtons(
 function changeTitle(language: Language, notice: Pick<OrderNotice, "values">, change: OrderChange) {
   const copy = text[language];
   const vatOnly =
-    notice.values.some((value) => value.kind === "PIVA") &&
-    !notice.values.some((value) => value.kind === "CF");
+    notice.values.some((value) => value.kind === "PIVA")
+    && !notice.values.some((value) => value.kind === "CF");
   return change !== "new" && vatOnly ? copy.vatChange[change] : copy.change[change];
 }
 
 /**
- * Notifica di un ordine: in testa la variazione e il dato fiscale, poi in citazione
- * acquirente, totale, articoli, numero e data.
+ * Notifica di un ordine: in testa la variazione e il dato fiscale, poi in citazione acquirente,
+ * totale, articoli, numero e data.
  */
 export function orderMessage(
   env: { APP_ORIGIN: string },
@@ -300,8 +300,8 @@ export function orderMessage(
 }
 
 /**
- * Un ordine in un elenco, come nel riepilogo e negli ultimi ordini: il numero apre il
- * dettaglio in FiscalBay, poi acquirente, totale, data e dato fiscale.
+ * Un ordine in un elenco, come nel riepilogo e negli ultimi ordini: il numero apre il dettaglio in
+ * FiscalBay, poi acquirente, totale, data e dato fiscale.
  */
 export function orderEntry(
   env: { APP_ORIGIN: string },
@@ -328,8 +328,8 @@ export function orderEntry(
 }
 
 /**
- * Un pulsante per codice autorizzato degli ordini, scelto come nella notifica e presente nel
- * testo: il codice nel pulsante dice di quale ordine è, il tocco lo copia.
+ * Un pulsante per codice autorizzato degli ordini, scelto come nella notifica e presente nel testo:
+ * il codice nel pulsante dice di quale ordine è, il tocco lo copia.
  */
 export function copyButtons(notices: OrderNotice[], html: string): BotButton[][] {
   const codes = new Set(
@@ -413,9 +413,7 @@ export function importMessage(
       [
         {
           text: `${icons.link} ${text[language].orders}`,
-          url: appUrl(env, language, ordersPath, summary.environment, {
-            negozio: summary.storeId,
-          }),
+          url: appUrl(env, language, ordersPath, summary.environment, { negozio: summary.storeId }),
         },
       ],
     ],

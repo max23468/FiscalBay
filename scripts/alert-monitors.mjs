@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * Monitor degli avvisi (OBSERVABILITY.md, incidenti): query della SQL API che Cloudflare valuta
- * fuori dal Worker, con l'avviso per email all'owner. Coprono ciò che il compito
- * `owner_incidents` non può segnalare: cron fermo, eccezioni, coda dei falliti, spazio D1 ed
- * email non consegnate. Sono policy `custom_analytics` dell'account, riconosciute dal nome:
- * `apply` crea quelle mancanti e riscrive le altre; il readback le confronta con le previste.
- * Il monitor delle email è comune ai due ambienti.
+ * fuori dal Worker, con l'avviso per email all'owner. Coprono ciò che il compito `owner_incidents`
+ * non può segnalare: cron fermo, eccezioni, coda dei falliti, spazio D1 ed email non consegnate.
+ * Sono policy `custom_analytics` dell'account, riconosciute dal nome: `apply` crea quelle mancanti
+ * e riscrive le altre; il readback le confronta con le previste. Il monitor delle email è comune ai
+ * due ambienti.
  *
  * L'account ammette cinque policy `custom_analytics`, quante ne servono a un ambiente: restano
  * quelle della Production. `--mode test` serve a provarle sul test e prende il loro posto, così
@@ -143,8 +143,8 @@ export function checkReadback(desired, policies) {
     const found = policies.filter((policy) => policy.name === expected.name);
     return [
       expected.name,
-      found.length === 1 &&
-        JSON.stringify(comparable(found[0])) === JSON.stringify(comparable(expected)),
+      found.length === 1
+        && JSON.stringify(comparable(found[0])) === JSON.stringify(comparable(expected)),
     ];
   });
   return { ok: checks.every(([, ok]) => ok), checks: Object.fromEntries(checks) };

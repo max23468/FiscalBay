@@ -1,11 +1,11 @@
-import { UpstreamError, upstreamText } from "../http.server";
-import type { EbayAccess } from "./environment.server";
 import {
   orderObservationSchema,
   type OrderObservation,
 } from "../../domain/order-observation.server";
 import { escapeMarkup } from "../../markup";
 import { parseMinor } from "../../money";
+import { UpstreamError, upstreamText } from "../http.server";
+import type { EbayAccess } from "./environment.server";
 
 /**
  * Trading resta circoscritto alle chiamate necessarie: `GetOrders` per gli acquisti prima del
@@ -34,13 +34,7 @@ export type TradingTaxIdentifier = {
   attributes?: ReadonlyArray<{ name: string; value: string }>;
 };
 
-const xmlEntities: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-};
+const xmlEntities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
 
 function xmlText(value: string): string {
   return value
@@ -113,8 +107,8 @@ async function tradingCall(access: EbayAccess, call: string, fields: string): Pr
 }
 
 /**
- * Risposta Trading già verificata con `tradingAck`: i parser ricevono soltanto letture valide e
- * non ripetono il controllo.
+ * Risposta Trading già verificata con `tradingAck`: i parser ricevono soltanto letture valide e non
+ * ripetono il controllo.
  */
 async function tradingRequest(access: EbayAccess, call: string, fields: string): Promise<string> {
   const xml = await upstreamText(
@@ -130,9 +124,9 @@ async function tradingRequest(access: EbayAccess, call: string, fields: string):
         "x-ebay-api-iaf-token": access.accessToken,
       },
       body:
-        '<?xml version="1.0" encoding="utf-8"?>' +
-        `<${call}Request xmlns="urn:ebay:apis:eBLBaseComponents">` +
-        `<Version>${tradingApiVersion}</Version>${fields}</${call}Request>`,
+        '<?xml version="1.0" encoding="utf-8"?>'
+        + `<${call}Request xmlns="urn:ebay:apis:eBLBaseComponents">`
+        + `<Version>${tradingApiVersion}</Version>${fields}</${call}Request>`,
     },
     { maxBytes: tradingMaxBytes },
   );
@@ -155,9 +149,9 @@ export async function readTradingOrders(
   const xml = await tradingCall(
     access,
     "GetOrders",
-    `<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>` +
-      `<ModTimeFrom>${from}</ModTimeFrom><ModTimeTo>${until}</ModTimeTo>` +
-      `<Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>${input.page}</PageNumber></Pagination>`,
+    `<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>`
+      + `<ModTimeFrom>${from}</ModTimeFrom><ModTimeTo>${until}</ModTimeTo>`
+      + `<Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>${input.page}</PageNumber></Pagination>`,
   );
   return parseTradingOrders(xml);
 }
@@ -168,8 +162,8 @@ function orderBlocks(xml: string): string[] {
 }
 
 /**
- * Il blocco senza le transazioni: qui stanno i campi dell'ordine e dell'acquirente, e quelli
- * delle transazioni non li contaminano.
+ * Il blocco senza le transazioni: qui stanno i campi dell'ordine e dell'acquirente, e quelli delle
+ * transazioni non li contaminano.
  */
 function orderHeader(block: string): string {
   return block.replace(/<TransactionArray>[\s\S]*?<\/TransactionArray>/gu, "");
@@ -298,8 +292,8 @@ export function parseTradingOrders(xml: string) {
               : status,
           fulfillmentStatus: xmlField(header, "ShippedTime") ? "FULFILLED" : null,
           cancelStatus:
-            ["Cancelled", "Canceled"].includes(status) ||
-            xmlField(header, "CancelStatus") === "CancelClosedWithRefund"
+            ["Cancelled", "Canceled"].includes(status)
+            || xmlField(header, "CancelStatus") === "CancelClosedWithRefund"
               ? "CANCELED"
               : xmlField(header, "CancelStatus"),
           buyer: {
@@ -341,10 +335,10 @@ export function parseTradingOrders(xml: string) {
     }
   }
   if (
-    !Number.isSafeInteger(Number(totalText)) ||
-    Number(totalText) < entries ||
-    new Set(orders.map((order) => order.externalOrderId)).size !== orders.length ||
-    (moreText === "true" && !entries)
+    !Number.isSafeInteger(Number(totalText))
+    || Number(totalText) < entries
+    || new Set(orders.map((order) => order.externalOrderId)).size !== orders.length
+    || (moreText === "true" && !entries)
   )
     throw new UpstreamError("invalid_response");
   return { orders, total: Number(totalText), more: moreText === "true", skipped };
@@ -394,9 +388,9 @@ export async function readTradingTaxObservations(
   const xml = await tradingCall(
     access,
     "GetOrders",
-    "<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
-      `<OrderIDArray>${orderIds.map((id) => `<OrderID>${escapeXml(id)}</OrderID>`).join("")}</OrderIDArray>` +
-      `<Pagination><EntriesPerPage>${tradingTaxBatch}</EntriesPerPage><PageNumber>1</PageNumber></Pagination>`,
+    "<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>"
+      + `<OrderIDArray>${orderIds.map((id) => `<OrderID>${escapeXml(id)}</OrderID>`).join("")}</OrderIDArray>`
+      + `<Pagination><EntriesPerPage>${tradingTaxBatch}</EntriesPerPage><PageNumber>1</PageNumber></Pagination>`,
   );
   if (xmlField(xml, "HasMoreOrders") === "true") throw new UpstreamError("invalid_response");
   const blocks = orderBlocks(xml);
@@ -435,12 +429,12 @@ export function qualifiedImageUrl(value: string): string | null {
   } catch {
     return null;
   }
-  return url.protocol === "https:" &&
-    imageHosts.has(url.hostname) &&
-    !url.port &&
-    !url.username &&
-    !url.password &&
-    /\.(?:jpe?g|png|webp)$/iu.test(url.pathname)
+  return url.protocol === "https:"
+    && imageHosts.has(url.hostname)
+    && !url.port
+    && !url.username
+    && !url.password
+    && /\.(?:jpe?g|png|webp)$/iu.test(url.pathname)
     ? url.href
     : null;
 }
@@ -477,11 +471,11 @@ export function qualifiedEbayUrl(value: string): string | null {
   } catch {
     return null;
   }
-  return url.protocol === "https:" &&
-    /^(?:[a-z\d-]+\.)*ebay\.[a-z]{2,3}(?:\.[a-z]{2})?$/u.test(url.hostname) &&
-    !url.port &&
-    !url.username &&
-    !url.password
+  return url.protocol === "https:"
+    && /^(?:[a-z\d-]+\.)*ebay\.[a-z]{2,3}(?:\.[a-z]{2})?$/u.test(url.hostname)
+    && !url.port
+    && !url.username
+    && !url.password
     ? url.href
     : null;
 }
@@ -524,8 +518,8 @@ export type SellerStanding = {
 };
 
 /**
- * Feedback e stato Top Rated in una risposta `GetUser`. eBay riporta `TopRatedSeller` soltanto
- * per chi lo è: l'assenza vale come venditore non Top Rated.
+ * Feedback e stato Top Rated in una risposta `GetUser`. eBay riporta `TopRatedSeller` soltanto per
+ * chi lo è: l'assenza vale come venditore non Top Rated.
  */
 export function parseSellerStanding(xml: string): SellerStanding {
   const user = /<User>([\s\S]*)<\/User>/u.exec(xml)?.[1] ?? "";

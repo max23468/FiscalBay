@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { createCookie, data, redirect } from "react-router";
 
+import { withStoreNotice } from "../access-notice";
 import { assertSameOrigin } from "../account-area.server";
 import { appCopy, type AppCopy } from "../app-copy";
 import {
@@ -9,7 +10,6 @@ import {
   previewSettingsPath,
   previewStoresPath,
 } from "../app-links";
-import { withStoreNotice } from "../access-notice";
 import { languageFromPath, localizedPath } from "../i18n";
 import {
   marketingIntent,
@@ -20,7 +20,10 @@ import {
 import type { ActionResult } from "../view-models";
 import { isScenarioId, loadScenario, scenarioVerified, type ScenarioId } from "./scenarios.server";
 
-/** Scenario scelto e ordini sbloccati per finta: niente dati personali, solo identificativi sintetici. */
+/**
+ * Scenario scelto e ordini sbloccati per finta: niente dati personali, solo identificativi
+ * sintetici.
+ */
 const previewCookie = createCookie("fb_anteprima", {
   path: "/",
   httpOnly: true,
@@ -50,8 +53,8 @@ export function assertPreviewAvailable() {
 }
 
 /**
- * Prima di ogni action dell'anteprima: come nell'area reale, un modulo inviato da un altro sito
- * non cambia lo scenario né lo stato simulato.
+ * Prima di ogni action dell'anteprima: come nell'area reale, un modulo inviato da un altro sito non
+ * cambia lo scenario né lo stato simulato.
  */
 export function assertPreviewAction(request: Request) {
   assertPreviewAvailable();
@@ -61,12 +64,12 @@ export function assertPreviewAction(request: Request) {
 export async function readPreviewState(request: Request): Promise<PreviewState> {
   const value: unknown = await previewCookie.parse(request.headers.get("Cookie"));
   if (
-    typeof value === "object" &&
-    value !== null &&
-    "scenario" in value &&
-    isScenarioId(value.scenario) &&
-    "unlocked" in value &&
-    Array.isArray(value.unlocked)
+    typeof value === "object"
+    && value !== null
+    && "scenario" in value
+    && isScenarioId(value.scenario)
+    && "unlocked" in value
+    && Array.isArray(value.unlocked)
   ) {
     return {
       scenario: value.scenario,
@@ -103,11 +106,7 @@ export async function currentScenario(request: Request) {
     if (order.fiscal.state === "error" && retried.has(order.id))
       order.fiscal = { state: "checking" };
   }
-  return {
-    state,
-    language,
-    scenario,
-  };
+  return { state, language, scenario };
 }
 
 /**
@@ -163,8 +162,8 @@ const securityNotices: Record<string, string | null> = {
 };
 
 /**
- * Azioni della Sicurezza con le stesse risposte dell'area reale: l'esito torna nell'indirizzo
- * della categoria e la conferma dell'identità riesce sempre. Null per le altre azioni.
+ * Azioni della Sicurezza con le stesse risposte dell'area reale: l'esito torna nell'indirizzo della
+ * categoria e la conferma dell'identità riesce sempre. Null per le altre azioni.
  */
 export function simulateSecurity(request: Request, form: FormData) {
   assertPreviewAvailable();
@@ -184,8 +183,8 @@ export function simulateSecurity(request: Request, form: FormData) {
 }
 
 /**
- * Risposta simulata a un'azione dei componenti. Il primo salvataggio dello
- * scenario che lo prevede fallisce, per mostrare il ripristino del valore.
+ * Risposta simulata a un'azione dei componenti. Il primo salvataggio dello scenario che lo prevede
+ * fallisce, per mostrare il ripristino del valore.
  */
 export async function simulateAction(request: Request, form: FormData) {
   const { state, language, scenario } = await currentScenario(request);
@@ -232,8 +231,8 @@ export async function simulateAction(request: Request, form: FormData) {
   }
   // La ripresa di un negozio in pausa per inattività riprende tutti quelli dello spazio.
   if (
-    intent === "store-resume" &&
-    scenario.stores.some((store) => store.pauseReason === "inactivity")
+    intent === "store-resume"
+    && scenario.stores.some((store) => store.pauseReason === "inactivity")
   )
     return data<ActionResult>(
       { ok: true, notice: t.stores.done["store-resume"] },
@@ -251,11 +250,7 @@ export async function simulateAction(request: Request, form: FormData) {
           ? t.orders.marketingProposal.accepted
           : t.orders.marketingProposal.declined,
       },
-      {
-        headers: {
-          "Set-Cookie": await writePreviewState({ ...state, marketingAnswered: true }),
-        },
-      },
+      { headers: { "Set-Cookie": await writePreviewState({ ...state, marketingAnswered: true }) } },
     );
   }
   if (intent === "save" && scenario.saveFailsOnce && !state.saveFailed) {

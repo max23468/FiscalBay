@@ -5,20 +5,19 @@
  * state attestate al go-live e non si ripetono.
  *
  * Due fasi. `prima` vale prima di `Promuovi`: Worker e dominio, segreti dichiarati, D1, code,
- * bucket dei file, widget Turnstile, registro delle scadenze, ambiente GitHub della pubblicazione
- * e account Stripe.
- * `dopo` vale dopo il deploy e prima di aprire le iscrizioni: superficie pubblica (robots,
- * sitemap, pagine indicizzabili e `noindex`), consumer della coda, protezioni della zona sulle
- * risposte reali, archivio dei log, sottoscrizioni eBay, bot Telegram e promozione. Sul test le due fasi si
- * rileggono insieme, perché il Worker è già distribuito. La superficie comprende il beacon delle
- * statistiche del sito, sulle sole pagine pubbliche.
+ * bucket dei file, widget Turnstile, registro delle scadenze, ambiente GitHub della pubblicazione e
+ * account Stripe. `dopo` vale dopo il deploy e prima di aprire le iscrizioni: superficie pubblica
+ * (robots, sitemap, pagine indicizzabili e `noindex`), consumer della coda, protezioni della zona
+ * sulle risposte reali, archivio dei log, sottoscrizioni eBay, bot Telegram e promozione. Sul test
+ * le due fasi si rileggono insieme, perché il Worker è già distribuito. La superficie comprende il
+ * beacon delle statistiche del sito, sulle sole pagine pubbliche.
  *
- * Il resoconto riporta soltanto nomi ed esiti, mai valori di segreti o dati degli utenti. Esce
- * con 1 se un controllo automatico non passa o non si esegue.
+ * Il resoconto riporta soltanto nomi ed esiti, mai valori di segreti o dati degli utenti. Esce con
+ * 1 se un controllo automatico non passa o non si esegue.
  *
- * Uso: node scripts/go-live.mjs [plan|check] [--mode live] [--phase prima|dopo|tutte]
- * Telegram si rilegge soltanto con `TELEGRAM_BOT_TOKEN` e `TELEGRAM_OWNER_ID` dell'ambiente nelle
- * variabili del comando, come per `telegram-bot.mjs`.
+ * Uso: node scripts/go-live.mjs [plan|check] [--mode live] [--phase prima|dopo|tutte] Telegram si
+ * rilegge soltanto con `TELEGRAM_BOT_TOKEN` e `TELEGRAM_OWNER_ID` dell'ambiente nelle variabili del
+ * comando, come per `telegram-bot.mjs`.
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -141,16 +140,16 @@ export function checkPublication(expected, state) {
       area: "Rollback",
       item: `ambiente GitHub ${expected.environment} soltanto per ${expected.branch}`,
       ok:
-        policy?.custom_branch_policies === true &&
-        JSON.stringify(state?.branches ?? []) === JSON.stringify([expected.branch]),
+        policy?.custom_branch_policies === true
+        && JSON.stringify(state?.branches ?? []) === JSON.stringify([expected.branch]),
     },
     {
       area: "Rollback",
       item: `${expected.enabled ? "account, token e interruttore" : "account e token"} nell'ambiente ${expected.environment}`,
       ok:
-        Boolean(state?.environment) &&
-        missing.length === 0 &&
-        (!expected.enabled || variables.get(expected.enabled) === "true"),
+        Boolean(state?.environment)
+        && missing.length === 0
+        && (!expected.enabled || variables.get(expected.enabled) === "true"),
       detail: missing.length ? `mancano ${missing.join(", ")}` : undefined,
     },
   ];
@@ -191,35 +190,35 @@ export function checkResources(target, state, phase) {
           area: "Quote",
           item: `coda ${name} in UE a 14 giorni`,
           ok:
-            entry?.jurisdiction === "eu" &&
-            entry?.settings?.message_retention_period === queueRetention,
+            entry?.jurisdiction === "eu"
+            && entry?.settings?.message_retention_period === queueRetention,
         };
       }),
     {
       area: "Dati",
       item: `bucket ${target.exports} in UE senza accesso pubblico`,
       ok:
-        state.bucket?.jurisdiction === "eu" &&
-        state.managedDomain?.enabled === false &&
-        Array.isArray(state.customDomains?.domains) &&
-        state.customDomains.domains.length === 0,
+        state.bucket?.jurisdiction === "eu"
+        && state.managedDomain?.enabled === false
+        && Array.isArray(state.customDomains?.domains)
+        && state.customDomains.domains.length === 0,
     },
     {
       area: "Dati",
       item: "file esportati eliminati dopo un giorno",
       ok:
-        rules.length === 1 &&
-        rules[0].enabled === true &&
-        (rules[0].conditions?.prefix ?? "") === "" &&
-        rules[0].deleteObjectsTransition?.condition?.maxAge === exportsMaxAge &&
-        rules[0].abortMultipartUploadsTransition?.condition?.maxAge === exportsMaxAge,
+        rules.length === 1
+        && rules[0].enabled === true
+        && (rules[0].conditions?.prefix ?? "") === ""
+        && rules[0].deleteObjectsTransition?.condition?.maxAge === exportsMaxAge
+        && rules[0].abortMultipartUploadsTransition?.condition?.maxAge === exportsMaxAge,
     },
     {
       area: "Auth",
       item: `widget Turnstile gestito sul solo ${target.domain}`,
       ok:
-        widget?.mode === "managed" &&
-        JSON.stringify(widget?.domains ?? []) === JSON.stringify([target.domain]),
+        widget?.mode === "managed"
+        && JSON.stringify(widget?.domains ?? []) === JSON.stringify([target.domain]),
     },
     {
       area: "Alert",
@@ -239,19 +238,19 @@ export function checkResources(target, state, phase) {
         area: "Quote",
         item: `consumer di ${expected.name} con retry e coda dei falliti`,
         ok:
-          consumer?.dead_letter_queue === expected.deadLetterQueue &&
-          consumer?.settings?.batch_size === expected.maxBatchSize &&
-          consumer?.settings?.max_retries === expected.maxRetries &&
-          consumer?.settings?.max_concurrency === expected.maxConcurrency &&
-          Boolean(queue?.producers?.some(({ script }) => script === target.worker)),
+          consumer?.dead_letter_queue === expected.deadLetterQueue
+          && consumer?.settings?.batch_size === expected.maxBatchSize
+          && consumer?.settings?.max_retries === expected.maxRetries
+          && consumer?.settings?.max_concurrency === expected.maxConcurrency
+          && Boolean(queue?.producers?.some(({ script }) => script === target.worker)),
       };
     }),
   ];
 }
 
 /**
- * Percorsi letti oltre alle pagine della sitemap: legali, accesso e area riservata, anteprima.
- * Le pagine pubbliche vengono dalla sitemap servita, che il Worker compone dal codice.
+ * Percorsi letti oltre alle pagine della sitemap: legali, accesso e area riservata, anteprima. Le
+ * pagine pubbliche vengono dalla sitemap servita, che il Worker compone dal codice.
  */
 export const surfacePaths = {
   legal: ["/termini", "/privacy", "/en/terms", "/en/privacy"],
@@ -286,21 +285,21 @@ function counted(response) {
   const beacon = beaconConfig(response?.body);
   const policy = response?.headers?.["content-security-policy"] ?? "";
   return (
-    response?.body?.includes(`src="${webAnalyticsScript}"`) &&
-    Boolean(beacon?.token) &&
-    beacon.spa === false &&
-    policy.includes(webAnalyticsScript) &&
-    policy.includes(webAnalyticsCollector)
+    response?.body?.includes(`src="${webAnalyticsScript}"`)
+    && Boolean(beacon?.token)
+    && beacon.spa === false
+    && policy.includes(webAnalyticsScript)
+    && policy.includes(webAnalyticsCollector)
   );
 }
 
 /**
- * Superficie pubblica. In Production robots chiude soltanto le aree private e indica la
- * sitemap, le cui pagine, in italiano e in inglese, rispondono senza `noindex`; altrove robots
- * chiude il dominio e ogni pagina è `noindex`. Ovunque Termini e Privacy rispondono `noindex`,
- * accesso e area riservata pure, e le risposte dichiarano la versione del Worker; in Production
- * l'anteprima non esiste. Il beacon compare nelle pagine pubbliche, legali comprese, e mai in
- * accesso, area riservata e anteprima.
+ * Superficie pubblica. In Production robots chiude soltanto le aree private e indica la sitemap, le
+ * cui pagine, in italiano e in inglese, rispondono senza `noindex`; altrove robots chiude il
+ * dominio e ogni pagina è `noindex`. Ovunque Termini e Privacy rispondono `noindex`, accesso e area
+ * riservata pure, e le risposte dichiarano la versione del Worker; in Production l'anteprima non
+ * esiste. Il beacon compare nelle pagine pubbliche, legali comprese, e mai in accesso, area
+ * riservata e anteprima.
  */
 export function checkSurface(target, responses) {
   const pages = sitemapPaths(target.origin, responses.sitemap?.body);
@@ -311,25 +310,25 @@ export function checkSurface(target, responses) {
       area: "SEO",
       item: target.live ? "robots.txt con aree private e sitemap" : "robots.txt chiude il dominio",
       ok:
-        responses.robots?.status === 200 &&
-        (target.live
-          ? robotsBody.includes(`Sitemap: ${target.origin}/sitemap.xml`) &&
-            ["/app/", "/accesso", "/admin", "/api/"].every((prefix) =>
+        responses.robots?.status === 200
+        && (target.live
+          ? robotsBody.includes(`Sitemap: ${target.origin}/sitemap.xml`)
+            && ["/app/", "/accesso", "/admin", "/api/"].every((prefix) =>
               robotsBody.includes(`Disallow: ${prefix}`),
-            ) &&
-            !/^Disallow: \/$/mu.test(robotsBody)
+            )
+            && !/^Disallow: \/$/mu.test(robotsBody)
           : robotsBody === "User-agent: *\nDisallow: /\n"),
     },
     {
       area: "SEO",
       item: "sitemap con home e pagine in due lingue",
       ok:
-        responses.sitemap?.status === 200 &&
-        pages.includes("/") &&
-        pages.includes("/en") &&
-        pages.some((page) => page.startsWith("/en/")) &&
-        pages.some((page) => page !== "/" && page !== "/en" && !page.startsWith("/en/")) &&
-        pages.every((page) => !surfacePaths.legal.includes(page)),
+        responses.sitemap?.status === 200
+        && pages.includes("/")
+        && pages.includes("/en")
+        && pages.some((page) => page.startsWith("/en/"))
+        && pages.some((page) => page !== "/" && page !== "/en" && !page.startsWith("/en/"))
+        && pages.every((page) => !surfacePaths.legal.includes(page)),
     },
     {
       area: "SEO",
@@ -494,11 +493,7 @@ async function read(url) {
   try {
     const response = await fetch(url, { redirect: "manual" });
     const text = await response.text();
-    return {
-      status: response.status,
-      headers: Object.fromEntries(response.headers),
-      body: text,
-    };
+    return { status: response.status, headers: Object.fromEntries(response.headers), body: text };
   } catch {
     return null;
   }

@@ -4,7 +4,6 @@ import { logFailure } from "../errors";
 import { inSequence } from "../sequence";
 import type { EbayEnvironment } from "../view-models";
 import { deletionMarkerDays } from "./account-deletion.server";
-import { clearedStoreProfileSql } from "./store-state.server";
 import {
   consumeStepJob,
   deleteOrders,
@@ -14,16 +13,17 @@ import {
   claimStepJob,
 } from "./deletion-steps.server";
 import { storeIdentity, storeIdentityHash } from "./store-marks.server";
+import { clearedStoreProfileSql } from "./store-state.server";
 
 /**
  * Cancellazione richiesta da eBay (Marketplace Account Deletion, §30): eBay la invia per ogni
  * utente eBay eliminato, venditore o acquirente. L'ingresso registra soltanto quelle di un utente
  * di cui FiscalBay conserva dati; il lavoro dalla coda, ripetibile, elimina per il venditore i
- * negozi con ordini, letture, consenso, segni e accesso con eBay, e per l'acquirente i suoi
- * ordini in ogni negozio. Restano i diritti commerciali minimi dello spazio (cicli, quota usata,
- * scelta del negozio Free e trasferimenti), che non contengono l'identità eBay. La richiesta
- * conclusa resta per la finestra di Time Travel, così il compito periodico la ripete se i dati
- * ricompaiono dopo un restore.
+ * negozi con ordini, letture, consenso, segni e accesso con eBay, e per l'acquirente i suoi ordini
+ * in ogni negozio. Restano i diritti commerciali minimi dello spazio (cicli, quota usata, scelta
+ * del negozio Free e trasferimenti), che non contengono l'identità eBay. La richiesta conclusa
+ * resta per la finestra di Time Travel, così il compito periodico la ripete se i dati ricompaiono
+ * dopo un restore.
  */
 
 /** Identità comunicata da eBay: `userId` immutabile, token eIAS e username. */
@@ -36,8 +36,8 @@ export type EbayAccountDeletion = {
 };
 
 /**
- * Ordini dell'acquirente nell'ambiente: per token eIAS e, per gli ordini che non lo riportano,
- * per username. Parametri: ?1 ambiente, ?2 token eIAS, ?3 username.
+ * Ordini dell'acquirente nell'ambiente: per token eIAS e, per gli ordini che non lo riportano, per
+ * username. Parametri: ?1 ambiente, ?2 token eIAS, ?3 username.
  */
 const buyerOrdersSql = `SELECT o.id FROM orders o JOIN ebay_stores s ON s.id = o.store_id
   WHERE s.ebay_environment = ?1 AND (o.buyer_eias_token = ?2
@@ -45,8 +45,8 @@ const buyerOrdersSql = `SELECT o.id FROM orders o JOIN ebay_stores s ON s.id = o
 
 /**
  * Dati che FiscalBay conserva sull'utente eBay: negozio con la sua identità, segno di un negozio
- * lasciato, accesso con eBay o ordini da acquirente. Parametri: ?1 ambiente, ?2 token eIAS,
- * ?3 username, ?4 identificativo, ?5 impronta del segno.
+ * lasciato, accesso con eBay o ordini da acquirente. Parametri: ?1 ambiente, ?2 token eIAS, ?3
+ * username, ?4 identificativo, ?5 impronta del segno.
  */
 const knownUserSql = `EXISTS (SELECT 1 FROM ebay_stores WHERE ebay_environment = ?1 AND ebay_account_id = ?4)
   OR EXISTS (SELECT 1 FROM store_identity_marks WHERE identity_hash = ?5)
@@ -65,8 +65,8 @@ async function knownUserBindings(secret: string, input: Omit<EbayAccountDeletion
 }
 
 /**
- * Registra la richiesta e la accoda, se FiscalBay conserva dati dell'utente. False senza dati:
- * la notifica non lascia traccia. Una notifica ripetuta ritrova la richiesta e la riapre se era
+ * Registra la richiesta e la accoda, se FiscalBay conserva dati dell'utente. False senza dati: la
+ * notifica non lascia traccia. Una notifica ripetuta ritrova la richiesta e la riapre se era
  * conclusa. Se la coda non accetta, l'errore passa all'ingresso, che risponde 503 perché eBay
  * ritenti, e la richiesta registrata resta al compito periodico.
  */
@@ -95,8 +95,8 @@ export async function recordEbayAccountDeletion(
 }
 
 /**
- * Arresto del negozio del venditore, ripetibile: senza consenso letture e notifiche già
- * accodate non scrivono più, e le ricevute con i suoi ordini si eliminano.
+ * Arresto del negozio del venditore, ripetibile: senza consenso letture e notifiche già accodate
+ * non scrivono più, e le ricevute con i suoi ordini si eliminano.
  */
 function stopStoreStatements(db: D1Database, storeId: string, at: string) {
   return [
@@ -112,8 +112,8 @@ function stopStoreStatements(db: D1Database, storeId: string, at: string) {
 
 /**
  * Dopo gli ordini: letture, pause, marker degli ordini, preferenze e consegne Telegram e
- * trasferimenti non eseguiti, poi l'identità eBay della riga. La riga resta senza identità per
- * le righe commerciali dello spazio che la citano; l'eliminazione dei dati revoca i file delle
+ * trasferimenti non eseguiti, poi l'identità eBay della riga. La riga resta senza identità per le
+ * righe commerciali dello spazio che la citano; l'eliminazione dei dati revoca i file delle
  * esportazioni dello spazio.
  */
 function eraseStoreStatements(db: D1Database, storeId: string, at: string) {
@@ -140,8 +140,8 @@ export type EbayDeletionOutcome = "done" | "more" | "busy" | "missing";
 
 /**
  * Un passo del lavoro, ripetibile: ogni fase rilegge lo stato corrente e una ripetizione non
- * duplica effetti. «more» quando restano ordini oltre il budget, «busy» se un altro consumer
- * ha la richiesta.
+ * duplica effetti. «more» quando restano ordini oltre il budget, «busy» se un altro consumer ha la
+ * richiesta.
  */
 export async function runEbayAccountDeletion(
   env: Pick<Env, "DB" | "BETTER_AUTH_SECRET">,
@@ -225,8 +225,8 @@ export function isEbayAccountDeletionMessage(body: unknown): body is z.infer<typ
 
 /**
  * Esegue un passo dalla coda. Gli ordini oltre il budget ripartono con un nuovo messaggio; la
- * richiesta tenuta da un altro consumer resta a lui o al compito periodico. Un errore riprova
- * con backoff per poche consegne, poi passa al compito.
+ * richiesta tenuta da un altro consumer resta a lui o al compito periodico. Un errore riprova con
+ * backoff per poche consegne, poi passa al compito.
  */
 export async function consumeEbayAccountDeletion(
   message: Message<unknown>,
@@ -243,8 +243,8 @@ export async function consumeEbayAccountDeletion(
 }
 
 /**
- * Compito periodico: riapre le richieste concluse i cui dati ricompaiono, come dopo un restore,
- * e riprende quelle non concluse (messaggio perso o errore), dalla più vecchia. Un errore su una
+ * Compito periodico: riapre le richieste concluse i cui dati ricompaiono, come dopo un restore, e
+ * riprende quelle non concluse (messaggio perso o errore), dalla più vecchia. Un errore su una
  * richiesta non ferma le altre.
  */
 export async function resumeEbayAccountDeletions(

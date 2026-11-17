@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 /**
  * Sceglie il livello del gate dai file modificati, uguale in locale e in CI:
+ *
  * - `docs`: documentazione ordinaria e suo archivio, `pnpm verify:documents`;
  * - `tooling`: governo, script, workflow e configurazioni degli strumenti, `pnpm verify:tooling`;
  * - `unit`: test applicativi e loro configurazione, `pnpm verify:unit`;
  * - `build`: prove browser e loro strumenti, controllo del bundle, soli valori testuali delle
  *   variabili del Worker test, `pnpm verify:build`;
- * - `full`: ogni altro file, un diff vuoto o un confronto non disponibile, `pnpm verify`.
- * La sequenza di ogni livello esiste soltanto negli script di package.json; ogni livello comprende
- * il precedente. Il classificatore sceglie anche le prove browser e il deploy test.
- * Uso: node scripts/classify-changes.mjs [--base REF --head REF] [--complete] [--all] [--github-output] [--json] [--run] [--browser]
- * `--run` esegue il gate del livello, `--browser` le sole prove browser scelte, in Chromium.
- * Senza --base confronta il checkout, file non tracciati inclusi, con l'ultimo verde locale di
- * `--run` nello stesso worktree, oppure con origin/develop se manca o con `--all`.
+ * - `full`: ogni altro file, un diff vuoto o un confronto non disponibile, `pnpm verify`. La sequenza
+ *   di ogni livello esiste soltanto negli script di package.json; ogni livello comprende il
+ *   precedente. Il classificatore sceglie anche le prove browser e il deploy test. Uso: node
+ *   scripts/classify-changes.mjs [--base REF --head REF] [--complete] [--all] [--github-output]
+ *   [--json] [--run] [--browser] `--run` esegue il gate del livello, `--browser` le sole prove
+ *   browser scelte, in Chromium. Senza --base confronta il checkout, file non tracciati inclusi,
+ *   con l'ultimo verde locale di `--run` nello stesso worktree, oppure con origin/develop se manca
+ *   o con `--all`.
  */
 import { execFileSync } from "node:child_process";
 import {
@@ -28,6 +30,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+
+import { trackedSources } from "./lib/provider.mjs";
 import { criticalModule, prTargets } from "./mutation.mjs";
 import {
   changeFile,
@@ -37,7 +41,6 @@ import {
   visibleNews,
 } from "./release/release.mjs";
 import { importGraph } from "./verify-repo.mjs";
-import { trackedSources } from "./lib/provider.mjs";
 
 /** Script di package.json eseguito da ciascun livello, dal più leggero. */
 export const levelScripts = {
@@ -69,19 +72,19 @@ export const localScripts = {
 };
 
 /**
- * Test Vitest del gate locale: nessuno per documenti e strumenti, quelli che importano i moduli
- * e i test cambiati quando il diff resta in `app/`, `workers/` e `test/`, l'intera suite senza
- * copertura se cambia altro che i test leggono, come manifest, configurazioni o changelog. Le
- * prove browser e i loro strumenti non toccano Vitest.
+ * Test Vitest del gate locale: nessuno per documenti e strumenti, quelli che importano i moduli e i
+ * test cambiati quando il diff resta in `app/`, `workers/` e `test/`, l'intera suite senza
+ * copertura se cambia altro che i test leggono, come manifest, configurazioni o changelog. Le prove
+ * browser e i loro strumenti non toccano Vitest.
  */
 export function localTests(gate, files, impacts) {
   if (!["unit", "build", "full"].includes(gate)) return [];
   const source = (file) => /^(?:app|workers|test)\/.+\.tsx?$/u.test(file);
   const others = files.filter(
     (file, index) =>
-      !source(file) &&
-      !browser.test(file) &&
-      levels.indexOf(impacts[index].level) >= levels.indexOf("unit"),
+      !source(file)
+      && !browser.test(file)
+      && levels.indexOf(impacts[index].level) >= levels.indexOf("unit"),
   );
   if (others.length || files.some((file) => source(file) && !existsSync(file)))
     return [["pnpm", ["test"]]];
@@ -183,9 +186,9 @@ function manifestDifference(before, after) {
 }
 
 /**
- * Peso di una modifica del manifest: `tools` se cambiano soltanto strumenti di sviluppo, `build`
- * se cambiano dipendenze o strumenti che entrano nell'artefatto, `undefined` negli altri casi,
- * per esempio se cambiano gli script o un manifest non si legge.
+ * Peso di una modifica del manifest: `tools` se cambiano soltanto strumenti di sviluppo, `build` se
+ * cambiano dipendenze o strumenti che entrano nell'artefatto, `undefined` negli altri casi, per
+ * esempio se cambiano gli script o un manifest non si legge.
  */
 export function dependencyChange(before, after) {
   try {
@@ -251,9 +254,9 @@ export function scriptsChange(before, after) {
 
 /** Vero se due changelog leggibili mostrano la stessa pagina Novità. */
 export const sameNews = (before, after) =>
-  typeof before === "string" &&
-  typeof after === "string" &&
-  visibleNews(before) === visibleNews(after);
+  typeof before === "string"
+  && typeof after === "string"
+  && visibleNews(before) === visibleNews(after);
 
 /** Vero se due changelog differiscono soltanto per il giorno di una versione. */
 export function changelogDayOnly(before, after) {
@@ -265,8 +268,8 @@ export function changelogDayOnly(before, after) {
 /**
  * Livello di un file ed effetti sulle prove browser e sul deploy test. `change` contiene le due
  * versioni dei file confrontati per contenuto, quando il confronto le rende disponibili; `lock`
- * dice se il lockfile accompagna un manifest che cambia soltanto strumenti di sviluppo.
- * `core` limita i browser al nucleo essenziale: la suite completa resta alla qualifica.
+ * dice se il lockfile accompagna un manifest che cambia soltanto strumenti di sviluppo. `core`
+ * limita i browser al nucleo essenziale: la suite completa resta alla qualifica.
  */
 export function fileImpact(file, change, lock) {
   // La pagina Novità si legge dal changelog con i frammenti alla build: distribuisce soltanto un
@@ -274,8 +277,8 @@ export function fileImpact(file, change, lock) {
   // le hanno. Altre modifiche, decisioni e versioni senza Novità sono documentazione (D303); il
   // giorno scritto dopo una pubblicazione è già nella build distribuita.
   if (changelogFile(file))
-    return changelogDayOnly(change?.before, change?.after) ||
-      sameNews(change?.before, change?.after)
+    return changelogDayOnly(change?.before, change?.after)
+      || sameNews(change?.before, change?.after)
       ? { level: "docs", e2e: false, deploy: false }
       : { level: "build", e2e: false, deploy: true };
   if (file === manifestFile) {
@@ -383,9 +386,9 @@ export const sharedModules =
 export const undeclaredModules = (files) =>
   files.filter(
     (file) =>
-      !file.startsWith("app/routes/") &&
-      !moduleAreas.some(([pattern]) => pattern.test(file)) &&
-      !sharedModules.test(file),
+      !file.startsWith("app/routes/")
+      && !moduleAreas.some(([pattern]) => pattern.test(file))
+      && !sharedModules.test(file),
   );
 
 /** Aree di una route; `undefined` se il nome non ne indica una. */
@@ -445,7 +448,8 @@ export const qualificationChange = (files) =>
 /**
  * Procedura che gira da `main`: pubblicazione, ritiro, qualifica e mutation che `publish.yml`
  * richiama, Action, script e prove browser. Un lotto senza deploy che non la tocca, per esempio
- * documenti, test o workflow della CI di `develop`, fa avanzare `main` senza attendere il candidato.
+ * documenti, test o workflow della CI di `develop`, fa avanzare `main` senza attendere il
+ * candidato.
  */
 export const mainProcessChange = (files) =>
   files.some(
@@ -465,8 +469,8 @@ const areaGrep = (areas) => [
 const serverOnly = /\.server\.ts$|^app\/domain\/|^app\/integrations\//u;
 
 /**
- * Controlli per i file modificati; `complete` qualifica il candidato sul diff cumulativo.
- * `changes` associa a `cloudflare.config.ts` le versioni prima e dopo.
+ * Controlli per i file modificati; `complete` qualifica il candidato sul diff cumulativo. `changes`
+ * associa a `cloudflare.config.ts` le versioni prima e dopo.
  */
 export function plan(files, sources = [], complete = false, changes = {}) {
   const lock =
@@ -634,12 +638,13 @@ export function needsDeploy(base, head) {
 
 /**
  * Prove browser da ripetere dopo l'ultima run verde della PR (`previous`), con `base` la base del
- * commit provato ora (`head`). Le aree già provate dalla PR e quelle provate dalla base nella propria
- * PR possono rompersi soltanto dove si incontrano: si ripetono le aree dei file che la PR cambia e
- * che sono cambiati da allora, più quelle dei soli cambi della base che la PR tocca anche lei, con il
- * nucleo `@smoke` e le spec cambiate. `{ reuse: true }` se nulla riguarda i browser, `{ grep }` con
- * la selezione ridotta, null se serve quella intera: un modulo senza area come layout, router o stili
- * condivisi, dipendenze di build, il runner delle prove o un confronto non disponibile.
+ * commit provato ora (`head`). Le aree già provate dalla PR e quelle provate dalla base nella
+ * propria PR possono rompersi soltanto dove si incontrano: si ripetono le aree dei file che la PR
+ * cambia e che sono cambiati da allora, più quelle dei soli cambi della base che la PR tocca anche
+ * lei, con il nucleo `@smoke` e le spec cambiate. `{ reuse: true }` se nulla riguarda i browser, `{
+ * grep }` con la selezione ridotta, null se serve quella intera: un modulo senza area come layout,
+ * router o stili condivisi, dipendenze di build, il runner delle prove o un confronto non
+ * disponibile.
  */
 export function browserNarrowing(previous, head, base, sources) {
   let changed;
@@ -675,18 +680,18 @@ export function distributes(base, head) {
 }
 
 /**
- * File che non cambiano ciò che si distribuisce né il processo che lo pubblica: documenti, voci
- * del changelog, test e spec browser. Le Novità entrano nella build come testo, che il gate della
- * PR controlla e la build Production rilegge. Codice, migration, dipendenze, configurazioni,
- * script, workflow e helper delle prove restano fuori.
+ * File che non cambiano ciò che si distribuisce né il processo che lo pubblica: documenti, voci del
+ * changelog, test e spec browser. Le Novità entrano nella build come testo, che il gate della PR
+ * controlla e la build Production rilegge. Codice, migration, dipendenze, configurazioni, script,
+ * workflow e helper delle prove restano fuori.
  */
 const certificationNeutral =
   /^(?:docs\/|changes\/[^/]+\.md$|[^/]+\.md$|test\/|e2e\/[^/]+\.spec\.ts$)/u;
 
 /**
  * Tree la cui certificazione vale per `sha`: il suo e quelli degli antenati da cui `sha` differisce
- * soltanto per file neutri (D329), dal più recente. Il primo antenato con una differenza che
- * conta chiude l'elenco; un confronto non disponibile non prova nulla e lascia il solo tree noto.
+ * soltanto per file neutri (D329), dal più recente. Il primo antenato con una differenza che conta
+ * chiude l'elenco; un confronto non disponibile non prova nulla e lascia il solo tree noto.
  */
 export function certificationLineage(sha, limit = 30) {
   let commits;

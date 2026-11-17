@@ -1,9 +1,9 @@
-import { recordOrderObservation } from "./order-import.server";
-import type { OrderObservation } from "./order-observation.server";
 import { logFailure } from "../errors";
-import { dayMilliseconds } from "../time";
 import type { EbayAccess } from "../integrations/ebay/environment.server";
 import type { UpstreamError } from "../integrations/http.server";
+import { dayMilliseconds } from "../time";
+import { recordOrderObservation } from "./order-import.server";
+import type { OrderObservation } from "./order-observation.server";
 
 // Stato di un'esecuzione dell'acquisizione, condiviso da passate e dettaglio.
 
@@ -100,12 +100,12 @@ export async function record(ctx: Context, observation: OrderObservation) {
  * eBay sono del keyset, che test e Production condividono; l'Application Growth Check si chiede
  * solo quando il carico corrente le avvicina davvero alla soglia (D322). Per questo:
  *
- * - ogni Worker conta le proprie chiamate per giorno UTC, così la console separa il consumo
+ * - Ogni Worker conta le proprie chiamate per giorno UTC, così la console separa il consumo
  *   dell'ambiente da quello del keyset;
- * - il lavoro non urgente, cioè storico, immagini e letture fiscali degli ordini creati da più
- *   di `urgentDays` giorni, usa una chiamata soltanto finché il consumo del keyset resta sotto
+ * - Il lavoro non urgente, cioè storico, immagini e letture fiscali degli ordini creati da più di
+ *   `urgentDays` giorni, usa una chiamata soltanto finché il consumo del keyset resta sotto
  *   `backgroundShare` della quota; il resto aspetta l'azzeramento;
- * - un Worker con `EBAY_WORKER_SHARE` sotto il 100% non supera quella parte della quota con le
+ * - Un Worker con `EBAY_WORKER_SHARE` sotto il 100% non supera quella parte della quota con le
  *   proprie chiamate: il test lascia la quota ai negozi Production.
  */
 
@@ -177,8 +177,8 @@ export type CallBudget = {
 };
 
 /**
- * Parte delle quote `GetOrders` e `GetItem` del keyset riservata alle chiamate di questo Worker,
- * da `EBAY_WORKER_SHARE` in percentuale fra 1 e 100; assente o non valida vale l'intera quota.
+ * Parte delle quote `GetOrders` e `GetItem` del keyset riservata alle chiamate di questo Worker, da
+ * `EBAY_WORKER_SHARE` in percentuale fra 1 e 100; assente o non valida vale l'intera quota.
  */
 export function workerShare(env: { EBAY_WORKER_SHARE?: string }) {
   const percent = Number(env.EBAY_WORKER_SHARE);
@@ -187,9 +187,9 @@ export function workerShare(env: { EBAY_WORKER_SHARE?: string }) {
 }
 
 /**
- * Stato del budget all'inizio di un'esecuzione. Senza una lettura delle quote il limite non è
- * noto: nessuna chiamata si rimanda. Con `share` sotto 1 e le chiamate del Worker già oltre
- * quella parte, la chiamata entra in attesa fino all'azzeramento come un limite di eBay.
+ * Stato del budget all'inizio di un'esecuzione. Senza una lettura delle quote il limite non è noto:
+ * nessuna chiamata si rimanda. Con `share` sotto 1 e le chiamate del Worker già oltre quella parte,
+ * la chiamata entra in attesa fino all'azzeramento come un limite di eBay.
  */
 export async function loadCallBudget(
   db: D1Database,

@@ -1,29 +1,18 @@
 import { env } from "cloudflare:workers";
-
 import { expect, it, vi } from "vitest";
 
-import { duringServiceActivity, waitUntil } from "../app/service-activity.server";
-
-import worker from "../workers/app";
-import { pageCacheKey, sharedResponse, skipPageCache } from "../app/page-cache.server";
 import { canonicalPath, localizedPath, movedEnglishPath, settingsSectionParam } from "../app/i18n";
-
-import * as site from "../app/routes/site";
-
-import * as features from "../app/routes/features";
-
-import * as pricing from "../app/routes/pricing";
-
-import * as siteSecurity from "../app/routes/site-security";
-
+import { pageCacheKey, sharedResponse, skipPageCache } from "../app/page-cache.server";
 import * as faq from "../app/routes/faq";
-
-import * as support from "../app/routes/support";
-
+import * as features from "../app/routes/features";
 import * as legal from "../app/routes/legal";
-
+import * as pricing from "../app/routes/pricing";
+import * as site from "../app/routes/site";
+import * as siteSecurity from "../app/routes/site-security";
+import * as support from "../app/routes/support";
+import { duringServiceActivity, waitUntil } from "../app/service-activity.server";
+import worker from "../workers/app";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
-
 import {
   now,
   send,
@@ -121,10 +110,7 @@ it("il Worker fa riconvalidare le pagine pubbliche, no-store la home, e in Produ
   // React Router: una route che chiedesse una cache pubblica la vedrebbe conservata.
   const pages: Record<
     string,
-    {
-      loader: (args: never) => unknown;
-      headers?: (args: never) => HeadersInit;
-    }
+    { loader: (args: never) => unknown; headers?: (args: never) => HeadersInit }
   > = {
     "/": site,
     "/funzionalita": features,
@@ -322,9 +308,7 @@ it("il Worker conserva cache e redirect dichiarati dal router anche con header i
   expect(redirect.headers.get("location")).toBe("https://test.fiscalbay.it/accesso");
   expect(redirect.headers.get("cache-control")).toBe("no-store");
   router.handle.mockResolvedValue(
-    new Response("pubblico", {
-      headers: { "cache-control": "public, max-age=60" },
-    }),
+    new Response("pubblico", { headers: { "cache-control": "public, max-age=60" } }),
   );
   expect((await workerFetch(request, environment)).headers.get("cache-control")).toBe(
     "public, max-age=60",

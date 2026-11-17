@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 
 import { useCopy } from "~/components/copy-context";
+import { useTurnstile } from "~/components/turnstile";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -12,7 +13,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
-import { useTurnstile } from "~/components/turnstile";
+
 import { turnstileActions } from "../../turnstile";
 
 /**

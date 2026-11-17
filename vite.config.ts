@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
-import { reactRouter } from "@react-router/dev/vite";
+
 import { cloudflare } from "@cloudflare/vite-plugin";
+import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type Plugin } from "vite";
+
 import {
   formatNotices,
   noticesFile,
@@ -14,10 +16,10 @@ import {
 } from "./scripts/third-party-notices.mjs";
 
 /**
- * Adattamento temporaneo, da rimuovere quando il plugin Cloudflare 2.x e React Router
- * concordano sulla cartella client. Il plugin scrive gli asset nella Build Output
- * (`.cloudflare/output/.../assets`), mentre React Router legge e scrive manifest e asset
- * in `build/client`: il collegamento fa coincidere le due cartelle.
+ * Adattamento temporaneo, da rimuovere quando il plugin Cloudflare 2.x e React Router concordano
+ * sulla cartella client. Il plugin scrive gli asset nella Build Output
+ * (`.cloudflare/output/.../assets`), mentre React Router legge e scrive manifest e asset in
+ * `build/client`: il collegamento fa coincidere le due cartelle.
  */
 const linkClientAssets = (): Plugin => ({
   name: "link-client-assets",
@@ -32,8 +34,8 @@ const linkClientAssets = (): Plugin => ({
 });
 
 /**
- * Avvisi delle licenze dei pacchetti che il browser riceve, ricavati da moduli e asset della
- * build client e scritti accanto agli asset.
+ * Avvisi delle licenze dei pacchetti che il browser riceve, ricavati da moduli e asset della build
+ * client e scritti accanto agli asset.
  */
 const thirdPartyNotices = (): Plugin => ({
   name: "third-party-notices",
@@ -66,9 +68,9 @@ const thirdPartyNotices = (): Plugin => ({
 });
 
 /**
- * Moduli dei testi di ogni lingua, con i loro import statici, dalla build del client al bundle
- * del server: il documento li precarica (`copyModules` in `app/app-copy.ts`). Il client si costruisce per
- * primo; un nome mancante ferma la build invece di togliere il precaricamento in silenzio.
+ * Moduli dei testi di ogni lingua, con i loro import statici, dalla build del client al bundle del
+ * server: il documento li precarica (`copyModules` in `app/app-copy.ts`). Il client si costruisce
+ * per primo; un nome mancante ferma la build invece di togliere il precaricamento in silenzio.
  */
 const preloadCopyModules = (): Plugin => {
   let modules: Record<string, string[]> | undefined;
@@ -126,7 +128,5 @@ export default defineConfig(({ isPreview }) => ({
         ]),
   ],
   environments: { ssr: { build: { sourcemap: true } } },
-  resolve: {
-    tsconfigPaths: true,
-  },
+  resolve: { tsconfigPaths: true },
 }));

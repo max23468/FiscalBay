@@ -4,13 +4,13 @@ import { useId, useState, useSyncExternalStore } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useAction } from "~/components/action";
+import { useCopy } from "~/components/copy-context";
+import { PremiumSelectItem } from "~/components/premium-select-item";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Field, FieldLabel } from "~/components/ui/field";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "~/components/ui/select";
-import { useCopy } from "~/components/copy-context";
-import { PremiumSelectItem } from "~/components/premium-select-item";
-import { usePendingList } from "./pending-list";
+
 import { listFilterParams } from "../../orders/order-criteria";
 import { rememberStore, withoutListPosition } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
@@ -22,6 +22,7 @@ import {
   shippingStatuses,
   type Plan,
 } from "../../view-models";
+import { usePendingList } from "./pending-list";
 
 interface FilterOption {
   value: string;
@@ -117,8 +118,8 @@ function FilterSelect({
 }
 
 /**
- * Esportazione dell'elenco filtrato, disattivata con l'elenco vuoto. Durante la selezione
- * esporta la barra contestuale.
+ * Esportazione dell'elenco filtrato, disattivata con l'elenco vuoto. Durante la selezione esporta
+ * la barra contestuale.
  */
 function ExportListButton({
   href,
@@ -195,8 +196,8 @@ function ToolbarActions({
 }
 
 /**
- * Filtri dell'elenco nell'URL, modalità Seleziona, esportazione dell'elenco filtrato e
- * ripristino della conferma di sblocco.
+ * Filtri dell'elenco nell'URL, modalità Seleziona, esportazione dell'elenco filtrato e ripristino
+ * della conferma di sblocco.
  */
 export function OrdersToolbar({
   stores,
@@ -205,8 +206,8 @@ export function OrdersToolbar({
 }: {
   empty: boolean;
   /**
-   * Esportazione degli ordini dell'elenco, con filtri e ricerca: null con l'elenco vuoto,
-   * assente se la sezione non esiste. Durante la selezione esporta la barra contestuale.
+   * Esportazione degli ordini dell'elenco, con filtri e ricerca: null con l'elenco vuoto, assente
+   * se la sezione non esiste. Durante la selezione esporta la barra contestuale.
    */
   exportHref?: string | null;
   stores: Array<{ id: string; name: string }>;
@@ -242,7 +243,7 @@ export function OrdersToolbar({
       }}
       className={cn(
         // Chiuso non occupa spazio: il margine negativo assorbe la distanza dalla riga sopra.
-        "col-span-2 row-start-2 grid grid-rows-[0fr] transition-[grid-template-rows,margin-top,visibility] duration-(--duration-quick) ease-(--ease-smooth-out) max-md:invisible max-md:-mt-4 motion-reduce:transition-none md:contents",
+        "col-span-2 row-start-2 grid grid-rows-[0fr] transition-[grid-template-rows,margin-top,visibility] duration-(--duration-quick) ease-(--ease-smooth-out) motion-reduce:transition-none max-md:invisible max-md:-mt-4 md:contents",
         "data-open:grid-rows-[1fr] data-open:duration-(--duration-fast) max-md:data-open:visible max-md:data-open:mt-0",
       )}
     >

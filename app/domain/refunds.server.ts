@@ -11,12 +11,12 @@ import {
 import { openSubscriptionFilterSql } from "./billing-subscriptions.server";
 
 /**
- * Rimborsi, dispute e cancellazioni finanziarie (§6.4, §6.6). Con Managed Payments li decide
- * anche Stripe: l'assistenza Link rimborsa entro 60 giorni e Stripe gestisce le dispute.
- * FiscalBay rilegge il pagamento e revoca soltanto la copertura che ha pagato, quando il cliente
- * ha riavuto l'intero importo: rimborso totale riuscito oppure disputa persa. Un rimborso
- * parziale si registra senza diventare giorni; una disputa aperta non revoca nulla. Prova,
- * concessioni, altre coperture e sblocchi degli ordini restano.
+ * Rimborsi, dispute e cancellazioni finanziarie (§6.4, §6.6). Con Managed Payments li decide anche
+ * Stripe: l'assistenza Link rimborsa entro 60 giorni e Stripe gestisce le dispute. FiscalBay
+ * rilegge il pagamento e revoca soltanto la copertura che ha pagato, quando il cliente ha riavuto
+ * l'intero importo: rimborso totale riuscito oppure disputa persa. Un rimborso parziale si registra
+ * senza diventare giorni; una disputa aperta non revoca nulla. Prova, concessioni, altre coperture
+ * e sblocchi degli ordini restano.
  */
 
 /** Rimborsi riusciti, in centesimi, e revoca dovuta. */
@@ -27,9 +27,9 @@ const signal = (failure: string) =>
   logFailure({ error: new ApplicationError("INVALID_REQUEST", failure), operation: "billing" });
 
 /**
- * Esito di un addebito per la copertura che ha pagato. Le richieste a Stripe partono soltanto
- * per un addebito con rimborsi o con una disputa: i rimborsi contano quando sono riusciti,
- * le dispute quando sono perse.
+ * Esito di un addebito per la copertura che ha pagato. Le richieste a Stripe partono soltanto per
+ * un addebito con rimborsi o con una disputa: i rimborsi contano quando sono riusciti, le dispute
+ * quando sono perse.
  */
 export async function paymentReversal(stripe: Stripe, charge: Stripe.Charge): Promise<Reversal> {
   let refunded = 0;
@@ -54,8 +54,8 @@ export async function paymentReversal(stripe: Stripe, charge: Stripe.Charge): Pr
 }
 
 /**
- * Esito registrato sulla sola copertura pagata da `reference`, una fattura o una sessione
- * lifetime. La revoca resta anche se il rimborso fallisce dopo o l'oggetto sparisce.
+ * Esito registrato sulla sola copertura pagata da `reference`, una fattura o una sessione lifetime.
+ * La revoca resta anche se il rimborso fallisce dopo o l'oggetto sparisce.
  */
 export function reversalStatements(
   db: D1Database,
@@ -81,8 +81,8 @@ export function reversalStatements(
 }
 
 /**
- * Il cliente ha chiesto la cancellazione dei dati finanziari: FiscalBay non lo usa più.
- * Argomento: espressione SQL del cliente.
+ * Il cliente ha chiesto la cancellazione dei dati finanziari: FiscalBay non lo usa più. Argomento:
+ * espressione SQL del cliente.
  */
 export const erasedCustomerSql = (customer: string) =>
   `EXISTS (SELECT 1 FROM stripe_customer_erasures r WHERE r.customer_id = ${customer})`;
@@ -95,9 +95,8 @@ export async function isErasedCustomer(db: D1Database, customerId: string) {
 }
 
 /**
- * Addebiti di un cliente per payment intent, per le fatture di un abbonamento, da tutte le
- * pagine. Vuoto per un cliente cancellato o non più disponibile: senza addebito leggibile
- * nessuna revoca.
+ * Addebiti di un cliente per payment intent, per le fatture di un abbonamento, da tutte le pagine.
+ * Vuoto per un cliente cancellato o non più disponibile: senza addebito leggibile nessuna revoca.
  */
 export async function customerCharges(db: D1Database, stripe: Stripe, customerId: string) {
   if (await isErasedCustomer(db, customerId)) return new Map<string, Stripe.Charge>();
@@ -123,8 +122,8 @@ export async function customerCharges(db: D1Database, stripe: Stripe, customerId
 }
 
 /**
- * Payment intent dell'evento di rimborso o di disputa, con la segnalazione all'assistenza di
- * una disputa aperta o persa e di un rimborso parziale. Null senza payment intent.
+ * Payment intent dell'evento di rimborso o di disputa, con la segnalazione all'assistenza di una
+ * disputa aperta o persa e di un rimborso parziale. Null senza payment intent.
  */
 export async function reversalIntent(stripe: Stripe, topic: string, objectId: string) {
   if (topic.startsWith("charge.dispute.")) {
@@ -144,11 +143,11 @@ export async function reversalIntent(stripe: Stripe, topic: string, objectId: st
 }
 
 /**
- * Cliente cancellato su Stripe, per una richiesta tramite Link o dall'assistenza: Stripe ha
- * già chiuso i suoi abbonamenti e cancellato i dati degli oggetti finanziari. Vale soltanto per
- * un cliente di uno spazio di questo ambiente e ancora cancellato quando si rilegge: FiscalBay
- * smette di usarlo, conserva le coperture attribuite e lo spazio e lo segnala all'assistenza.
- * Restituisce gli abbonamenti ancora aperti in locale da rileggere.
+ * Cliente cancellato su Stripe, per una richiesta tramite Link o dall'assistenza: Stripe ha già
+ * chiuso i suoi abbonamenti e cancellato i dati degli oggetti finanziari. Vale soltanto per un
+ * cliente di uno spazio di questo ambiente e ancora cancellato quando si rilegge: FiscalBay smette
+ * di usarlo, conserva le coperture attribuite e lo spazio e lo segnala all'assistenza. Restituisce
+ * gli abbonamenti ancora aperti in locale da rileggere.
  */
 export async function recordErasure(
   env: Env,

@@ -1,16 +1,16 @@
 /**
  * File temporanei delle esportazioni nel bucket R2 dell'ambiente. La chiave dell'oggetto è un
  * identificativo casuale, senza dati personali; nome del file, tipo, revisione di accesso dello
- * spazio e scadenza stanno nella riga D1, che decide a ogni download se il file vale ancora.
- * Il bucket non ha accesso pubblico né URL prefirmati: i byte passano soltanto dal Worker.
+ * spazio e scadenza stanno nella riga D1, che decide a ogni download se il file vale ancora. Il
+ * bucket non ha accesso pubblico né URL prefirmati: i byte passano soltanto dal Worker.
  */
 
 /** Durata massima di un file. */
 export const exportFileMilliseconds = 24 * 60 * 60_000;
 
 /**
- * Parte di un caricamento multiparte. R2 vuole parti uguali, salvo l'ultima, di almeno 5 MiB:
- * un file più piccolo di una parte si scrive in una sola richiesta.
+ * Parte di un caricamento multiparte. R2 vuole parti uguali, salvo l'ultima, di almeno 5 MiB: un
+ * file più piccolo di una parte si scrive in una sola richiesta.
  */
 export const exportPartBytes = 8 * 1024 * 1024;
 
@@ -23,8 +23,8 @@ export const revisionSql = (user: string) =>
     JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ${user}), 0)`;
 
 /**
- * Revisione da leggere prima di leggere i dati del file: se cambia durante la generazione, il
- * file non diventa scaricabile.
+ * Revisione da leggere prima di leggere i dati del file: se cambia durante la generazione, il file
+ * non diventa scaricabile.
  */
 export async function exportRevision(db: D1Database, userId: string): Promise<number> {
   const row = await db
@@ -45,9 +45,9 @@ function concat(chunks: Uint8Array[], size: number): Uint8Array {
 }
 
 /**
- * Scrive il flusso nell'oggetto senza tenerlo intero in memoria: oltre una parte usa il
- * caricamento multiparte, a parti di `exportPartBytes`. Un errore del flusso o di R2 annulla
- * il caricamento, così nessun oggetto parziale resta nel bucket.
+ * Scrive il flusso nell'oggetto senza tenerlo intero in memoria: oltre una parte usa il caricamento
+ * multiparte, a parti di `exportPartBytes`. Un errore del flusso o di R2 annulla il caricamento,
+ * così nessun oggetto parziale resta nel bucket.
  */
 async function writeObject(
   bucket: R2Bucket,
@@ -146,8 +146,8 @@ export async function publishExportFile(
 }
 
 /**
- * File dell'utente ancora valido all'istante `now`, con i byte da trasmettere: scaduto,
- * revocato, di un altro utente o già eliminato vale come assente, anche se l'oggetto esiste.
+ * File dell'utente ancora valido all'istante `now`, con i byte da trasmettere: scaduto, revocato,
+ * di un altro utente o già eliminato vale come assente, anche se l'oggetto esiste.
  */
 export async function openExportFile(
   env: Pick<Env, "DB" | "EXPORT_FILES">,
@@ -170,10 +170,10 @@ export async function openExportFile(
 const purgeBatch = 500;
 
 /**
- * Elimina a giri oggetti e righe dei file scelti da `select`, che riceve il numero massimo di
- * righe del giro. L'oggetto si elimina prima della riga, così un errore di R2 lascia la riga al
- * tentativo successivo. Un oggetto rimasto senza riga per un errore fra le due scritture lo
- * elimina la regola di lifecycle del bucket. Restituisce quanti file ha eliminato.
+ * Elimina a giri oggetti e righe dei file scelti da `select`, che riceve il numero massimo di righe
+ * del giro. L'oggetto si elimina prima della riga, così un errore di R2 lascia la riga al tentativo
+ * successivo. Un oggetto rimasto senza riga per un errore fra le due scritture lo elimina la regola
+ * di lifecycle del bucket. Restituisce quanti file ha eliminato.
  */
 export async function deleteExportFiles(
   env: Pick<Env, "DB" | "EXPORT_FILES">,
@@ -197,8 +197,8 @@ export async function deleteExportFiles(
 
 /**
  * Pulizia applicativa: elimina oggetti e righe dei file scaduti o revocati, poi i lavori di
- * esportazione conclusi: quello pronto quando il suo file non esiste più, quello non riuscito
- * dopo 24 ore dalla conclusione. Restituisce quanti file ha eliminato.
+ * esportazione conclusi: quello pronto quando il suo file non esiste più, quello non riuscito dopo
+ * 24 ore dalla conclusione. Restituisce quanti file ha eliminato.
  */
 export async function purgeExportFiles(
   env: Pick<Env, "DB" | "EXPORT_FILES">,

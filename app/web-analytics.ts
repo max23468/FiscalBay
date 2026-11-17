@@ -8,9 +8,9 @@ export const webAnalyticsScript = "https://static.cloudflareinsights.com/beacon.
 export const webAnalyticsCollector = "https://cloudflareinsights.com";
 
 /**
- * Configurazione del beacon. Le pagine pubbliche si collegano con link normali, quindi ogni
- * pagina vista è un nuovo documento: senza il rilevamento delle navigazioni client il beacon non
- * segue chi passa dal sito all'area dell'account.
+ * Configurazione del beacon. Le pagine pubbliche si collegano con link normali, quindi ogni pagina
+ * vista è un nuovo documento: senza il rilevamento delle navigazioni client il beacon non segue chi
+ * passa dal sito all'area dell'account.
  */
 export function webAnalyticsBeacon(token: string): string {
   return JSON.stringify({ token, spa: false });

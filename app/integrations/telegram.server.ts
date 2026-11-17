@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+
 import { z } from "zod";
 
 import { botCommands, ownerCommands, type BotCommand, type OwnerCommand } from "../bot-commands";
@@ -30,9 +31,9 @@ const secretPattern = /^[A-Za-z0-9_-]{32,256}$/u;
 export function telegramConfigured(env: Env): boolean {
   // Un valore assente diventa «undefined», che nessuno dei due formati ammette.
   return (
-    usernamePattern.test(String(env.TELEGRAM_BOT_USERNAME)) &&
-    (!!env.TELEGRAM || !!env.TELEGRAM_BOT_TOKEN) &&
-    secretPattern.test(String(env.TELEGRAM_WEBHOOK_SECRET))
+    usernamePattern.test(String(env.TELEGRAM_BOT_USERNAME))
+    && (!!env.TELEGRAM || !!env.TELEGRAM_BOT_TOKEN)
+    && secretPattern.test(String(env.TELEGRAM_WEBHOOK_SECRET))
   );
 }
 
@@ -244,9 +245,9 @@ function botStatus(response: Response, text: string, now?: number): UpstreamErro
   const reply = botReply(text);
   if (status === 429) {
     const retryAfter =
-      reply?.parameters?.retry_after ??
-      retryAfterSeconds(response.headers.get("retry-after"), now) ??
-      undefined;
+      reply?.parameters?.retry_after
+      ?? retryAfterSeconds(response.headers.get("retry-after"), now)
+      ?? undefined;
     return new UpstreamError("rate_limited", { status, retryAfter });
   }
   if (status >= 500) return new UpstreamError("unavailable", { status });
@@ -267,8 +268,8 @@ function botEndpoint(env: Env, method: string, fetcher: typeof fetch): [string, 
 }
 
 /**
- * Chiamata alla Bot API con timeout, limite dei byte e la classificazione comune dei provider.
- * Il token non entra mai in un errore o in un log.
+ * Chiamata alla Bot API con timeout, limite dei byte e la classificazione comune dei provider. Il
+ * token non entra mai in un errore o in un log.
  */
 async function botApi<Schema extends z.ZodType>(
   env: Env,
@@ -325,8 +326,8 @@ export type BotButton =
   | { text: string; copy_text: { text: string } };
 
 /**
- * Messaggio del bot in HTML, con il testo già sottoposto a escape e i pulsanti per riga.
- * `preview`: immagine mostrata in piccolo sotto il testo, senza comparire nel testo.
+ * Messaggio del bot in HTML, con il testo già sottoposto a escape e i pulsanti per riga. `preview`:
+ * immagine mostrata in piccolo sotto il testo, senza comparire nel testo.
  */
 export type BotMessage = { html: string; buttons?: BotButton[][]; preview?: string };
 
@@ -401,8 +402,8 @@ export async function answerCallback(
 
 /**
  * Menu dei comandi nelle sole chat private: in italiano per chi usa Telegram in italiano, in
- * inglese per gli altri. I comandi dell'ambito predefinito, come quelli impostati da BotFather,
- * si eliminano: da BotFather resta soltanto la descrizione. Ripeterlo non cambia nulla.
+ * inglese per gli altri. I comandi dell'ambito predefinito, come quelli impostati da BotFather, si
+ * eliminano: da BotFather resta soltanto la descrizione. Ripeterlo non cambia nulla.
  */
 export async function setBotCommands(
   env: Env,
@@ -446,9 +447,9 @@ const profileKeys = {
 } as const;
 
 /**
- * Profilo del bot: in italiano per chi usa Telegram in italiano, in inglese per gli altri, come
- * il menu. Ogni campo si scrive soltanto se diverso da quello letto, perché Telegram limita i
- * cambi di nome. Ripeterlo non cambia nulla.
+ * Profilo del bot: in italiano per chi usa Telegram in italiano, in inglese per gli altri, come il
+ * menu. Ogni campo si scrive soltanto se diverso da quello letto, perché Telegram limita i cambi di
+ * nome. Ripeterlo non cambia nulla.
  */
 export async function setBotProfile(
   env: Env,
@@ -539,8 +540,8 @@ export async function sendRichMessage(
 }
 
 /**
- * Sostituisce un messaggio a tabelle. Lo stesso contenuto già presente lascia il messaggio
- * com'è; un messaggio non più modificabile, per esempio troppo vecchio, restituisce `gone`.
+ * Sostituisce un messaggio a tabelle. Lo stesso contenuto già presente lascia il messaggio com'è;
+ * un messaggio non più modificabile, per esempio troppo vecchio, restituisce `gone`.
  */
 export async function editRichMessage(
   env: Env,

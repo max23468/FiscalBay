@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { missingPages, missingSections, routePatterns } from "./verify-pages.mjs";
+
 import { abortedDataRequest, expectedPageError, knownPagePath } from "../e2e/page-cases.ts";
+import { missingPages, missingSections, routePatterns } from "./verify-pages.mjs";
 
 describe("catalogo delle pagine", () => {
   it("ignora errori HTTP attesi solo del documento corrente o dei suoi dati", () => {

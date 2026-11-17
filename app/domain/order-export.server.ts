@@ -1,12 +1,5 @@
-import { maxListedOrders, type OrderScope } from "../orders/order-criteria";
-import { minorToDecimal } from "../money";
-import { shownTaxType } from "../tax-quality";
 import type { AppCopy } from "../copy/copy-it";
-import type { EbayEnvironment } from "../view-models";
-import { fiscalNotice } from "./order-view.server";
-import { listVisibleOrders, type VisibleOrder } from "./orders.server";
-import { xlsxStream, type XlsxCell } from "./xlsx.server";
-import { wallClock } from "../time";
+import { minorToDecimal } from "../money";
 import {
   exportHeader,
   exportSampleSize,
@@ -16,12 +9,19 @@ import {
   type ExportRows,
   type ExportSampleOrder,
 } from "../orders/export-columns";
+import { maxListedOrders, type OrderScope } from "../orders/order-criteria";
+import { shownTaxType } from "../tax-quality";
+import { wallClock } from "../time";
+import type { EbayEnvironment } from "../view-models";
+import { fiscalNotice } from "./order-view.server";
+import { listVisibleOrders, type VisibleOrder } from "./orders.server";
+import { xlsxStream, type XlsxCell } from "./xlsx.server";
 
 /**
  * File degli ordini (§12), CSV o XLSX: una riga per ordine o per articolo, con i soli valori
  * fiscali autorizzati all'istante della richiesta. Lo schema standard non cambia fra un file e
- * l'altro; con Premium le colonne scelte cambiano presenza e ordine, non il significato. I
- * valori restano quelli della fonte.
+ * l'altro; con Premium le colonne scelte cambiano presenza e ordine, non il significato. I valori
+ * restano quelli della fonte.
  */
 
 /** Separatore dei valori multipli nella stessa cella, in un ordine deterministico. */
@@ -36,8 +36,8 @@ export function exportDateTime(iso: string | null, timeZone: string): string {
 }
 
 /**
- * Identificativi autorizzati per colonna: CF e Partita IVA italiani con il valore originale,
- * gli altri con tipo e Paese. Più valori dello stesso tipo stanno nella stessa cella, ordinati.
+ * Identificativi autorizzati per colonna: CF e Partita IVA italiani con il valore originale, gli
+ * altri con tipo e Paese. Più valori dello stesso tipo stanno nella stessa cella, ordinati.
  */
 function taxCells(order: VisibleOrder) {
   const cf: string[] = [];
@@ -57,8 +57,8 @@ function taxCells(order: VisibleOrder) {
 
 /**
  * Situazione fiscale come nella pagina Ordini: un dato disponibile porta la stessa avvertenza
- * sull'ultima lettura, così il file non lo presenta come confermato dopo una lettura non
- * riuscita o in corso.
+ * sull'ultima lettura, così il file non lo presenta come confermato dopo una lettura non riuscita o
+ * in corso.
  */
 function fiscalCell(order: VisibleOrder, t: AppCopy) {
   const notice = order.fiscalState === "available" ? fiscalNotice(order) : null;
@@ -75,8 +75,8 @@ function statusCell<Status extends string>(
 }
 
 /**
- * Valori del file per un ordine, colonna per colonna: una sola riga, oppure una per articolo con
- * il totale sulla prima.
+ * Valori del file per un ordine, colonna per colonna: una sola riga, oppure una per articolo con il
+ * totale sulla prima.
  */
 export function exportRecords(
   order: VisibleOrder,
@@ -162,9 +162,9 @@ export function exportRows(
 /**
  * Valore di una cella che un foglio di calcolo eseguirebbe come formula: si apre con `=`, `@`,
  * tabulazione o ritorno a capo, oppure con `+` o `-` senza essere un numero semplice con segno.
- * Excel calcola anche `+39-333-1234567`, `-2-3` o `-1/0`: soltanto cifre con al più un
- * separatore decimale restano intatte. Uno spazio o un carattere Unicode iniziale, come `＝`,
- * non apre una formula.
+ * Excel calcola anche `+39-333-1234567`, `-2-3` o `-1/0`: soltanto cifre con al più un separatore
+ * decimale restano intatte. Uno spazio o un carattere Unicode iniziale, come `＝`, non apre una
+ * formula.
  */
 export function formulaLike(value: string): boolean {
   return /^[=@\t\r\n]/u.test(value) || /^[+-](?!\d+(?:[.,]\d+)?$)/u.test(value);
@@ -221,8 +221,8 @@ export async function exportSampleOrders(
 
 /**
  * Ordini consultabili dell'ambito, a pagine dal più recente: ogni pagina rilegge negozi,
- * conservazione e diritti allo stesso istante `now`, così nessuna pagina include un ordine o
- * un valore fiscale che quell'istante non autorizza.
+ * conservazione e diritti allo stesso istante `now`, così nessuna pagina include un ordine o un
+ * valore fiscale che quell'istante non autorizza.
  */
 export async function* exportOrderPages(
   db: D1Database,
@@ -250,8 +250,8 @@ export async function* exportOrderPages(
 }
 
 /**
- * CSV in streaming: BOM UTF-8 per Excel, intestazione e poi le righe pagina per pagina. Un
- * errore a metà interrompe il flusso, così il file incompleto non risulta scaricato.
+ * CSV in streaming: BOM UTF-8 per Excel, intestazione e poi le righe pagina per pagina. Un errore a
+ * metà interrompe il flusso, così il file incompleto non risulta scaricato.
  */
 export function exportCsvStream(
   pages: AsyncGenerator<VisibleOrder[]>,

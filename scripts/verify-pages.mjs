@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import routes from "../app/routes.ts";
-import { localizedPath } from "../app/i18n.ts";
-import { settingsSections } from "../app/area-sections.ts";
-import { pageCases } from "../e2e/page-cases.ts";
 import { fileURLToPath } from "node:url";
+
+import { settingsSections } from "../app/area-sections.ts";
+import { localizedPath } from "../app/i18n.ts";
+import routes from "../app/routes.ts";
+import { pageCases } from "../e2e/page-cases.ts";
 
 export function routePatterns(entries, prefix = "") {
   return entries.flatMap((entry) => {

@@ -4,7 +4,10 @@ import { useId, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 
 import { useAction, useNotice } from "~/components/action";
+import { CheckboxOption } from "~/components/checkbox-option";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { PremiumNote, StatusAlert } from "~/components/status";
+import { useDate } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import { FieldGroup, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
@@ -17,14 +20,12 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { useCopy, useLinks } from "~/components/copy-context";
-import { useDate } from "~/components/time-zone";
+
 import { exportFilePath, orderExportPath } from "../../app-links";
-import { localizedPath } from "../../i18n";
-import type { ExportFileView } from "../../domain/export-jobs.server";
-import { downloadExport, saveFile } from "./download";
 import type { AppCopy } from "../../copy/copy-it";
 import type { ExportConfiguration } from "../../domain/export-configurations.server";
+import type { ExportFileView } from "../../domain/export-jobs.server";
+import { localizedPath } from "../../i18n";
 import {
   columnName,
   exportHeader,
@@ -49,8 +50,8 @@ import {
   shippingStatuses,
   type OrderPeriod,
 } from "../../view-models";
-import { CheckboxOption } from "~/components/checkbox-option";
 import { Group, RadioOption, SimpleSelect } from "./controls";
+import { downloadExport, saveFile } from "./download";
 
 /** Valore della scelta «Standard» fra le configurazioni salvate. */
 const standardChoice = "";
@@ -90,8 +91,8 @@ function FiscalChoice({
   const { t } = useCopy();
   const copy = t.settings.export;
   const filtered =
-    context?.kind === "filtered" &&
-    fiscalSituations.some((item) => item === new URLSearchParams(context.query).get("fiscale"));
+    context?.kind === "filtered"
+    && fiscalSituations.some((item) => item === new URLSearchParams(context.query).get("fiscale"));
   if (filtered) return null;
   return (
     <FieldSet>
@@ -136,8 +137,8 @@ function ExportContextNote({ context }: { context: ExportContext }) {
 /**
  * Crea il file nell'area reale: il modulo invia ambito e opzioni e il browser salva la risposta.
  * Con JavaScript la richiesta resta nella pagina, così un rifiuto diventa un avviso e un file
- * preparato dalla coda compare fra i file creati; senza, l'invio ordinario scarica il file o
- * torna alla sezione.
+ * preparato dalla coda compare fra i file creati; senza, l'invio ordinario scarica il file o torna
+ * alla sezione.
  */
 function CreateFileForm({
   context,
@@ -310,7 +311,7 @@ function ExportPreview({
                   key={column}
                   // I valori lunghi vanno a capo invece di essere tagliati.
                   className={cn(
-                    "max-w-72 px-3 py-2 whitespace-normal [overflow-wrap:anywhere]",
+                    "max-w-72 px-3 py-2 [overflow-wrap:anywhere] whitespace-normal",
                     index === 0 && [sticky, "bg-card"],
                   )}
                 >
@@ -375,9 +376,9 @@ function FormatField({
 }
 
 /**
- * Colonne scelte e ordinate con Premium: ogni colonna si include e si sposta con i pulsanti,
- * e lo spostamento è annunciato. Nel Free soltanto la nota del piano, che vale anche per XLSX
- * e configurazioni.
+ * Colonne scelte e ordinate con Premium: ogni colonna si include e si sposta con i pulsanti, e lo
+ * spostamento è annunciato. Nel Free soltanto la nota del piano, che vale anche per XLSX e
+ * configurazioni.
  */
 function ColumnsField({
   premium,

@@ -1,5 +1,13 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { workspaceDetail } from "../app/domain/admin-directory.server";
+import { listAnomalies } from "../app/domain/admin-operations.server";
+import {
+  recordUnallocatedLifetime,
+  resolveBillingIncident,
+  reconcileBillingIncidents,
+} from "../app/domain/billing-incidents.server";
 import {
   applyStripeEvent,
   openBillingPortal,
@@ -16,17 +24,10 @@ import {
   refundedShare,
   unusedCredit,
 } from "../app/domain/lifetime.server";
-import { verifiedSession } from "./fixtures/account-fixtures";
-import { subscriptionView } from "../app/domain/plan-view.server";
-import { listAnomalies } from "../app/domain/admin-operations.server";
-import { workspaceDetail } from "../app/domain/admin-directory.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import {
-  recordUnallocatedLifetime,
-  resolveBillingIncident,
-  reconcileBillingIncidents,
-} from "../app/domain/billing-incidents.server";
+import { subscriptionView } from "../app/domain/plan-view.server";
 import { createBoundedStripeClient } from "../app/integrations/stripe.server";
+import { verifiedSession } from "./fixtures/account-fixtures";
 import {
   insertEntitlement,
   insertStore,
@@ -309,8 +310,8 @@ describe("Lifetime e concessioni", () => {
   });
 
   /**
-   * Stripe simulato che ferma la creazione della sessione lifetime finché `resume` non la
-   * lascia proseguire, oppure la fa fallire.
+   * Stripe simulato che ferma la creazione della sessione lifetime finché `resume` non la lascia
+   * proseguire, oppure la fa fallire.
    */
   function heldLifetime(stripe: ReturnType<typeof stripeAccount>, outcome: "held" | "failed") {
     let entered!: () => void;
@@ -323,9 +324,9 @@ describe("Lifetime e concessioni", () => {
     });
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       if (
-        new URL(String(input)).pathname === "/v1/checkout/sessions" &&
-        init?.method === "POST" &&
-        new URLSearchParams(String(init.body)).get("mode") === "payment"
+        new URL(String(input)).pathname === "/v1/checkout/sessions"
+        && init?.method === "POST"
+        && new URLSearchParams(String(init.body)).get("mode") === "payment"
       ) {
         entered();
         await held;
@@ -757,10 +758,7 @@ describe("Lifetime e concessioni", () => {
     });
     stripe.state.charges
       .find((charge) => charge.id === "ch_cs_lifetime_1")!
-      .refunds.push({
-        amount: 18178,
-        status: "succeeded",
-      });
+      .refunds.push({ amount: 18178, status: "succeeded" });
     await event(stripe, "charge.refunded", "ch_cs_lifetime_1", "2026-09-20T08:00:00.000Z");
     expect(
       (

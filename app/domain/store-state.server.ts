@@ -1,6 +1,7 @@
 /**
- * Frammenti SQL sul negozio (nome mostrato e condizioni sul suo stato), condivisi dalle query
- * che leggono, importano o consultano i suoi dati. Gli argomenti sono espressioni SQL (alias o parametri), mai valori.
+ * Frammenti SQL sul negozio (nome mostrato e condizioni sul suo stato), condivisi dalle query che
+ * leggono, importano o consultano i suoi dati. Gli argomenti sono espressioni SQL (alias o
+ * parametri), mai valori.
  */
 
 /** Nome mostrato del negozio: quello del negozio eBay, altrimenti lo username dell'account. */

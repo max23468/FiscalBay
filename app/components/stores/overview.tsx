@@ -2,25 +2,18 @@ import { ChevronRight, ExternalLink, RefreshCw } from "lucide-react";
 import { Link } from "react-router";
 
 import { useAction } from "~/components/action";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { useHydrated } from "~/components/hydrated";
 import { StatusBadge } from "~/components/status";
 import { useDate } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
-import { useCopy, useLinks } from "~/components/copy-context";
+
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
 import { formatNumber } from "../../format";
 import { type StoreView } from "../../view-models";
 import { PauseButton, ReconnectButton } from "./actions";
-import {
-  FeedbackSummary,
-  LastSync,
-  RecentList,
-  StoreSubtitle,
-  StoreTile,
-  type SectionProps,
-} from "./store";
 import {
   connectionStatus,
   consentExpired,
@@ -31,6 +24,14 @@ import {
   syncDescription,
   type StoresPageData,
 } from "./state";
+import {
+  FeedbackSummary,
+  LastSync,
+  RecentList,
+  StoreSubtitle,
+  StoreTile,
+  type SectionProps,
+} from "./store";
 
 /** Valore di un riquadro della scheda: etichetta sopra, valore sotto. */
 function OverviewStat({ label, children }: { label: string; children: React.ReactNode }) {
@@ -131,8 +132,8 @@ function OverviewRecent({ store }: SectionProps) {
 
 /**
  * Azioni frequenti della scheda: lettura o ricollegamento, pausa e dettagli. Reimportazione,
- * scollegamento ed eliminazione restano nel pannello. Sotto `sm` i pulsanti stanno in colonna
- * a tutta larghezza, da `sm` in riga.
+ * scollegamento ed eliminazione restano nel pannello. Sotto `sm` i pulsanti stanno in colonna a
+ * tutta larghezza, da `sm` in riga.
  */
 function OverviewActions({ store, data }: { store: StoreView; data: StoresPageData }) {
   const { links } = useLinks();
@@ -177,9 +178,9 @@ function OverviewActions({ store, data }: { store: StoreView; data: StoresPageDa
 }
 
 /**
- * Con un solo negozio, il caso più comune, la pagina lo mostra per esteso: stato, letture,
- * storico e autorizzazione si leggono senza aprire il pannello, che resta completo. Da desktop
- * gli aggiornamenti stanno nella colonna destra; su mobile precedono le azioni.
+ * Con un solo negozio, il caso più comune, la pagina lo mostra per esteso: stato, letture, storico
+ * e autorizzazione si leggono senza aprire il pannello, che resta completo. Da desktop gli
+ * aggiornamenti stanno nella colonna destra; su mobile precedono le azioni.
  */
 export function StoreOverview({ store, data }: { store: StoreView; data: StoresPageData }) {
   const { t } = useCopy();

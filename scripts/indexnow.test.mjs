@@ -11,11 +11,11 @@ describe("IndexNow", () => {
   it("invia le pagine della sitemap con la chiave dell'host", () => {
     // Forma della sitemap servita: `<loc>` per pagina e lingua, alternate in `xhtml:link`.
     const alternates =
-      '<xhtml:link rel="alternate" hreflang="it" href="https://fiscalbay.it/"/>' +
-      '<xhtml:link rel="alternate" hreflang="en" href="https://fiscalbay.it/en"/>';
+      '<xhtml:link rel="alternate" hreflang="it" href="https://fiscalbay.it/"/>'
+      + '<xhtml:link rel="alternate" hreflang="en" href="https://fiscalbay.it/en"/>';
     const urls = sitemapUrls(
-      `<urlset><url><loc>https://fiscalbay.it/</loc>${alternates}</url>` +
-        `<url><loc>https://fiscalbay.it/en</loc>${alternates}</url></urlset>`,
+      `<urlset><url><loc>https://fiscalbay.it/</loc>${alternates}</url>`
+        + `<url><loc>https://fiscalbay.it/en</loc>${alternates}</url></urlset>`,
     );
     // Le alternate delle lingue non sono `<loc>` e non si ripetono.
     assert.deepEqual(urls, ["https://fiscalbay.it/", "https://fiscalbay.it/en"]);

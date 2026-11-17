@@ -1,11 +1,8 @@
 import ExcelJS from "exceljs";
-
 import { strFromU8, unzipSync } from "fflate";
-
 import { describe, expect, it } from "vitest";
 
 import { appCopy } from "../app/app-copy";
-
 import {
   csvCell,
   exportCsvStream,
@@ -15,9 +12,7 @@ import {
   exportXlsxStream,
   formulaLike,
 } from "../app/domain/order-export.server";
-
-import { exportHeader, parseColumns, standardColumns } from "../app/orders/export-columns";
-
+import { type VisibleOrder } from "../app/domain/orders.server";
 import {
   columnLetters,
   serialDate,
@@ -29,13 +24,9 @@ import {
   xlsxMaxRows,
   type XlsxCell,
 } from "../app/domain/xlsx.server";
-
-import { type VisibleOrder } from "../app/domain/orders.server";
-
-import { now } from "./fixtures/database-fixtures";
-
 import { fulfillmentObservation } from "../app/integrations/ebay/fulfillment.server";
-
+import { exportHeader, parseColumns, standardColumns } from "../app/orders/export-columns";
+import { now } from "./fixtures/database-fixtures";
 import { it_, visible, tax } from "./fixtures/order-export-scenarios";
 
 describe("righe e celle del file", () => {

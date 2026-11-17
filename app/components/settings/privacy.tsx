@@ -2,14 +2,15 @@ import { useState } from "react";
 import { Link } from "react-router";
 
 import { useAction } from "~/components/action";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { StatusAlert } from "~/components/status";
-import { downloadExport } from "./download";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
-import { useCopy, useLinks } from "~/components/copy-context";
+
 import { appHref, privacyPath, termsPath } from "../../app-links";
 import { localizedPath } from "../../i18n";
 import { DeleteAccount } from "../delete-account";
+import { downloadExport } from "./download";
 import type { SecurityData } from "./security";
 import { settingsRow, settingsRowText } from "./security-rows";
 
@@ -17,8 +18,8 @@ import { settingsRow, settingsRowText } from "./security-rows";
 const privacySection = "impostazioni/privacy";
 
 /**
- * Esportazione dei dati dell'account: il file si scarica dal suo percorso, che ricontrolla
- * sessione e validità. Un errore resta accanto all'azione fino al tentativo successivo.
+ * Esportazione dei dati dell'account: il file si scarica dal suo percorso, che ricontrolla sessione
+ * e validità. Un errore resta accanto all'azione fino al tentativo successivo.
  */
 function useAccountExport() {
   const { t } = useCopy();

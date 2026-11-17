@@ -2,12 +2,13 @@ import { cn } from "cn";
 import { useState } from "react";
 
 import { LedgerIndicator } from "~/components/brand";
+import { useCopy } from "~/components/copy-context";
 import { IconTile, InitialsTile } from "~/components/icon-tile";
 import { StatusBadge, StatusIcon } from "~/components/status";
 import { useDate } from "~/components/time-zone";
-import { useCopy } from "~/components/copy-context";
-import { type StoreView } from "../../view-models";
+
 import { formatNumber, formatPercent, formatRelative } from "../../format";
+import { type StoreView } from "../../view-models";
 import { marketplaceText } from "./state";
 
 /** Logo del negozio eBay; senza logo, o se non si carica, le iniziali del nome. */
@@ -66,7 +67,10 @@ export function LastSync({
   slot?: boolean;
   /** Nei riquadri stretti della scheda il testo va a capo. */
   wrap?: boolean;
-  /** Fuori dalla tabella, che ha l'intestazione della colonna, il valore ha la sua etichetta e va a capo. */
+  /**
+   * Fuori dalla tabella, che ha l'intestazione della colonna, il valore ha la sua etichetta e va a
+   * capo.
+   */
   labelled?: boolean;
 }) {
   const { t, language } = useCopy();

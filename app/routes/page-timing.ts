@@ -2,11 +2,11 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 
 import { isSameOrigin } from "../account-area.server";
+import { redeemTimingTicket } from "../domain/page-timing.server";
 import { postOnly } from "../error-response";
 import { readBounded } from "../integrations/http.server";
 import { pagePoint, writePoints } from "../metrics.server";
 import { maxLayoutShift, maxTimingMs, serverPhases, timedPages } from "../page-timing";
-import { redeemTimingTicket } from "../domain/page-timing.server";
 import type { Route } from "./+types/page-timing";
 
 const duration = z.number().int().min(0).max(maxTimingMs);
@@ -35,10 +35,9 @@ const maxBytes = 1024;
 export const loader = postOnly;
 
 /**
- * Misure del caricamento delle pagine dell'app inviate dal browser: scritte su Analytics Engine
- * con i soli campi ammessi, una volta per il biglietto della pagina. Richieste di altre origini,
- * vuote, troppo grandi, non valide, senza un biglietto valido o ripetute non
- * lasciano traccia.
+ * Misure del caricamento delle pagine dell'app inviate dal browser: scritte su Analytics Engine con
+ * i soli campi ammessi, una volta per il biglietto della pagina. Richieste di altre origini, vuote,
+ * troppo grandi, non valide, senza un biglietto valido o ripetute non lasciano traccia.
  */
 export async function action({ request }: Route.ActionArgs) {
   if (!isSameOrigin(request)) return new Response(null, { status: 403 });

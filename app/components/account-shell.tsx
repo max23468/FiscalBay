@@ -1,10 +1,11 @@
 import { useLocation, useNavigation, useSubmit } from "react-router";
 
 import { AppShell } from "~/components/app-shell";
+import { useCopy } from "~/components/copy-context";
 import { useDeviceTimeZone } from "~/components/device-time-zone";
 import { OrdersLoading } from "~/components/orders/loading";
 import { shellDestinations, shellMenu } from "~/components/shell-links";
-import { useCopy } from "~/components/copy-context";
+
 import { appCopy } from "../app-copy";
 import {
   accessPath,
@@ -53,9 +54,9 @@ export function AccountShell({
   const navigation = useNavigation();
   const ordersList = appHref(links, "ordini");
   const loadingOrders =
-    navigation.state === "loading" &&
-    navigation.location.pathname === ordersList &&
-    !pathname.startsWith(ordersList);
+    navigation.state === "loading"
+    && navigation.location.pathname === ordersList
+    && !pathname.startsWith(ordersList);
   return (
     <AppShell
       account={account}

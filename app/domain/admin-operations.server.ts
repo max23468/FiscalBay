@@ -1,9 +1,9 @@
 import { stalledDeletions } from "./account-deletion.server";
-import { stalledEbayDeletions } from "./ebay-account-deletion.server";
 import { auditInProgress } from "./admin-audit.server";
+import { stalledEbayDeletions } from "./ebay-account-deletion.server";
 import { bulkDataAnomalies, quotaAnomalies } from "./ebay-quotas.server";
-import { minute, stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
 import { listedOrder, orderLineageSql, storeLabelSql } from "./store-state.server";
+import { minute, stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
 
 /**
  * Stato operativo per la console (§15): lavori periodici, ricevute dei provider, letture dei
@@ -68,9 +68,9 @@ export const credentialWarningDays = 45;
 
 /**
  * Ordini italiani senza dato fiscale (§31): un negozio li segnala quando, fra gli ordini delle
- * ultime 48 ore, ne mancano almeno 5 e almeno il 60%. Gli ordini delle ultime 3 ore attendono
- * la passata Trading, che spesso porta il dato dopo. Indica in anticipo un campo o uno scope che
- * eBay ha smesso di restituire, non un acquirente che non l'ha indicato.
+ * ultime 48 ore, ne mancano almeno 5 e almeno il 60%. Gli ordini delle ultime 3 ore attendono la
+ * passata Trading, che spesso porta il dato dopo. Indica in anticipo un campo o uno scope che eBay
+ * ha smesso di restituire, non un acquirente che non l'ha indicato.
  */
 export const taxGap = { orders: 5, percent: 60, windowHours: 48, settleHours: 3 } as const;
 
@@ -338,8 +338,8 @@ function credentialAnomalies(credentials: Signals["credentials"]): Anomaly[] {
       kind: "credential_expiry",
       severity: expiring.some((row) => row.expired) ? "p1" : "p2",
       since: new Date(
-        Date.parse(`${String(expiring[0]!.expires)}T00:00:00.000Z`) -
-          credentialWarningDays * 24 * 60 * minute,
+        Date.parse(`${String(expiring[0]!.expires)}T00:00:00.000Z`)
+          - credentialWarningDays * 24 * 60 * minute,
       ).toISOString(),
       count: expiring.length,
       subjects: expiring.map((row) => ({

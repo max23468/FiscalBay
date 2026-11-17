@@ -1,15 +1,8 @@
 import { env } from "cloudflare:workers";
-
 import { expect, it, vi } from "vitest";
 
 import { appCopy } from "../app/app-copy";
-
-import { standardColumns } from "../app/orders/export-columns";
-
-import { XlsxRowLimitError } from "../app/domain/xlsx.server";
-
 import { purgeExportFiles } from "../app/domain/export-files.server";
-
 import {
   consumeExportJob,
   exportJobOrders,
@@ -18,15 +11,11 @@ import {
   queueOrderFile,
   resumeExportJobs,
 } from "../app/domain/export-jobs.server";
-
 import { consumeTask, taskSlot } from "../app/domain/scheduled-work.server";
-
+import { XlsxRowLimitError } from "../app/domain/xlsx.server";
+import { standardColumns } from "../app/orders/export-columns";
 import { verifiedSession } from "./fixtures/account-fixtures";
-
-import { queued, queueMessage } from "./fixtures/queue-fixture";
-
 import { insertEntitlement, now } from "./fixtures/database-fixtures";
-
 import {
   it_,
   userId,
@@ -41,6 +30,7 @@ import {
   bell,
   setupScenarios,
 } from "./fixtures/order-export-scenarios";
+import { queued, queueMessage } from "./fixtures/queue-fixture";
 
 setupScenarios();
 
@@ -60,10 +50,7 @@ it("oltre la soglia prepara il file dalla coda e la campanella lo annuncia", asy
   try {
     const response = await request("", { period: "30" });
     expect(response.status).toBe(202);
-    expect(await response.json()).toEqual({
-      ok: true,
-      notice: it_.settings.export.exportQueued,
-    });
+    expect(await response.json()).toEqual({ ok: true, notice: it_.settings.export.exportQueued });
     expect(send).toHaveBeenCalledOnce();
     message = send.mock.calls[0]![0];
   } finally {
@@ -75,13 +62,7 @@ it("oltre la soglia prepara il file dalla coda e la campanella lo annuncia", asy
   expect(pending).toMatchObject({ state: "queued", file_id: null, finished_at: null });
   expect(pending!.request_sealed).not.toMatch(/since|production|Europe/u);
   expect(await sectionFiles()).toEqual([
-    {
-      id,
-      name: "fiscalbay-ordini-2026-09-13.csv",
-      state: "queued",
-      at: now,
-      expiresAt: null,
-    },
+    { id, name: "fiscalbay-ordini-2026-09-13.csv", state: "queued", at: now, expiresAt: null },
   ]);
   expect(await bell()).toEqual([]);
   const delivery = queueMessage(message);
@@ -330,13 +311,15 @@ it("se il blocco non si libera dopo un errore, lo segnala e riprova allo scadere
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   const failing = vi.spyOn(env.EXPORT_FILES, "put").mockRejectedValue(new Error("R2"));
   const prepare = env.DB.prepare.bind(env.DB);
-  const release = vi.spyOn(env.DB, "prepare").mockImplementation((sql: string) =>
-    sql.includes("SET locked_until = NULL WHERE id = ?1 AND state = 'queued'")
-      ? ({
-          bind: () => ({ run: () => Promise.reject(new Error("D1")) }),
-        } as unknown as D1PreparedStatement)
-      : prepare(sql),
-  );
+  const release = vi
+    .spyOn(env.DB, "prepare")
+    .mockImplementation((sql: string) =>
+      sql.includes("SET locked_until = NULL WHERE id = ?1 AND state = 'queued'")
+        ? ({
+            bind: () => ({ run: () => Promise.reject(new Error("D1")) }),
+          } as unknown as D1PreparedStatement)
+        : prepare(sql),
+    );
   try {
     const message = queueMessage({ exportJob: id });
     await consumeExportJob(message, env);

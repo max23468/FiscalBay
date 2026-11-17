@@ -1,6 +1,6 @@
-import { storeIdentityHash, storeMarkSql, trialMarkExpiry } from "./store-marks.server";
 import { deleteOrders, requestOrderBudget, storeDataTables } from "./deletion-steps.server";
 import { applyWorkspacePlan } from "./free-store.server";
+import { storeIdentityHash, storeMarkSql, trialMarkExpiry } from "./store-marks.server";
 import { clearedStoreProfileSql, storeNameSql } from "./store-state.server";
 
 /**
@@ -9,19 +9,19 @@ import { clearedStoreProfileSql, storeNameSql } from "./store-state.server";
  * rilegge appartenenza e spazio di destinazione e fallisce se nel frattempo sono cambiati.
  *
  * Passa soltanto l'identità del negozio. Ordini, sblocchi, credenziali, preferenze Telegram e
- * lavori pendenti restano allo spazio precedente e si eliminano: lo storico, il login e i
- * pagamenti non si trasferiscono. Il negozio arriva scollegato e il nuovo proprietario lo
- * ricollega con il proprio consenso eBay, poi lo storico si importa secondo il suo piano.
+ * lavori pendenti restano allo spazio precedente e si eliminano: lo storico, il login e i pagamenti
+ * non si trasferiscono. Il negozio arriva scollegato e il nuovo proprietario lo ricollega con il
+ * proprio consenso eBay, poi lo storico si importa secondo il suo piano.
  *
  * Il negozio porta i suoi limiti: la conferma scrive lo stesso segno della cancellazione
- * dell'account, che il ricollegamento applica allo spazio di destinazione con la stessa regola.
- * Una prova già usata non si ripete e il ciclo Free in corso prosegue con i suoi sblocchi. Uno
- * dei due spazi con una cancellazione dell'account in corso non partecipa a un trasferimento.
+ * dell'account, che il ricollegamento applica allo spazio di destinazione con la stessa regola. Una
+ * prova già usata non si ripete e il ciclo Free in corso prosegue con i suoi sblocchi. Uno dei due
+ * spazi con una cancellazione dell'account in corso non partecipa a un trasferimento.
  */
 
 /**
- * Cancellazione dell'account in corso per uno degli spazi o dei loro membri. Argomenti:
- * espressioni SQL dei due spazi.
+ * Cancellazione dell'account in corso per uno degli spazi o dei loro membri. Argomenti: espressioni
+ * SQL dei due spazi.
  */
 const deletionSql = (from: string, to: string) => `EXISTS (SELECT 1 FROM account_deletions d
   WHERE d.completed_at IS NULL AND (d.workspace_id IN (${from}, ${to})
@@ -111,9 +111,9 @@ export type TransferResult =
   | "more";
 
 /**
- * Condizioni della conferma, sulla riga `t` di `store_transfers` all'istante `at`: preparazione
- * non eseguita né scaduta, negozio ancora dello spazio di partenza, destinazione esistente e
- * nessuno dei due spazi in cancellazione.
+ * Condizioni della conferma, sulla riga `t` di `store_transfers` all'istante `at`: preparazione non
+ * eseguita né scaduta, negozio ancora dello spazio di partenza, destinazione esistente e nessuno
+ * dei due spazi in cancellazione.
  */
 const confirmableSql = (t: string, at: string) => `${t}.executed_at IS NULL
   AND julianday(${t}.expires_at) > julianday(${at})
@@ -127,9 +127,9 @@ const confirmableSql = (t: string, at: string) => `${t}.executed_at IS NULL
  * soltanto finché la preparazione è ancora confermabile: una sola istruzione su un negozio grande
  * supera i limiti del database. Il resto sta in un solo commit: ogni istruzione dipende dalla
  * prima, che segna la preparazione eseguita soltanto se il negozio è ancora dello spazio di
- * partenza, la destinazione esiste e nessuno dei due spazi si sta cancellando, con
- * l'identificativo casuale di questa esecuzione: due conferme concorrenti o ripetute, anche
- * nello stesso istante, ne eseguono una sola e l'altra non scrive altro.
+ * partenza, la destinazione esiste e nessuno dei due spazi si sta cancellando, con l'identificativo
+ * casuale di questa esecuzione: due conferme concorrenti o ripetute, anche nello stesso istante, ne
+ * eseguono una sola e l'altra non scrive altro.
  */
 export async function confirmStoreTransfer(
   env: Pick<Env, "DB" | "BETTER_AUTH_SECRET">,

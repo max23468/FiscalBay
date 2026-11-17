@@ -4,7 +4,10 @@ import { m } from "motion/react";
 import { useId } from "react";
 import { Link } from "react-router";
 
+import { useCopy } from "~/components/copy-context";
+import { CopyButton } from "~/components/tax-code";
 import { dotTones, toneFor } from "~/components/tile-tone";
+import { useDate } from "~/components/time-zone";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -14,23 +17,21 @@ import {
   DropdownMenuLinkItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+
 import { mailtoHref } from "../../contact";
+import { addressRows } from "../../format";
 import { formatAmount } from "../../i18n";
+import { ebayOrderHref } from "../../orders/ebay-links";
+import type { SecondaryActions } from "../../orders/page-data";
 import {
   marketplaceLabel,
   type AddressView,
   type ContactsView,
   type OrderView,
 } from "../../view-models";
-import { addressRows } from "../../format";
-import { CopyButton } from "~/components/tax-code";
 import { FiscalCodes, FiscalNotes, type FiscalProps } from "./fiscal";
 import { fromListState, missingContact } from "./labels";
-import { ebayOrderHref } from "../../orders/ebay-links";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
-import { useDate } from "~/components/time-zone";
-import { useCopy } from "~/components/copy-context";
-import type { SecondaryActions } from "../../orders/page-data";
 
 /** Area di tocco invisibile di almeno 44 px per i collegamenti testuali, come per i pulsanti. */
 const coarseTarget =
@@ -88,8 +89,8 @@ const contactLink =
   "rounded-sm underline decoration-muted-foreground/40 underline-offset-[0.25em] outline-none hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
- * Telefono nella forma internazionale, da toccare per chiamare; un numero non riconosciuto
- * resta com'è e non diventa un collegamento.
+ * Telefono nella forma internazionale, da toccare per chiamare; un numero non riconosciuto resta
+ * com'è e non diventa un collegamento.
  */
 export function PhoneNumber({
   phone,
@@ -105,7 +106,7 @@ export function PhoneNumber({
     <span className="inline-flex max-w-full flex-wrap items-center gap-1">
       <a
         href={`tel:${view.international}`}
-        className={cn("font-code min-w-0 [overflow-wrap:anywhere]", contactLink)}
+        className={cn("min-w-0 font-code [overflow-wrap:anywhere]", contactLink)}
       >
         {view.display}
       </a>
@@ -186,8 +187,8 @@ export function ItemThumbnail({ src }: { src?: string }) {
 }
 
 /**
- * Indirizzo di fatturazione e contatti dell'acquirente: dati non fiscali, visibili
- * anche con il Codice Fiscale da sbloccare. Un dato assente resta indicato.
+ * Indirizzo di fatturazione e contatti dell'acquirente: dati non fiscali, visibili anche con il
+ * Codice Fiscale da sbloccare. Un dato assente resta indicato.
  */
 function BuyerContacts({ order }: { order: OrderView }) {
   const { t } = useCopy();
@@ -294,11 +295,14 @@ export function OrderCard({
   onSelect: (selected: boolean) => void;
   isNew: boolean;
   /**
-   * Posizione nell'elenco. La scheda si rimisura per il riordino soltanto quando cambia, non a
-   * ogni aggiornamento della pagina come la selezione.
+   * Posizione nell'elenco. La scheda si rimisura per il riordino soltanto quando cambia, non a ogni
+   * aggiornamento della pagina come la selezione.
    */
   position: number;
-  /** Posizione tra le schede comparse insieme, per l’ingresso scalato; assente per i nuovi ordini in cima. */
+  /**
+   * Posizione tra le schede comparse insieme, per l’ingresso scalato; assente per i nuovi ordini in
+   * cima.
+   */
   enterIndex?: number;
   actions: SecondaryActions;
 }) {
@@ -324,8 +328,8 @@ export function OrderCard({
           : { animationDelay: `${Math.min(enterIndex, maxEnterSteps) * enterStep}ms` }
       }
       className={cn(
-        enterIndex !== undefined &&
-          "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]",
+        enterIndex !== undefined
+          && "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]",
         // Da due colonne la scheda occupa quattro righe condivise con quella accanto:
         // intestazione, articolo, acquirente e «Dettaglio» iniziano alla stessa altezza.
         "flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 transition-[border-color] duration-(--duration-quick) lg:row-span-4 lg:grid lg:grid-rows-subgrid",
@@ -349,7 +353,7 @@ export function OrderCard({
             </Link>
           </h2>
           <div className="-my-1 -mr-1.5 flex shrink-0 items-center gap-1">
-            <span className="font-code mr-1 text-[0.9375rem] font-semibold whitespace-nowrap">
+            <span className="mr-1 font-code text-[0.9375rem] font-semibold whitespace-nowrap">
               {formatAmount(order.totalMinor, order.currency, language)}
             </span>
             {selecting ? (

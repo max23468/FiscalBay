@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { listAnomalies } from "../app/domain/admin-operations.server";
-import { reconcileOwnerIncidents } from "../app/domain/owner-incidents.server";
 import {
   consumeEbayAccountDeletion,
   recordEbayAccountDeletion,
@@ -14,6 +13,7 @@ import {
   openExportFile,
   exportRevision,
 } from "../app/domain/export-files.server";
+import { indexOrderSearch, purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { exportOrderPages } from "../app/domain/order-export.server";
 import { orderSuggestions } from "../app/domain/order-suggestions.server";
 import {
@@ -21,7 +21,7 @@ import {
   searchVisibleOrders,
   visibleOrderState,
 } from "../app/domain/orders.server";
-import { indexOrderSearch, purgeExpiredRecords } from "../app/domain/maintenance.server";
+import { reconcileOwnerIncidents } from "../app/domain/owner-incidents.server";
 import { storeIdentityHash } from "../app/domain/store-marks.server";
 import {
   insertCredentials,
@@ -54,8 +54,8 @@ const buyer = {
 };
 
 /**
- * Ordine con acquirente nel negozio indicato; `mergedInto` per un ordine combinato. Il trigger
- * che revoca i file confronta la conservazione con l'orologio di D1.
+ * Ordine con acquirente nel negozio indicato; `mergedInto` per un ordine combinato. Il trigger che
+ * revoca i file confronta la conservazione con l'orologio di D1.
  */
 const buyerOrder = (
   id: string,

@@ -3,29 +3,29 @@
  * Protezioni della zona e della posta (§24, D168). Descrive, convalida con `dry_run`, applica e
  * rilegge sulla zona comune ai due ambienti:
  *
- * - header di sicurezza e HSTS graduale per gli host dell'ambiente, con una Response Header
- *   Transform Rule: l'impostazione HSTS della zona varrebbe anche per l'altro ambiente;
- * - regole WAF personalizzate: i webhook firmati senza controlli da browser e il blocco delle
- *   sonde osservate nei log del test (file nascosti, PHP, WordPress, backup e configurazioni);
- * - una regola di rate limiting sulle raffiche verso gli endpoint di accesso, prima del binding
- *   Rate Limiting del Worker e dei contatori D1;
- * - DMARC Management, con l'indirizzo `rua` di Cloudflare aggiunto al record esistente, e
- *   Certificate Transparency Monitoring verso l'indirizzo dell'owner;
- * - il rilevamento delle credenziali trapelate. L'header `Exposed-Credential-Check` verso il
- *   Worker è un managed transform che la CLI non gestisce, attivato una volta dall'API
+ * - Header di sicurezza e HSTS graduale per gli host dell'ambiente, con una Response Header Transform
+ *   Rule: l'impostazione HSTS della zona varrebbe anche per l'altro ambiente;
+ * - Regole WAF personalizzate: i webhook firmati senza controlli da browser e il blocco delle sonde
+ *   osservate nei log del test (file nascosti, PHP, WordPress, backup e configurazioni);
+ * - Una regola di rate limiting sulle raffiche verso gli endpoint di accesso, prima del binding Rate
+ *   Limiting del Worker e dei contatori D1;
+ * - DMARC Management, con l'indirizzo `rua` di Cloudflare aggiunto al record esistente, e Certificate
+ *   Transparency Monitoring verso l'indirizzo dell'owner;
+ * - Il rilevamento delle credenziali trapelate. L'header `Exposed-Credential-Check` verso il Worker è
+ *   un managed transform che la CLI non gestisce, attivato una volta dall'API
  *   (`add_waf_credential_check_status_header`): il readback lo prova con una password nota.
  *
- * Il readback controlla anche che la zona lasci passare i crawler AI, ammessi dai Content
- * Signals del robots.txt servito dall'app.
+ * Il readback controlla anche che la zona lasci passare i crawler AI, ammessi dai Content Signals
+ * del robots.txt servito dall'app.
  *
- * Le regole dell'ambiente si riconoscono dal `ref`: `apply` sostituisce soltanto quelle e lascia
- * le altre della fase. Il readback controlla configurazione, impostazioni conservate (DNSSEC,
- * HTTPS, piano, Bot Fight Mode, posta) e risposte reali dell'ambiente. `remove` toglie le regole
- * dell'ambiente: è il percorso di rientro, insieme alla cronologia delle versioni dei ruleset.
- * Le chiamate passano dal profilo della CLI `cf`.
+ * Le regole dell'ambiente si riconoscono dal `ref`: `apply` sostituisce soltanto quelle e lascia le
+ * altre della fase. Il readback controlla configurazione, impostazioni conservate (DNSSEC, HTTPS,
+ * piano, Bot Fight Mode, posta) e risposte reali dell'ambiente. `remove` toglie le regole
+ * dell'ambiente: è il percorso di rientro, insieme alla cronologia delle versioni dei ruleset. Le
+ * chiamate passano dal profilo della CLI `cf`.
  *
- * Uso: node scripts/zone-protection.mjs <plan|validate|apply|readback|remove> [--mode live]
- *      node scripts/zone-protection.mjs readback --burst   (prova anche il rate limiting)
+ * Uso: node scripts/zone-protection.mjs <plan|validate|apply|readback|remove> [--mode live] node
+ * scripts/zone-protection.mjs readback --burst (prova anche il rate limiting)
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,9 +44,9 @@ export const zonePlan = "free";
 
 /**
  * Scala di HSTS: si sale di un gradino soltanto dopo il readback del precedente. I due ambienti
- * sono all'ultimo gradino, un anno, con `includeSubDomains` e `preload` per la lista dei
- * browser: i soli nomi web della zona sono l'apice, `www` e `test`, tutti in HTTPS; gli altri
- * record servono alla posta. Un nuovo sottodominio deve nascere in HTTPS.
+ * sono all'ultimo gradino, un anno, con `includeSubDomains` e `preload` per la lista dei browser: i
+ * soli nomi web della zona sono l'apice, `www` e `test`, tutti in HTTPS; gli altri record servono
+ * alla posta. Un nuovo sottodominio deve nascere in HTTPS.
  */
 export const hstsStages = [300, 86_400, 604_800, 31_536_000];
 export const hstsStage = { test: 3, live: 3 };
@@ -69,8 +69,8 @@ export const staticHeaders = {
 };
 
 /**
- * Lettura delle risposte da altre origini (CORP): nessuna, salvo le immagini delle condivisioni,
- * le icone e il logo delle email, che anteprime e client di posta caricano da altri siti.
+ * Lettura delle risposte da altre origini (CORP): nessuna, salvo le immagini delle condivisioni, le
+ * icone e il logo delle email, che anteprime e client di posta caricano da altri siti.
  */
 export const resourcePolicy = { default: "same-origin", shared: "cross-origin" };
 export const sharedResourcePrefixes = ["/og/", "/icon-"];
@@ -80,8 +80,8 @@ export const sharedResourcePaths = ["/favicon.ico", "/favicon.svg", "/apple-touc
 export const authBurst = { path: "/api/auth/", requests: 30, period: 10, timeout: 10 };
 
 /**
- * Pagine dei moduli di accesso e assistenza, nelle due lingue e con i dati delle route: sul Free
- * la regola non distingue il metodo, quindi conta anche le aperture della pagina.
+ * Pagine dei moduli di accesso e assistenza, nelle due lingue e con i dati delle route: sul Free la
+ * regola non distingue il metodo, quindi conta anche le aperture della pagina.
  */
 export const formPaths = ["/accesso", "/supporto"].flatMap((path) =>
   [path, `/en${path}`].flatMap((page) => [page, `${page}.data`]),
@@ -170,8 +170,8 @@ export function sharedResourceRule(target) {
 
 /**
  * I provider dei webhook non superano controlli da browser: niente Browser Integrity Check né
- * challenge della modalità sotto attacco sui soli percorsi esatti. Firma, segreto e limiti
- * restano del Worker.
+ * challenge della modalità sotto attacco sui soli percorsi esatti. Firma, segreto e limiti restano
+ * del Worker.
  */
 export function webhookRule(target) {
   return {
@@ -322,14 +322,14 @@ export function contains(actual, expected) {
   if (expected === null || typeof expected !== "object") return actual === expected;
   if (Array.isArray(expected))
     return (
-      Array.isArray(actual) &&
-      actual.length === expected.length &&
-      expected.every((value, index) => contains(actual[index], value))
+      Array.isArray(actual)
+      && actual.length === expected.length
+      && expected.every((value, index) => contains(actual[index], value))
     );
   return (
-    actual !== null &&
-    typeof actual === "object" &&
-    Object.entries(expected).every(([key, value]) => contains(actual[key], value))
+    actual !== null
+    && typeof actual === "object"
+    && Object.entries(expected).every(([key, value]) => contains(actual[key], value))
   );
 }
 
@@ -339,8 +339,8 @@ const mitigated = (response) => header(response, "cf-mitigated") !== null;
 /** Header di sicurezza attesi su una risposta reale. */
 function securedHeaders(target, response) {
   return (
-    header(response, "strict-transport-security") === hstsValue(target) &&
-    Object.entries(staticHeaders).every(([name, value]) => header(response, name) === value)
+    header(response, "strict-transport-security") === hstsValue(target)
+    && Object.entries(staticHeaders).every(([name, value]) => header(response, name) === value)
   );
 }
 
@@ -349,8 +349,8 @@ const redirectsTo = (response, location) =>
   [301, 308].includes(response?.status) && header(response, "location") === location;
 
 /**
- * Controlli del readback: regole previste attive, impostazioni della posta e della zona
- * conservate, risposte reali dell'ambiente.
+ * Controlli del readback: regole previste attive, impostazioni della posta e della zona conservate,
+ * risposte reali dell'ambiente.
  */
 export function checkReadback(target, state) {
   const desired = desiredRules(target);
@@ -358,8 +358,8 @@ export function checkReadback(target, state) {
   const ruleChecks = phases.flatMap((phase) =>
     desired[phase].map((rule) => [
       `regola ${rule.ref}`,
-      rulesIn(phase).filter((actual) => actual.ref === rule.ref).length === 1 &&
-        contains(
+      rulesIn(phase).filter((actual) => actual.ref === rule.ref).length === 1
+        && contains(
           rulesIn(phase).find((actual) => actual.ref === rule.ref),
           rule,
         ),
@@ -393,55 +393,55 @@ export function checkReadback(target, state) {
     ["Speed Brain spento", state.settings?.speed_brain === "off"],
     [
       "crawler AI ammessi",
-      state.botManagement?.ai_bots_protection === "disabled" &&
-        state.botManagement?.crawler_protection === "disabled" &&
-        state.botManagement?.is_robots_txt_managed === false,
+      state.botManagement?.ai_bots_protection === "disabled"
+        && state.botManagement?.crawler_protection === "disabled"
+        && state.botManagement?.is_robots_txt_managed === false,
     ],
     ["rilevamento delle credenziali trapelate", state.leakedCredentials?.enabled === true],
     ["password nota segnalata al Worker", responses.passwordCheck?.leaked === true],
     [
       "alert dei certificati",
-      state.ctAlerting?.enabled === true &&
-        Array.isArray(state.ctAlerting.emails) &&
-        state.ctAlerting.emails.includes(alertEmail),
+      state.ctAlerting?.enabled === true
+        && Array.isArray(state.ctAlerting.emails)
+        && state.ctAlerting.emails.includes(alertEmail),
     ],
     ["DMARC Management attivo", state.dmarcReports?.enabled === true],
     [
       "un solo record DMARC con i report",
-      dmarcRecords.length === 1 &&
-        Boolean(state.dmarcReports?.rua_prefix) &&
-        dmarcWithReports(dmarc, state.dmarcReports.rua_prefix) === dmarc.replace(/^"|"$/gu, ""),
+      dmarcRecords.length === 1
+        && Boolean(state.dmarcReports?.rua_prefix)
+        && dmarcWithReports(dmarc, state.dmarcReports.rua_prefix) === dmarc.replace(/^"|"$/gu, ""),
     ],
     [
       "policy DMARC conservata",
-      dmarcTag(dmarc, "p") === "quarantine" &&
-        dmarcTag(dmarc, "adkim") === "r" &&
-        dmarcTag(dmarc, "aspf") === "r",
+      dmarcTag(dmarc, "p") === "quarantine"
+        && dmarcTag(dmarc, "adkim") === "r"
+        && dmarcTag(dmarc, "aspf") === "r",
     ],
     ["un solo SPF per nome", new Set(spf.map((record) => record.name)).size === spf.length],
     ["MX iCloud conservati", mx.join() === ["mx01.mail.icloud.com", "mx02.mail.icloud.com"].join()],
     [
       "pagina con header e CSP",
-      responses.page?.status === 200 &&
-        securedHeaders(target, responses.page) &&
-        header(responses.page, "cross-origin-resource-policy") === resourcePolicy.default &&
-        /frame-ancestors 'none'/u.test(header(responses.page, "content-security-policy") ?? "") &&
-        /'strict-dynamic'/u.test(header(responses.page, "content-security-policy") ?? "") &&
-        /require-trusted-types-for 'script'/u.test(
+      responses.page?.status === 200
+        && securedHeaders(target, responses.page)
+        && header(responses.page, "cross-origin-resource-policy") === resourcePolicy.default
+        && /frame-ancestors 'none'/u.test(header(responses.page, "content-security-policy") ?? "")
+        && /'strict-dynamic'/u.test(header(responses.page, "content-security-policy") ?? "")
+        && /require-trusted-types-for 'script'/u.test(
           header(responses.page, "content-security-policy-report-only") ?? "",
-        ) &&
-        header(responses.page, "cache-control") === "no-store",
+        )
+        && header(responses.page, "cache-control") === "no-store",
     ],
     [
       "icona con header, leggibile da altri siti",
-      responses.asset?.status === 200 &&
-        securedHeaders(target, responses.asset) &&
-        header(responses.asset, "cross-origin-resource-policy") === resourcePolicy.shared,
+      responses.asset?.status === 200
+        && securedHeaders(target, responses.asset)
+        && header(responses.asset, "cross-origin-resource-policy") === resourcePolicy.shared,
     ],
     [
       "asset con hash in cache per un anno",
-      responses.hashedAsset?.status === 200 &&
-        header(responses.hashedAsset, "cache-control") === "public, max-age=31536000, immutable",
+      responses.hashedAsset?.status === 200
+        && header(responses.hashedAsset, "cache-control") === "public, max-age=31536000, immutable",
     ],
     [
       "pagina assente con header",

@@ -1,6 +1,7 @@
 import { cn } from "cn";
 
 import { StatusAlert, StatusBadge } from "~/components/status";
+
 import type { ReceiptState, TaskState } from "../../domain/admin-operations.server";
 import type {
   BulkDataAnomaly,
@@ -10,8 +11,8 @@ import type {
 } from "../../domain/ebay-quotas.server";
 import type { TechnicalMetrics } from "../../domain/technical-metrics.server";
 import { formatNumber } from "../../format";
-import { SeverityBadge } from "./overview";
 import { ActionForm, DataTable, Disclosure, Panel } from "./kit";
+import { SeverityBadge } from "./overview";
 import { subjectLabel } from "./subject-label";
 import { useAdmin } from "./use-admin";
 
@@ -377,7 +378,7 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
               <span key="inp" className="grid gap-0.5">
                 <span>{pair(row.measures.inp)}</span>
                 {(["input", "processing", "presentation", "script"] as const).map((part) => (
-                  <span key={part} className="whitespace-nowrap text-xs text-muted-foreground">
+                  <span key={part} className="text-xs whitespace-nowrap text-muted-foreground">
                     {m.inpPart[part]} {pair(row.measures[`inp_${part}`])}
                   </span>
                 ))}

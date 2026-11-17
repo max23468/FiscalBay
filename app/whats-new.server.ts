@@ -3,9 +3,6 @@ import { env } from "cloudflare:workers";
 import versionedChangelog from "../CHANGELOG.md?raw";
 import { appCopy } from "./app-copy";
 import { isProduction } from "./app-links";
-import { displayTimeZone } from "./format";
-import { notificationWindowMilliseconds } from "./domain/notification-reads.server";
-import type { Language } from "./i18n";
 import {
   parseChangelog,
   releaseChangelog,
@@ -13,6 +10,9 @@ import {
   type WhatsNewKind,
   type WhatsNewRelease,
 } from "./changelog";
+import { notificationWindowMilliseconds } from "./domain/notification-reads.server";
+import { displayTimeZone } from "./format";
+import type { Language } from "./i18n";
 import type { NotificationView } from "./view-models";
 
 export interface WhatsNewView {
@@ -46,8 +46,8 @@ const changelog = withChanges(
 let parsed: WhatsNewRelease[] | undefined;
 
 /**
- * Novità del changelog versionato. Il testo è fissato alla build e si analizza alla prima
- * lettura: l'avvio dell'isolate, pagato dalla prima richiesta, resta senza questo lavoro.
+ * Novità del changelog versionato. Il testo è fissato alla build e si analizza alla prima lettura:
+ * l'avvio dell'isolate, pagato dalla prima richiesta, resta senza questo lavoro.
  */
 export function whatsNewReleases(): WhatsNewRelease[] {
   parsed ??= parseChangelog(releaseChangelog(changelog, import.meta.env.VITE_RELEASE_DAY)).releases;
@@ -89,8 +89,8 @@ export function whatsNewView(
 }
 
 /**
- * Una voce della campanella per versione, negli ultimi trenta giorni, verso la pagina. La
- * versione in preparazione la annuncia dal deploy del Worker che la contiene.
+ * Una voce della campanella per versione, negli ultimi trenta giorni, verso la pagina. La versione
+ * in preparazione la annuncia dal deploy del Worker che la contiene.
  */
 export function whatsNewNotifications(
   language: Language,

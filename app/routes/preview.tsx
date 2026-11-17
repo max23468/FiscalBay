@@ -10,9 +10,11 @@ import {
 
 import { AccountDeletionPage } from "~/components/account-deletion";
 import { AppShell } from "~/components/app-shell";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { useDeviceTimeZone } from "~/components/device-time-zone";
 import { UnavailablePage } from "~/components/not-found";
-import type { OrdersPageData } from "../orders/page-data";
+import { shellDestinations, shellMenu } from "~/components/shell-links";
+import { siteColumn } from "~/components/site-column";
 import {
   Select,
   SelectContent,
@@ -20,13 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { useCopy, useLinks } from "~/components/copy-context";
-import { shellDestinations, shellMenu } from "~/components/shell-links";
-import { siteColumn } from "~/components/site-column";
+
 import { appCopy } from "../app-copy";
 import { previewBase, previewOrdersPath, previewSettingsPath } from "../app-links";
 import { canonicalPath, localizedPath } from "../i18n";
 import { revalidateUnlessSnapshot } from "../orders/order-list";
+import type { OrdersPageData } from "../orders/page-data";
 import { isScenarioId, scenarioOptions, scenarioVerified } from "../preview/scenarios.server";
 import { currentScenario, assertPreviewAction, writePreviewState } from "../preview/state.server";
 import type { Route } from "./+types/preview";
@@ -56,8 +57,8 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
 }
 
 /**
- * Cambio di scenario e, come nell'area reale, scelta della lingua: qui cambia soltanto
- * l'indirizzo, perché l'anteprima non conserva preferenze.
+ * Cambio di scenario e, come nell'area reale, scelta della lingua: qui cambia soltanto l'indirizzo,
+ * perché l'anteprima non conserva preferenze.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertPreviewAction(request);

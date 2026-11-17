@@ -5,8 +5,8 @@ import { measure } from "../observability.server";
 
 /**
  * Confine minimo delle chiamate ai provider: timeout sull'intera lettura, limite dei byte anche
- * senza Content-Length e classificazione stabile degli errori. Il body del provider non entra
- * mai nell'errore: resta disponibile solo un codice OAuth breve, utile a chi chiama.
+ * senza Content-Length e classificazione stabile degli errori. Il body del provider non entra mai
+ * nell'errore: resta disponibile solo un codice OAuth breve, utile a chi chiama.
  */
 export type UpstreamFailure =
   | "credentials"
@@ -104,8 +104,8 @@ function providerCode(text: string): string | undefined {
 }
 
 /**
- * Esecuzione della richiesta e restituzione del testo di una risposta 2xx entro tempo e
- * dimensione. Ogni provider raggiunto da qui è eBay: la durata rientra nella sua fase.
+ * Esecuzione della richiesta e restituzione del testo di una risposta 2xx entro tempo e dimensione.
+ * Ogni provider raggiunto da qui è eBay: la durata rientra nella sua fase.
  */
 export async function upstreamText(
   fetcher: typeof fetch,
@@ -120,8 +120,8 @@ export async function upstreamText(
 }
 
 /**
- * Errore da sollevare per una risposta letta per intero, con il suo testo; null se è riuscita.
- * Il testo serve soltanto a ricavarne codici brevi o attese, mai a portarlo nell'errore.
+ * Errore da sollevare per una risposta letta per intero, con il suo testo; null se è riuscita. Il
+ * testo serve soltanto a ricavarne codici brevi o attese, mai a portarlo nell'errore.
  */
 export type StatusClassifier = (
   response: Response,
@@ -145,8 +145,8 @@ export function providerStatus(
 }
 
 /**
- * Richiesta con timeout sull'intera lettura e limite dei byte, senza misura di fase: stato e
- * testo di una risposta che `classify` considera riuscita.
+ * Richiesta con timeout sull'intera lettura e limite dei byte, senza misura di fase: stato e testo
+ * di una risposta che `classify` considera riuscita.
  */
 export async function readUpstream(
   fetcher: typeof fetch,

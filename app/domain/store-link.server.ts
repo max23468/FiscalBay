@@ -1,17 +1,5 @@
 import { logFailure } from "../errors";
-import {
-  applyStoreMark,
-  markAnchorStatement,
-  readStoreMark,
-  storeIdentity,
-} from "./store-marks.server";
 import type { Language } from "../i18n";
-import { linkReadAdmitted, storeLinkAdmitted } from "./admission.server";
-import { applyFreePlan } from "./free-store.server";
-import { acquireOrders } from "./order-acquisition.server";
-import { workerShare } from "./order-acquisition-context.server";
-import { serviceSetting } from "./service-settings.server";
-import type { EbayEnvironment } from "../view-models";
 import { ebayConfiguration, type EbayAccess } from "../integrations/ebay/environment.server";
 import {
   openToken,
@@ -20,7 +8,6 @@ import {
   sealToken,
   type SellerTokens,
 } from "../integrations/ebay/seller-credentials.server";
-import { registrationComplete, registrationStatus } from "./registration.server";
 import {
   exchangeStoreConsent,
   type EbayStoreIdentity,
@@ -28,6 +15,19 @@ import {
   type StoreLinkClaim,
   type StoreLinkOutcome,
 } from "../integrations/ebay/store-link.server";
+import type { EbayEnvironment } from "../view-models";
+import { linkReadAdmitted, storeLinkAdmitted } from "./admission.server";
+import { applyFreePlan } from "./free-store.server";
+import { workerShare } from "./order-acquisition-context.server";
+import { acquireOrders } from "./order-acquisition.server";
+import { registrationComplete, registrationStatus } from "./registration.server";
+import { serviceSetting } from "./service-settings.server";
+import {
+  applyStoreMark,
+  markAnchorStatement,
+  readStoreMark,
+  storeIdentity,
+} from "./store-marks.server";
 
 /**
  * Collegamento di un negozio eBay dopo il consenso: spazio personale al primo negozio, negozio
@@ -163,8 +163,8 @@ export async function linkConsentedStore(input: {
   if (!(await linkReadAdmitted(environment.DB, storeId, issued))) return "collegato";
   try {
     const access =
-      consent.access ??
-      (await renewedAccess(environment, storeId, ebayEnvironment, fetcher, issued));
+      consent.access
+      ?? (await renewedAccess(environment, storeId, ebayEnvironment, fetcher, issued));
     if (access) {
       await acquireOrders({
         db: environment.DB,
@@ -183,9 +183,9 @@ export async function linkConsentedStore(input: {
 }
 
 /**
- * Autorizzazione eBay data durante la registrazione: un solo consenso crea l'account e abilita
- * il negozio, che si collega quando email e profilo sono completi. Chi non conferma entro un
- * giorno collega il negozio dalla pagina Negozi, con il consenso normale.
+ * Autorizzazione eBay data durante la registrazione: un solo consenso crea l'account e abilita il
+ * negozio, che si collega quando email e profilo sono completi. Chi non conferma entro un giorno
+ * collega il negozio dalla pagina Negozi, con il consenso normale.
  */
 const signupGrantMilliseconds = 24 * 60 * 60 * 1000;
 
@@ -239,9 +239,9 @@ type SignupGrantRow = {
 export type SignupGrantOutcome = StoreLinkOutcome | "lista-attesa" | "sospeso";
 
 /**
- * Collega il negozio autorizzato in registrazione, se l'account ha ormai email confermata e
- * profilo completo. La riga si consuma una sola volta; con le chiamate eBay spente resta, così
- * un passaggio successivo la riprende. null quando non c'è nulla da collegare.
+ * Collega il negozio autorizzato in registrazione, se l'account ha ormai email confermata e profilo
+ * completo. La riga si consuma una sola volta; con le chiamate eBay spente resta, così un passaggio
+ * successivo la riprende. null quando non c'è nulla da collegare.
  */
 export async function activateSignupGrant(input: {
   env: Env;
@@ -313,8 +313,9 @@ export async function activateSignupGrant(input: {
  * Associa l'account eBay al primo spazio dell'utente con una sola istruzione: l'identificativo
  * stabile è unico, quindi lo stesso negozio non entra in due spazi neppure con richieste
  * concorrenti. Un nuovo username aggiorna il negozio esistente e il ricollegamento lo riattiva,
- * anche dopo uno scollegamento o un'eliminazione dei dati. Il limite di cancellazione resta:
- * si importano soltanto acquisti successivi, senza ripristinare gli eliminati. null se appartiene ad altri.
+ * anche dopo uno scollegamento o un'eliminazione dei dati. Il limite di cancellazione resta: si
+ * importano soltanto acquisti successivi, senza ripristinare gli eliminati. null se appartiene ad
+ * altri.
  */
 async function linkStore(
   env: Pick<Env, "DB" | "BETTER_AUTH_SECRET">,

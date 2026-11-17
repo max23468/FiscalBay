@@ -1,6 +1,6 @@
-import type { FiscalSituation } from "../view-models";
-import type { Language } from "../i18n";
 import type { BotCommand } from "../bot-commands";
+import type { Language } from "../i18n";
+import type { FiscalSituation } from "../view-models";
 
 /** Testi del bot Telegram e dei suoi messaggi, nelle due lingue. */
 
@@ -96,9 +96,7 @@ export const telegramMessageCopy = {
   },
 } satisfies Record<Language, unknown>;
 
-/**
- * Comandi e pulsanti del bot per i venditori.
- */
+/** Comandi e pulsanti del bot per i venditori. */
 export const telegramBotCopy = {
   it: {
     profile: {

@@ -1,27 +1,20 @@
 import { env } from "cloudflare:workers";
-
 import { describe, expect, it, vi } from "vitest";
 
-import { listVisibleOrders } from "../app/domain/orders.server";
-
 import { recordOrderObservation } from "../app/domain/order-import.server";
-
 import {
   orderObservationSchema,
   type OrderObservation,
 } from "../app/domain/order-observation.server";
-
 import { orderSuggestions } from "../app/domain/order-suggestions.server";
-
+import { listVisibleOrders } from "../app/domain/orders.server";
 import { deleteStoreData } from "../app/domain/stores.server";
-
 import {
   insertCredentials,
   insertEntitlement,
   insertStorePause,
   now,
 } from "./fixtures/database-fixtures";
-
 import {
   grantedAt,
   target,
@@ -287,9 +280,7 @@ describe("suggerimenti fiscali dai precedenti", () => {
     const current = await imported("current", "2026-09-13T00:00:00.000Z");
     await imported("current", "2026-09-13T00:00:00.000Z", [], { buyerEiasToken: undefined });
     expect((await read(current)).get(current)!.suggestions).toHaveLength(1);
-    await imported("current", "2026-09-13T00:00:00.000Z", [], {
-      buyerEiasToken: "changed-buyer",
-    });
+    await imported("current", "2026-09-13T00:00:00.000Z", [], { buyerEiasToken: "changed-buyer" });
     expect((await read(current)).get(current)!.suggestions).toEqual([]);
   });
 

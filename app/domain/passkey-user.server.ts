@@ -11,9 +11,9 @@ export type PasskeySignals = {
 };
 
 /**
- * User handle stabile dell'utente, creato alla prima registrazione di una passkey: 32 byte
- * casuali in base64url, entro i 64 byte ammessi da WebAuthn. Due richieste concorrenti
- * ricevono lo stesso valore.
+ * User handle stabile dell'utente, creato alla prima registrazione di una passkey: 32 byte casuali
+ * in base64url, entro i 64 byte ammessi da WebAuthn. Due richieste concorrenti ricevono lo stesso
+ * valore.
  */
 export async function passkeyUserHandle(db: D1Database, userId: string): Promise<string> {
   const row = await db
@@ -28,9 +28,9 @@ export async function passkeyUserHandle(db: D1Database, userId: string): Promise
 }
 
 /**
- * Utente WebAuthn delle opzioni di registrazione: il plugin userebbe un identificativo nuovo
- * a ogni passkey e il nome della passkey come nome utente. Qui valgono il user handle stabile,
- * l'email come nome utente e il nome dell'account come nome visualizzato.
+ * Utente WebAuthn delle opzioni di registrazione: il plugin userebbe un identificativo nuovo a ogni
+ * passkey e il nome della passkey come nome utente. Qui valgono il user handle stabile, l'email
+ * come nome utente e il nome dell'account come nome visualizzato.
  */
 export function withPasskeyUser(
   options: Record<string, unknown>,

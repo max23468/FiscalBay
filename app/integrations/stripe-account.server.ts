@@ -3,9 +3,9 @@ import type Stripe from "stripe";
 import type { PremiumOffer } from "../catalog";
 
 /**
- * Configurazione attesa dell'account Stripe di ogni ambiente: la usano il checkout, che verifica
- * il prezzo prima della vendita, e `scripts/stripe-account.mjs`, che rilegge e allinea l'account.
- * Il modulo importa soltanto tipi, così lo script lo carica con Node senza bundler.
+ * Configurazione attesa dell'account Stripe di ogni ambiente: la usano il checkout, che verifica il
+ * prezzo prima della vendita, e `scripts/stripe-account.mjs`, che rilegge e allinea l'account. Il
+ * modulo importa soltanto tipi, così lo script lo carica con Node senza bundler.
  */
 
 /** Eventi dell'endpoint `/webhooks/stripe`: il consumer rilegge l'oggetto di ciascuno. */
@@ -39,8 +39,8 @@ export function stripeAccountProfile(live: boolean, origin: string) {
 }
 
 /**
- * Portale clienti: disdetta a fine periodo senza conguaglio, nessun cambio di piano immediato
- * (la periodicità cambia alla scadenza dalla pagina del piano), metodo di pagamento e documenti,
+ * Portale clienti: disdetta a fine periodo senza conguaglio, nessun cambio di piano immediato (la
+ * periodicità cambia alla scadenza dalla pagina del piano), metodo di pagamento e documenti,
  * termini, privacy e ritorno dell'ambiente.
  */
 export function stripePortalConfiguration(origin: string) {
@@ -86,9 +86,9 @@ export type CatalogMismatch =
   | "tax_code";
 
 /**
- * Il prezzo configurato su Stripe deve essere quello del listino: attivo, in euro, netto con
- * le imposte aggiunte da Stripe, con la periodicità dell'offerta e un prodotto con codice
- * fiscale, senza il quale Managed Payments non copre la vendita.
+ * Il prezzo configurato su Stripe deve essere quello del listino: attivo, in euro, netto con le
+ * imposte aggiunte da Stripe, con la periodicità dell'offerta e un prodotto con codice fiscale,
+ * senza il quale Managed Payments non copre la vendita.
  */
 export function catalogMismatch(
   price: Stripe.Price,

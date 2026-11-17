@@ -8,6 +8,7 @@ import { EmptyState } from "~/components/empty-state";
 import { useDate } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
+
 import { appHref } from "../../app-links";
 import type { OrdersPageData } from "../../orders/page-data";
 
@@ -57,7 +58,7 @@ function OnboardingSteps({ data }: { data: OrdersPageData }) {
               <span
                 aria-hidden="true"
                 className={cn(
-                  "font-code grid size-4 place-items-center rounded-full text-[0.625rem]",
+                  "grid size-4 place-items-center rounded-full font-code text-[0.625rem]",
                   index === current ? "bg-primary text-primary-foreground" : "border",
                 )}
               >

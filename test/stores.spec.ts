@@ -1,10 +1,8 @@
 import { env } from "cloudflare:workers";
-import { insertWorkspace } from "./fixtures/database-fixtures";
-
 import { expect, it, onTestFinished, vi } from "vitest";
 
+import { requestOrderBudget } from "../app/domain/deletion-steps.server";
 import { listVisibleOrders } from "../app/domain/orders.server";
-
 import {
   deleteStoreData,
   disconnectStore,
@@ -13,24 +11,19 @@ import {
   pauseStore,
   resumeStore,
 } from "../app/domain/stores.server";
-
-import { loader as loadStores, clientAction as storesClientAction } from "../app/routes/stores";
-
+import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
+import { refreshStoreToken } from "../app/integrations/ebay/seller-credentials.server";
 import { loader as loadProfile } from "../app/routes/profile";
-
 import {
   action as settingsAction,
   loader as loadSettings,
   clientAction as settingsClientAction,
 } from "../app/routes/settings";
-
-import { refreshStoreToken } from "../app/integrations/ebay/seller-credentials.server";
-
-import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
-
-import { requestOrderBudget } from "../app/domain/deletion-steps.server";
-
+import { loader as loadStores, clientAction as storesClientAction } from "../app/routes/stores";
+import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account-fixtures";
+import { homeFor } from "./fixtures/account-route-fixtures";
 import {
+  insertWorkspace,
   insertOrder,
   insertStore,
   insertStorePause,
@@ -38,17 +31,9 @@ import {
   resetDatabase,
   resetOrderFixtures,
 } from "./fixtures/database-fixtures";
-
 import { syntheticEbay } from "./fixtures/ebay-fixtures";
-
-import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account-fixtures";
-
-import { homeFor } from "./fixtures/account-route-fixtures";
-
 import { queued } from "./fixtures/queue-fixture";
-
 import { callRoute, routeData, routeResponse, testOrigin } from "./fixtures/route-fixtures";
-
 import {
   day,
   linkThroughEbay,
@@ -189,10 +174,7 @@ it("avvisa prima della scadenza del consenso e, dopo, per al massimo trenta gior
   });
   expect(
     (await listStores(env.DB, seller.userId, new Date(at.getTime() + 30 * day)))[0],
-  ).toMatchObject({
-    connection: "reconnect_required",
-    reminder: null,
-  });
+  ).toMatchObject({ connection: "reconnect_required", reminder: null });
 
   // Il rifiuto di eBay fa partire i trenta giorni dal rifiuto, anche prima della scadenza.
   await setExpiry(new Date(at.getTime() + 300 * day));
@@ -820,16 +802,10 @@ it("chiede letture e reimportazione dalla schermata con l'esito della richiesta"
     ).toEqual({ ok: true, notice: "L’importazione dello storico è già in corso." });
 
     const other = await verifiedSession("estraneo-letture@example.invalid");
-    const foreign = await storeForm(other.cookie, {
-      intent: "store-sync",
-      store: seller.storeId,
-    });
+    const foreign = await storeForm(other.cookie, { intent: "store-sync", store: seller.storeId });
     expect((foreign as { init: ResponseInit }).init.status).toBe(404);
     await storeForm(seller.cookie, { intent: "store-pause", store: seller.storeId });
-    const paused = await storeForm(seller.cookie, {
-      intent: "store-sync",
-      store: seller.storeId,
-    });
+    const paused = await storeForm(seller.cookie, { intent: "store-sync", store: seller.storeId });
     expect((paused as { init: ResponseInit }).init.status).toBe(409);
     // In pausa la richiesta rimasta non tiene la pagina in attesa.
     const [held] = (await storesPage("/app/negozi", seller.cookie)).data.page.stores;

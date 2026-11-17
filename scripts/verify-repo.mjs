@@ -239,7 +239,8 @@ export function checkGateJobs(files) {
 
 /**
  * Il runner del Mac gira nell'account dell'owner: lo usano soltanto i coordinatori di `cycle.yml`,
- * che eseguono codice di `develop` senza dipendenze, mai i job delle PR o quelli con `pnpm install`.
+ * che eseguono codice di `develop` senza dipendenze, mai i job delle PR o quelli con `pnpm
+ * install`.
  */
 export function checkSelfHostedRunners(files) {
   const errors = [];
@@ -254,8 +255,8 @@ export function checkSelfHostedRunners(files) {
 }
 
 /**
- * Impronte SHA-256 degli indirizzi degli account delle verifiche live, che restano
- * nell'inventario privato (AGENTS): il controllo li riconosce senza scriverli qui.
+ * Impronte SHA-256 degli indirizzi degli account delle verifiche live, che restano nell'inventario
+ * privato (AGENTS): il controllo li riconosce senza scriverli qui.
  */
 const privateAddressHashes = new Set([
   "b48ba865305b142dccb2743171b8b490611bef089390a98ea6ad2ce2abe8d2a0",
@@ -276,8 +277,8 @@ export function checkPrivateAddresses(files, hashes = privateAddressHashes) {
 const securityTxtNotice = 30;
 
 /**
- * `security.txt` ha contatto, indirizzo canonico e una scadenza entro un anno: una scadenza
- * vicina ferma il gate prima che il file diventi non valido per chi segnala una vulnerabilità.
+ * `security.txt` ha contatto, indirizzo canonico e una scadenza entro un anno: una scadenza vicina
+ * ferma il gate prima che il file diventi non valido per chi segnala una vulnerabilità.
  */
 export function checkSecurityTxt(files, now = new Date()) {
   const file = files.find(({ path: name }) => name === "public/.well-known/security.txt");

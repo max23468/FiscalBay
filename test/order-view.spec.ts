@@ -1,5 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
+
+import { appCopy } from "../app/app-copy";
+import { billingCopyText, buyerLanguage, missingContact } from "../app/components/orders/labels";
+import {
+  addressCase,
+  buyerNameView,
+  contactsView,
+  emailView,
+  mailtoHref,
+  phoneView,
+} from "../app/contact";
+import { orderView } from "../app/domain/order-view.server";
 import type { VisibleOrder } from "../app/domain/orders.server";
+import { addressRows } from "../app/format";
 import {
   onlyAvailable,
   orderCriteria,
@@ -14,20 +27,8 @@ import {
   listFilters,
   withoutListPosition,
 } from "../app/orders/order-list";
-import { orderView } from "../app/domain/order-view.server";
 import { orderPeriodStart } from "../app/view-models";
 import { now } from "./fixtures/database-fixtures";
-import { addressRows } from "../app/format";
-import {
-  addressCase,
-  buyerNameView,
-  contactsView,
-  emailView,
-  mailtoHref,
-  phoneView,
-} from "../app/contact";
-import { billingCopyText, buyerLanguage, missingContact } from "../app/components/orders/labels";
-import { appCopy } from "../app/app-copy";
 
 describe("vista condivisa e criteri degli ordini", () => {
   const base: VisibleOrder = {
@@ -161,10 +162,7 @@ describe("vista condivisa e criteri degli ordini", () => {
     });
     // Senza dato, l'acquirente estero ha un motivo proprio.
     const billedIn = (countryCode: string) =>
-      ({
-        ...base.summary,
-        buyer: { billingAddress: { countryCode } },
-      }) as VisibleOrder["summary"];
+      ({ ...base.summary, buyer: { billingAddress: { countryCode } } }) as VisibleOrder["summary"];
     const foreign = { fiscalState: "foreign", taxAvailability: "not_included" } as const;
     expect(view({ ...foreign, summary: billedIn("ES") }).fiscal).toEqual({
       state: "missing",

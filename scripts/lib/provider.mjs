@@ -1,7 +1,7 @@
 /**
- * Accesso ai provider dagli script: CLI `cf` alla versione fissata, D1 remota, `gh` e
- * Portachiavi macOS. Le opzioni di ogni chiamata restano al chiamante: ambiente, `--mode`,
- * `--zone` e flussi d'uscita.
+ * Accesso ai provider dagli script: CLI `cf` alla versione fissata, D1 remota, `gh` e Portachiavi
+ * macOS. Le opzioni di ogni chiamata restano al chiamante: ambiente, `--mode`, `--zone` e flussi
+ * d'uscita.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -32,9 +32,9 @@ export function cf(
 
 /**
  * Valore JSON nell'uscita della CLI, che può precedere il documento con avvisi o righe di
- * avanzamento: vale il primo `[` o `{` da cui il resto è JSON, entro poche parentesi del
- * preambolo. Toglie l'involucro `result` delle risposte API; `null` se la CLI non stampa JSON,
- * come per l'eliminazione di un segreto.
+ * avanzamento: vale il primo `[` o `{` da cui il resto è JSON, entro poche parentesi del preambolo.
+ * Toglie l'involucro `result` delle risposte API; `null` se la CLI non stampa JSON, come per
+ * l'eliminazione di un segreto.
  */
 export function jsonOutput(output) {
   let failure;
@@ -108,8 +108,8 @@ export async function retry(task, { attempts, delay }) {
 
 /**
  * Istruzioni sulla D1 remota con `cf d1 query`; restituisce le righe di ogni istruzione. Con un
- * elenco di istruzioni verifica che ognuna abbia un esito. Un errore dell'API si ripete fino a
- * tre volte, dopo 5 e 10 secondi.
+ * elenco di istruzioni verifica che ognuna abbia un esito. Un errore dell'API si ripete fino a tre
+ * volte, dopo 5 e 10 secondi.
  */
 export function d1Query(
   database,
@@ -122,9 +122,9 @@ export function d1Query(
     () => {
       const results = query(["d1", "query", database, "--sql", text], options);
       if (
-        !Array.isArray(results) ||
-        (statements && results.length !== statements.length) ||
-        results.some(({ success }) => !success)
+        !Array.isArray(results)
+        || (statements && results.length !== statements.length)
+        || results.some(({ success }) => !success)
       )
         throw new Error("Risposta D1 incompleta.");
       return results.map(({ results: rows }) => rows);
@@ -144,25 +144,22 @@ export function keychain(service) {
 /** CLI `gh`: ritenta soltanto letture su errori transitori, mai un effetto con esito incerto. */
 export function gh(...args) {
   const readOnly =
-    (args[0] === "api" &&
-      !args.some((arg) =>
+    (args[0] === "api"
+      && !args.some((arg) =>
         ["-X", "--method", "-f", "-F", "--field", "--raw-field", "--input"].includes(arg),
-      )) ||
-    (args[0] === "run" && ["view", "list"].includes(args[1]));
+      ))
+    || (args[0] === "run" && ["view", "list"].includes(args[1]));
   for (let attempt = 1; ; attempt++) {
     try {
       return (
-        execFileSync("gh", args, {
-          encoding: "utf8",
-          maxBuffer,
-          stdio: ["ignore", "pipe", "pipe"],
-        }) ?? ""
+        execFileSync("gh", args, { encoding: "utf8", maxBuffer, stdio: ["ignore", "pipe", "pipe"] })
+        ?? ""
       ).trim();
     } catch (error) {
       if (
-        !readOnly ||
-        attempt === 4 ||
-        !/HTTP (?:502|503|504)|TLS handshake timeout|connection reset|ECONNRESET/iu.test(
+        !readOnly
+        || attempt === 4
+        || !/HTTP (?:502|503|504)|TLS handshake timeout|connection reset|ECONNRESET/iu.test(
           String(error.stderr),
         )
       )
@@ -183,8 +180,8 @@ export const ghApi = (url) =>
   retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
 
 /**
- * Scarica gli artefatti di una run scelti con `--name` o `--pattern` in una cartella temporanea
- * e restituisce ciò che `read` ne ricava; null se mancano o non si leggono.
+ * Scarica gli artefatti di una run scelti con `--name` o `--pattern` in una cartella temporanea e
+ * restituisce ciò che `read` ne ricava; null se mancano o non si leggono.
  */
 export function readRunArtifact(repository, run, selector, read) {
   const directory = mkdtempSync(path.join(tmpdir(), "run-artifact-"));

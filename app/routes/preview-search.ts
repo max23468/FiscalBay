@@ -1,10 +1,11 @@
-import { postOnly } from "../error-response";
 import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import type { SearchResults } from "~/components/shell-search";
+
 import { previewOrdersPath } from "../app-links";
 import { buyerNameView } from "../contact";
+import { postOnly } from "../error-response";
 import { localizedPath } from "../i18n";
 import { searchQuery } from "../orders/order-search";
 import { searchHref } from "../orders/order-search.server";
@@ -22,8 +23,8 @@ export function loader() {
 }
 
 /**
- * Ricerca della barra superiore sugli scenari sintetici, con la stessa risposta della route
- * reale: query nel corpo, elenco con la ricerca cifrata nell'indirizzo.
+ * Ricerca della barra superiore sugli scenari sintetici, con la stessa risposta della route reale:
+ * query nel corpo, elenco con la ricerca cifrata nell'indirizzo.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertPreviewAction(request);
@@ -41,13 +42,15 @@ export async function action({ request }: Route.ActionArgs) {
   const search = href.slice(path.length);
   return Response.json(
     {
-      items: matches.slice(0, 5).map((order) => ({
-        id: order.id,
-        ebayOrderId: order.ebayOrderId,
-        buyerName: buyerNameView(order.buyerName) ?? order.buyerUsername ?? "",
-        detail: order.items[0]?.title ?? "",
-        href: `${path}/${order.id}${search}`,
-      })),
+      items: matches
+        .slice(0, 5)
+        .map((order) => ({
+          id: order.id,
+          ebayOrderId: order.ebayOrderId,
+          buyerName: buyerNameView(order.buyerName) ?? order.buyerUsername ?? "",
+          detail: order.items[0]?.title ?? "",
+          href: `${path}/${order.id}${search}`,
+        })),
       total: matches.length,
       href,
     } satisfies SearchResults,

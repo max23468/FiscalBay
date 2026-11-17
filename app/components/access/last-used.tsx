@@ -5,7 +5,8 @@ import { Badge } from "~/components/ui/badge";
 
 /**
  * Segno sul pulsante del metodo usato l'ultima volta da questo browser. Il segno descrive il
- * pulsante senza entrare nel suo nome, che resta quello di sempre per chi usa un lettore di schermo.
+ * pulsante senza entrare nel suo nome, che resta quello di sempre per chi usa un lettore di
+ * schermo.
  */
 export function useLastUsed(active: boolean) {
   const id = useId();

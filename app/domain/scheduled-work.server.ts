@@ -1,23 +1,23 @@
 import { z } from "zod";
 
+import { logFailure } from "../errors";
 import { resumeAccountDeletions } from "./account-deletion.server";
-import { resumeEbayAccountDeletions } from "./ebay-account-deletion.server";
 import { applyInactivity } from "./admission.server";
 import { reconcileBilling } from "./billing.server";
+import { resumeEbayAccountDeletions } from "./ebay-account-deletion.server";
+import { readEbayQuotas } from "./ebay-quotas.server";
 import { purgeExportFiles } from "./export-files.server";
 import { resumeExportJobs } from "./export-jobs.server";
-import { readEbayQuotas } from "./ebay-quotas.server";
 import { applyFreePlans } from "./free-store.server";
 import { indexOrderSearch, purgeExpiredRecords } from "./maintenance.server";
 import { dispatchStoreSyncs } from "./order-sync.server";
 import { configureOwnerCommands } from "./owner-control.server";
 import { reconcileOwnerIncidents } from "./owner-incidents.server";
 import { runOwnerNotifications } from "./owner-notifications.server";
+import { sendReconnectNotices } from "./reconnect-notices.server";
 import { configureBotCommands, configureBotProfile } from "./telegram-bot.server";
 import { deliverTelegram } from "./telegram-deliveries.server";
-import { logFailure } from "../errors";
 import { refreshExpiringTokens } from "./token-refresh.server";
-import { sendReconnectNotices } from "./reconnect-notices.server";
 import { recoverWebhookIngress } from "./webhook-receipts.server";
 import {
   minute,
@@ -30,16 +30,16 @@ import {
 export type { ScheduledTask };
 
 /**
- * Smistamento del lavoro pianificato. Un solo Cron Trigger per ambiente parte ogni dieci minuti
- * e, in base a `scheduledTime`, accoda il lavoro dovuto: compiti periodici, ricevute webhook
- * da riprendere e letture dei negozi. Il cron non chiama eBay: il consumer esegue un messaggio
- * per invocazione con il proprio budget.
+ * Smistamento del lavoro pianificato. Un solo Cron Trigger per ambiente parte ogni dieci minuti e,
+ * in base a `scheduledTime`, accoda il lavoro dovuto: compiti periodici, ricevute webhook da
+ * riprendere e letture dei negozi. Il cron non chiama eBay: il consumer esegue un messaggio per
+ * invocazione con il proprio budget.
  *
- * Un compito periodico ha un turno per periodo, registrato in D1 prima dell'invio: trigger
- * ripetuti o sovrapposti dello stesso periodo non lo accodano di nuovo, un trigger saltato
- * lascia il turno al successivo, e un turno accodato ma mai concluso (messaggio scaduto o
- * finito nella DLQ) si riaccoda dopo `staleMilliseconds`. Un periodo successivo assorbe quello
- * non concluso: i compiti lavorano su tutto ciò che è scaduto o in scadenza, non su una finestra.
+ * Un compito periodico ha un turno per periodo, registrato in D1 prima dell'invio: trigger ripetuti
+ * o sovrapposti dello stesso periodo non lo accodano di nuovo, un trigger saltato lascia il turno
+ * al successivo, e un turno accodato ma mai concluso (messaggio scaduto o finito nella DLQ) si
+ * riaccoda dopo `staleMilliseconds`. Un periodo successivo assorbe quello non concluso: i compiti
+ * lavorano su tutto ciò che è scaduto o in scadenza, non su una finestra.
  */
 
 const staleMilliseconds = 60 * minute;
@@ -275,9 +275,9 @@ export async function consumeTask(
 }
 
 /**
- * Lavoro del Cron Trigger. Ogni passo accoda soltanto, salvo il riallineamento del piano, che
- * resta su D1 e precede le letture: un negozio uscito dal piano non viene più smistato. Un
- * passo fallito non ferma i successivi e il suo lavoro resta al trigger seguente.
+ * Lavoro del Cron Trigger. Ogni passo accoda soltanto, salvo il riallineamento del piano, che resta
+ * su D1 e precede le letture: un negozio uscito dal piano non viene più smistato. Un passo fallito
+ * non ferma i successivi e il suo lavoro resta al trigger seguente.
  */
 export async function dispatchScheduledWork(env: Env, now: Date): Promise<void> {
   await dispatchTasks(env, now).catch((error: unknown) =>

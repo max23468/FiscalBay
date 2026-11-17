@@ -5,9 +5,9 @@ import { leakedPasswordField, passwordCheckPath } from "../../app-links";
 /**
  * Controllo delle password trapelate prima dell'invio: il browser manda la password in JSON al
  * Worker, dove l'edge di Cloudflare la confronta con le violazioni note. Una password nuova
- * trapelata ferma l'invio con `onLeaked`; senza `onLeaked`, all'accesso, l'invio prosegue con
- * il campo nascosto. `prepare`, all'uscita dal campo, avvia il controllo prima dell'invio, che
- * ne usa l'esito. Senza JavaScript, o se il controllo non risponde, l'invio procede.
+ * trapelata ferma l'invio con `onLeaked`; senza `onLeaked`, all'accesso, l'invio prosegue con il
+ * campo nascosto. `prepare`, all'uscita dal campo, avvia il controllo prima dell'invio, che ne usa
+ * l'esito. Senza JavaScript, o se il controllo non risponde, l'invio procede.
  */
 export function usePasswordCheck(onLeaked?: (input: HTMLInputElement) => void) {
   // Password già controllata: il nuovo invio, anche dopo Turnstile, non la ricontrolla.

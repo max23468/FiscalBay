@@ -1,35 +1,36 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { appCopy, infoEmail, pageTitle } from "../app/app-copy";
+import { indexable, isProductionOrigin } from "../app/app-links";
+import { italianGross, openPromotionEnd } from "../app/catalog";
+import { adminCopy } from "../app/copy/admin-copy";
+import { guides } from "../app/copy/guides.server";
+import { legalDocuments, type LegalSection } from "../app/copy/legal-documents.server";
+import { sitePages } from "../app/copy/site-pages.server";
+import { freeStoreChangeDays } from "../app/domain/free-store.server";
+import { trialDays } from "../app/domain/grants.server";
+import { freeHistoryDays } from "../app/domain/history-window.server";
+import { legalVersions } from "../app/domain/registration.server";
+import { formatDate } from "../app/format";
+import { loader as loadRoot } from "../app/root";
+import { loader as loadFaq, meta as faqMeta } from "../app/routes/faq";
+import { loader as loadFeatures } from "../app/routes/features";
+import { loader as loadLegal } from "../app/routes/legal";
+import { headers as pricingHeaders, loader as loadPricing } from "../app/routes/pricing";
+import { loader as loadRobots, robots } from "../app/routes/robots";
 import {
   headers as siteHeaders,
   loader as loadSite,
   meta as siteRouteMeta,
 } from "../app/routes/site";
-import { loader as loadFeatures } from "../app/routes/features";
-import { headers as pricingHeaders, loader as loadPricing } from "../app/routes/pricing";
 import { loader as loadSecurity } from "../app/routes/site-security";
-import { loader as loadFaq, meta as faqMeta } from "../app/routes/faq";
 import { loader as loadSupport } from "../app/routes/support";
-import { loader as loadLegal } from "../app/routes/legal";
-import { loader as loadRobots, robots } from "../app/routes/robots";
-import { llms, publicPage, sitemap } from "../app/site.server";
-import { indexable, isProductionOrigin } from "../app/app-links";
-import { appCopy, infoEmail, pageTitle } from "../app/app-copy";
-import { guides } from "../app/copy/guides.server";
-import { adminCopy } from "../app/copy/admin-copy";
-import { legalDocuments, type LegalSection } from "../app/copy/legal-documents.server";
-import { sitePages } from "../app/copy/site-pages.server";
-import { italianGross, openPromotionEnd } from "../app/catalog";
-import { freeStoreChangeDays } from "../app/domain/free-store.server";
-import { trialDays } from "../app/domain/grants.server";
-import { legalVersions } from "../app/domain/registration.server";
-import { freeHistoryDays } from "../app/domain/history-window.server";
-import { formatDate } from "../app/format";
 import { ogImage, siteMeta } from "../app/site-meta";
-import { loader as loadRoot } from "../app/root";
-import { resetDatabase, insertEntitlement, insertWorkspace } from "./fixtures/database-fixtures";
+import { llms, publicPage, sitemap } from "../app/site.server";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";
+import { resetDatabase, insertEntitlement, insertWorkspace } from "./fixtures/database-fixtures";
 import { callRoute, pagePath, routeData } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
@@ -71,9 +72,9 @@ describe("provenienza dei visitatori", () => {
   });
 
   it("non cambia canonical, dati strutturati né sitemap e non scrive cookie", async () => {
-    const plain = siteRouteMeta({
-      loaderData: await callRoute(loadSite, "/"),
-    } as Parameters<typeof siteRouteMeta>[0]);
+    const plain = siteRouteMeta({ loaderData: await callRoute(loadSite, "/") } as Parameters<
+      typeof siteRouteMeta
+    >[0]);
     const tagged = siteRouteMeta({
       loaderData: await callRoute(loadSite, "/?via=google%3A%2Fprezzi", {
         headers: { referer: from("www.google.com") },
@@ -143,9 +144,7 @@ describe("radice pubblica e area riservata", () => {
       .run();
     const line =
       "Promozione Free per un periodo limitato: 10 ordini da sbloccare ogni 7 giorni invece di 5.";
-    expect(await root("/")).toMatchObject({
-      copy: { quota: line },
-    });
+    expect(await root("/")).toMatchObject({ copy: { quota: line } });
     expect((await routeData(loadPricing, "/prezzi")).copy.promotion).toBe(line);
     expect(sitePages.en.home.freePromotion(10, null, 5)).toBe(
       "Free promotion for a limited time: 10 orders to unlock every 7 days instead of 5.",
@@ -359,9 +358,9 @@ describe("radice pubblica e area riservata", () => {
   });
 
   it("dà alla home i dati strutturati veri e l'italiano come x-default, alla FAQ le sue domande", async () => {
-    const home = siteRouteMeta({
-      loaderData: await callRoute(loadSite, "/"),
-    } as Parameters<typeof siteRouteMeta>[0]);
+    const home = siteRouteMeta({ loaderData: await callRoute(loadSite, "/") } as Parameters<
+      typeof siteRouteMeta
+    >[0]);
     expect(home).toEqual(
       expect.arrayContaining([
         { title: "Recupera il Codice Fiscale dagli ordini eBay | FiscalBay" },
@@ -379,9 +378,7 @@ describe("radice pubblica e area riservata", () => {
       (meta as Record<string, unknown>[]).find((item) => "script:ld+json" in item)![
         "script:ld+json"
       ];
-    const graph = structured(home) as {
-      "@graph": Record<string, unknown>[];
-    };
+    const graph = structured(home) as { "@graph": Record<string, unknown>[] };
     // I contatti generali sono `info@`: `supporto@` resta all'assistenza clienti (§14).
     expect(graph["@graph"]).toEqual([
       {
@@ -402,9 +399,9 @@ describe("radice pubblica e area riservata", () => {
         publisher: { "@id": "http://localhost:5173/#organization" },
       },
     ]);
-    const english = siteRouteMeta({
-      loaderData: await callRoute(loadSite, "/en"),
-    } as Parameters<typeof siteRouteMeta>[0]);
+    const english = siteRouteMeta({ loaderData: await callRoute(loadSite, "/en") } as Parameters<
+      typeof siteRouteMeta
+    >[0]);
     expect(english).toEqual(
       expect.arrayContaining([
         { tagName: "link", rel: "canonical", href: "http://localhost:5173/en" },
@@ -416,9 +413,9 @@ describe("radice pubblica e area riservata", () => {
         },
       ]),
     );
-    const faq = faqMeta({
-      loaderData: await callRoute(loadFaq, "/en/faq"),
-    } as Parameters<typeof faqMeta>[0]);
+    const faq = faqMeta({ loaderData: await callRoute(loadFaq, "/en/faq") } as Parameters<
+      typeof faqMeta
+    >[0]);
     const questions = structured(faq) as {
       "@type": string;
       inLanguage: string;

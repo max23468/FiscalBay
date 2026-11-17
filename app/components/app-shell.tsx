@@ -4,16 +4,17 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Link, NavLink, useLocation, useNavigate, useNavigation } from "react-router";
 
 import { NoticeContext } from "~/components/action";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { InitialsTile } from "~/components/icon-tile";
-import { Button } from "~/components/ui/button";
-import { NavigationProgress } from "~/components/navigation-progress";
 import { NavigationGuardProvider } from "~/components/navigation-guard";
+import { NavigationProgress } from "~/components/navigation-progress";
 import { NotificationsMenu } from "~/components/notifications-menu";
 import { prefetchRouteModules } from "~/components/route-modules";
 import { areaSection, type AccountMenuItem, type NavDestination } from "~/components/shell-links";
 import { GlobalSearch, MobileSearch, type ShellSearch } from "~/components/shell-search";
 import { siteColumn } from "~/components/site-column";
 import { mainContentId, SkipLink } from "~/components/skip-link";
+import { Button } from "~/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,15 +24,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { useCopy, useLinks } from "~/components/copy-context";
+
 import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
 import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
 import { appHref } from "../app-links";
 import type { AccountView, NotificationView } from "../view-models";
 
 /**
- * Shell dell'app. Navigazione, ricerca e campanella compaiono quando le loro
- * destinazioni esistono: l'area reale le riceve insieme alle funzioni relative.
+ * Shell dell'app. Navigazione, ricerca e campanella compaiono quando le loro destinazioni esistono:
+ * l'area reale le riceve insieme alle funzioni relative.
  */
 export function AppShell({
   account,
@@ -155,8 +156,8 @@ export function AppShell({
           className={cn(
             "pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))] z-[60] flex justify-center px-4",
             // Sopra la bottom navigation, quando c'è.
-            navigable &&
-              "max-md:bottom-[calc(5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))]",
+            navigable
+              && "max-md:bottom-[calc(5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))]",
           )}
         >
           {notice ? (
@@ -190,7 +191,7 @@ function TopNav({ destinations, label }: { destinations: NavDestination[]; label
               end={end}
               onPointerEnter={() => prefetchRouteModules(href)}
               onFocus={() => prefetchRouteModules(href)}
-              className="relative flex items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-3 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary group-has-[a.pending]/nav:aria-[current=page]:text-muted-foreground group-data-indicator/nav:after:hidden [&.pending]:text-foreground!"
+              className="relative flex items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors duration-(--duration-quick) outline-none group-data-indicator/nav:after:hidden hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:text-foreground group-has-[a.pending]/nav:aria-[current=page]:text-muted-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-3 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary [&.pending]:text-foreground!"
             >
               <Icon aria-hidden="true" className="size-4" />
               {label}
@@ -233,7 +234,7 @@ function BottomNav({ destinations, label }: { destinations: NavDestination[]; la
               onFocus={() => prefetchRouteModules(href)}
               // La voce corrente si distingue anche per il peso del testo, non soltanto per il
               // colore.
-              className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-xs font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset aria-[current=page]:font-semibold aria-[current=page]:text-primary group-has-[a.pending]/nav:aria-[current=page]:font-medium group-has-[a.pending]/nav:aria-[current=page]:text-muted-foreground [&.pending]:font-semibold! [&.pending]:text-primary!"
+              className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-xs font-medium text-muted-foreground transition-colors duration-(--duration-quick) outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset aria-[current=page]:font-semibold aria-[current=page]:text-primary group-has-[a.pending]/nav:aria-[current=page]:font-medium group-has-[a.pending]/nav:aria-[current=page]:text-muted-foreground [&.pending]:font-semibold! [&.pending]:text-primary!"
             >
               <Icon aria-hidden="true" className="size-5" />
               <span className="text-center leading-tight">{label}</span>
@@ -256,9 +257,9 @@ function BottomNav({ destinations, label }: { destinations: NavDestination[]; la
 }
 
 /**
- * Chiave del contenuto per sezione: cambiare sezione lo rimonta con una dissolvenza, mentre
- * filtri, dettagli e sotto-pagine della stessa sezione aggiornano il contenuto sul posto. Il
- * contenuto rimontato prende il focus senza scorrere; al primo caricamento resta dov'è.
+ * Chiave del contenuto per sezione: cambiare sezione lo rimonta con una dissolvenza, mentre filtri,
+ * dettagli e sotto-pagine della stessa sezione aggiornano il contenuto sul posto. Il contenuto
+ * rimontato prende il focus senza scorrere; al primo caricamento resta dov'è.
  */
 function useSectionEntry() {
   const key = areaSection(useLocation().pathname);
@@ -277,8 +278,8 @@ function useSectionEntry() {
 
 /**
  * Posizione dell'indicatore della navigazione: segue la destinazione appena scelta mentre si
- * carica, poi quella corrente. Con `line` misura il collegamento, con `pill` la sua icona.
- * Fino alla prima misura, e quando la navigazione è nascosta, l'indicatore non c'è.
+ * carica, poi quella corrente. Con `line` misura il collegamento, con `pill` la sua icona. Fino
+ * alla prima misura, e quando la navigazione è nascosta, l'indicatore non c'è.
  */
 function useNavIndicator<T extends HTMLElement>(variant: "line" | "pill") {
   const list = useRef<T>(null);
@@ -292,8 +293,8 @@ function useNavIndicator<T extends HTMLElement>(variant: "line" | "pill") {
     if (!container) return;
     const measure = () => {
       const link =
-        container.querySelector<HTMLElement>("a.pending") ??
-        container.querySelector<HTMLElement>('a[aria-current="page"]');
+        container.querySelector<HTMLElement>("a.pending")
+        ?? container.querySelector<HTMLElement>('a[aria-current="page"]');
       const target = variant === "pill" ? link?.querySelector("svg") : link;
       const inner = target?.getBoundingClientRect();
       if (!inner || inner.width === 0) return setBox(null);
@@ -305,11 +306,11 @@ function useNavIndicator<T extends HTMLElement>(variant: "line" | "pill") {
           width: inner.width,
           height: inner.height,
         };
-        return current &&
-          current.x === next.x &&
-          current.y === next.y &&
-          current.width === next.width &&
-          current.height === next.height
+        return current
+          && current.x === next.x
+          && current.y === next.y
+          && current.width === next.width
+          && current.height === next.height
           ? current
           : next;
       });

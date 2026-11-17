@@ -1,7 +1,7 @@
 import { logFailure } from "../errors";
 import { readApiQuotas, type ApiRate } from "../integrations/ebay/analytics.server";
-import type { EbayNotification } from "../integrations/ebay/notifications.server";
 import { ebayConfiguration, sandboxAvailable } from "../integrations/ebay/environment.server";
+import type { EbayNotification } from "../integrations/ebay/notifications.server";
 import type { EbayEnvironment } from "../view-models";
 import { limitedCall, ownCalls, quotaUsageStatements } from "./order-acquisition-context.server";
 import { serviceSetting } from "./service-settings.server";
@@ -9,10 +9,10 @@ import { serviceSetting } from "./service-settings.server";
 /**
  * Vista delle quote eBay della console (D177, D188). Per ambiente, API e chiamata mostra limite,
  * consumo, residuo e azzeramento, insieme alle chiamate che FiscalBay ha sospeso perché eBay ha
- * risposto con il limite superato. Oltre la soglia di attenzione della quota giornaliera, 70%
- * salvo diversa scelta nella console, la lettura apre un'anomalia, una sola per finestra
- * giornaliera e per quota, anche quando più chiamate la condividono, che si chiude quando una
- * lettura riuscita trova il consumo rientrato. Una lettura non riuscita non apre né chiude nulla.
+ * risposto con il limite superato. Oltre la soglia di attenzione della quota giornaliera, 70% salvo
+ * diversa scelta nella console, la lettura apre un'anomalia, una sola per finestra giornaliera e
+ * per quota, anche quando più chiamate la condividono, che si chiude quando una lettura riuscita
+ * trova il consumo rientrato. Una lettura non riuscita non apre né chiude nulla.
  */
 
 /** Consumo oltre il quale le letture sono a rischio nella stessa giornata. */
@@ -53,7 +53,10 @@ export type EnvironmentQuotas = {
   read: "ok" | "failed";
   rows: QuotaRow[];
   suspended: QuotaSuspension[];
-  /** Letture Fulfillment degli ordini fatte oggi (UTC) da questo Worker: eBay non ne pubblica la quota. */
+  /**
+   * Letture Fulfillment degli ordini fatte oggi (UTC) da questo Worker: eBay non ne pubblica la
+   * quota.
+   */
   orderReads: number;
 };
 
@@ -73,8 +76,8 @@ const callName = (resource: string) => resource.split(".").at(-1)!;
 function callRank(api: string, resource: string) {
   return expectedCalls.findIndex(
     (expected) =>
-      expected.api === api &&
-      (api === "Fulfillment"
+      expected.api === api
+      && (api === "Fulfillment"
         ? callName(resource).toLowerCase().includes(expected.call)
         : expected.call === callName(resource)),
   );
@@ -93,10 +96,7 @@ async function suspensions(db: D1Database, env: Env, environment: EbayEnvironmen
       WHERE until > ?1 AND (api_origin = ?2 OR api_origin LIKE ?2 || '#%') ORDER BY api_origin`)
     .bind(at, origin)
     .all<{ api_origin: string; until: string }>();
-  return results.map((row) => ({
-    call: limitedCall(row.api_origin),
-    until: row.until,
-  }));
+  return results.map((row) => ({ call: limitedCall(row.api_origin), until: row.until }));
 }
 
 /** `alertShare`: consumo giornaliero oltre il quale si completa l’Application Growth Check. */
@@ -128,10 +128,10 @@ const subjectOf = (environment: EbayEnvironment, row: Pick<QuotaRow, "api" | "re
 /**
  * Apre l'anomalia della finestra giornaliera per ogni quota oltre la soglia e chiude le altre
  * dell'ambiente: quelle rientrate e quelle di una finestra già azzerata. Il soggetto è la prima
- * chiamata di FiscalBay della quota, qualunque sia il numero delle chiamate che la condividono.
- * La chiave porta l'azzeramento indicato da eBay alla prima lettura, o il giorno UTC se manca:
- * finché quell'azzeramento non è passato la stessa quota resta la stessa anomalia, anche se eBay
- * sposta l'orario indicato.
+ * chiamata di FiscalBay della quota, qualunque sia il numero delle chiamate che la condividono. La
+ * chiave porta l'azzeramento indicato da eBay alla prima lettura, o il giorno UTC se manca: finché
+ * quell'azzeramento non è passato la stessa quota resta la stessa anomalia, anche se eBay sposta
+ * l'orario indicato.
  */
 async function anomalyStatements(db: D1Database, quotas: EnvironmentQuotas, now: Date) {
   const at = now.toISOString();
@@ -156,8 +156,8 @@ async function anomalyStatements(db: D1Database, quotas: EnvironmentQuotas, now:
       const subject = subjectOf(quotas.environment, row);
       const current = open.find(
         (anomaly) =>
-          anomaly.subject === subject &&
-          (anomaly.resetAt
+          anomaly.subject === subject
+          && (anomaly.resetAt
             ? Date.parse(anomaly.resetAt) > now.getTime()
             : anomaly.key.endsWith(`:${at.slice(0, 10)}`)),
       );

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { retry } from "../lib/provider.mjs";
 import { spawnSync, execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, cpSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
+
+import { retry } from "../lib/provider.mjs";
+import { releaseNotes } from "./release-notes.mjs";
 import {
   declaredReview,
   migrationEntry,
@@ -48,7 +50,6 @@ import {
   reconcileReceipt,
   serviceSecrets,
 } from "./release.mjs";
-import { releaseNotes } from "./release-notes.mjs";
 
 describe("ciclo reale con provider simulati", () => {
   it("riconcilia risposte perse, conferma senza attesa, ritiro, ripresa e giorno fallito senza rete", () => {
@@ -820,9 +821,7 @@ describe("rollback d'incidente", () => {
     assert.equal(saved.candidateActive, true);
   });
   const sha = (letter) => letter.repeat(40);
-  const version = (version_id, percentage = 100) => ({
-    versions: [{ version_id, percentage }],
-  });
+  const version = (version_id, percentage = 100) => ({ versions: [{ version_id, percentage }] });
   const identity = { new: `${sha("a")}:x`, old: `${sha("b")}:y`, older: `${sha("c")}:z` };
   const identityOf = (id) => identity[id];
 

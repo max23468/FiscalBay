@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
+
 import ExcelJS from "exceljs";
+
 import {
   areas,
   clickHydrated,
@@ -29,8 +31,8 @@ test.describe("area reale", () => {
       page.on("request", (request) => {
         // Le misure della pagina partono da sole dopo 10 secondi: non sono un'azione della prova.
         if (
-          request.method() === "POST" &&
-          new URL(request.url()).pathname !== "/api/v1/page-timing"
+          request.method() === "POST"
+          && new URL(request.url()).pathname !== "/api/v1/page-timing"
         )
           posts.push(request.url());
       });
@@ -397,9 +399,7 @@ test.describe("area reale", () => {
           const id = `unlock-${language}-${browserName}`;
           await useLocalAccount(context, "member", baseURL!, id);
           await page.setViewportSize({ width: it ? 1280 : 390, height: 900 });
-          await page.emulateMedia({
-            reducedMotion: "reduce",
-          });
+          await page.emulateMedia({ reducedMotion: "reduce" });
           // Il dialogo dello sblocco si apre solo dopo l'idratazione: un clic anticipato va perso.
           await open(page, pagePath(prefix, "/app/ordini"));
           const card = (suffix = "") =>
@@ -475,8 +475,8 @@ test.describe("area reale", () => {
           // altrimenti annullerebbe.
           const revalidated = page.waitForResponse(
             (response) =>
-              response.request().method() === "GET" &&
-              /\/(?:impostazioni\/piano|settings\/plan)\.data/u.test(response.url()),
+              response.request().method() === "GET"
+              && /\/(?:impostazioni\/piano|settings\/plan)\.data/u.test(response.url()),
           );
           await confirmation.click();
           await revalidated;
@@ -666,9 +666,7 @@ test.describe("area reale", () => {
       // L'esito arriva dopo il salvataggio e la rilettura della pagina.
       await expect(
         page.getByText(it ? "Configurazione salvata." : "Configuration saved."),
-      ).toBeVisible({
-        timeout: 20_000,
-      });
+      ).toBeVisible({ timeout: 20_000 });
       // Una nuova apertura riparte dalla forma standard; la configurazione si ritrova per nome.
       await open(page, pagePath(prefix, "/app/impostazioni/esportazione"));
       await expect(section.getByRole("radio", { name: "XLSX" })).not.toBeChecked();
@@ -691,9 +689,7 @@ test.describe("area reale", () => {
       // L'esito arriva dopo l'eliminazione e la rilettura della pagina.
       await expect(
         page.getByText(it ? "Configurazione eliminata." : "Configuration deleted."),
-      ).toBeVisible({
-        timeout: 20_000,
-      });
+      ).toBeVisible({ timeout: 20_000 });
       await expect(configuration).toHaveCount(0);
       expect(errors).toEqual([]);
     });
@@ -816,9 +812,7 @@ for (const language of ["it", "en"] as const) {
       const prefix = language === "it" ? "" : "/en";
       const t = (it: string, en: string) => (language === "it" ? it : en);
       await open(page, pagePath(prefix, "/anteprima/ordini"), "ordinario");
-      const locked = page.getByRole("article", {
-        name: t("Ordine", "Order") + " 05-48217-36194",
-      });
+      const locked = page.getByRole("article", { name: t("Ordine", "Order") + " 05-48217-36194" });
       await expect(
         page.getByText(t("2 sblocchi disponibili in questo ciclo.", "2 unlocks left this cycle."), {
           exact: true,
@@ -842,9 +836,7 @@ for (const language of ["it", "en"] as const) {
       await unlock.click();
       await expect(confirm.getByRole("checkbox")).not.toBeChecked();
       await confirm
-        .getByRole("checkbox", {
-          name: t("Non chiedermelo più", "Don’t ask again"),
-        })
+        .getByRole("checkbox", { name: t("Non chiedermelo più", "Don’t ask again") })
         .check();
       await confirm.getByRole("button", { name: t("Sblocca", "Unlock"), exact: true }).click();
       await expect(locked.getByText("BNCLCU75C12F205G")).toBeVisible();
@@ -876,13 +868,11 @@ for (const language of ["it", "en"] as const) {
       await expect(zero).toHaveClass(/bg-muted/);
       await page.getByRole("button", { name: t("Annulla", "Cancel"), exact: true }).click();
       await expect(select).toBeFocused();
-      const failed = page.getByRole("article", {
-        name: t("Ordine", "Order") + " 19-62740-31885",
-      });
+      const failed = page.getByRole("article", { name: t("Ordine", "Order") + " 19-62740-31885" });
       const retried = page.waitForResponse(
         (response) =>
-          /\/(?:ordini|orders)\.data/u.test(response.url()) &&
-          response.request().method() === "POST",
+          /\/(?:ordini|orders)\.data/u.test(response.url())
+          && response.request().method() === "POST",
       );
       await failed.getByRole("button", { name: t("Riprova", "Try again"), exact: true }).click();
       await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
@@ -1483,9 +1473,10 @@ test.describe("impostazioni", () => {
     );
     // Nel Free la corona compare una volta, nella nota che vale per XLSX e colonne.
     await open(page, "/anteprima/impostazioni/esportazione");
-    const note = page.getByRole("region", { name: "Esportazione" }).locator("p").filter({
-      hasText: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Pro.",
-    });
+    const note = page
+      .getByRole("region", { name: "Esportazione" })
+      .locator("p")
+      .filter({ hasText: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Pro." });
     await expect(note.locator("svg")).toHaveClass(/lucide-crown/);
     await expect(page.getByRole("radio", { name: "XLSX" })).toBeDisabled();
   });
@@ -1597,12 +1588,14 @@ test.describe("negozi e impostazioni", () => {
       const t = <Text>(it: Text, en: Text) => (language === "it" ? it : en);
       // Un solo negozio con le letture ferme: avviso con l'ultimo aggiornamento e campanella.
       await open(page, pagePath(prefix, "/anteprima/ordini"), "negozio-scaduto");
-      const failed = page.getByRole("status").filter({
-        hasText: t(
-          "Vintage Garage Italia: aggiornamento non riuscito",
-          "Vintage Garage Italia: update failed",
-        ),
-      });
+      const failed = page
+        .getByRole("status")
+        .filter({
+          hasText: t(
+            "Vintage Garage Italia: aggiornamento non riuscito",
+            "Vintage Garage Italia: update failed",
+          ),
+        });
       await expect(
         failed.getByRole("link", { name: t("Apri il negozio", "Open store") }),
       ).toHaveAttribute("href", pagePath(prefix, "/anteprima/negozi/neg-vintage"));

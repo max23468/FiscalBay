@@ -1,51 +1,30 @@
 import { env } from "cloudflare:workers";
-import { insertWorkspace } from "./fixtures/database-fixtures";
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { orderAllowance, startTrial, unlockOrders } from "../app/domain/grants.server";
-
+import { handleAuthRequest } from "../app/auth-route.server";
 import { admission, applyInactivity, recordActivity } from "../app/domain/admission.server";
-
-import { setSwitch } from "../app/domain/service-settings.server";
-
 import { purchaseState } from "../app/domain/checkout.server";
-
+import { applyFreePlans } from "../app/domain/free-store.server";
+import { orderAllowance, startTrial, unlockOrders } from "../app/domain/grants.server";
 import { lifetimeContext } from "../app/domain/lifetime.server";
-
-import { dispatchStoreSyncs, requestStoreSync } from "../app/domain/order-sync.server";
-
 import { consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
-
-import { action as storeLinkAction } from "../app/routes/store-link";
-
+import { dispatchStoreSyncs, requestStoreSync } from "../app/domain/order-sync.server";
 import { listVisibleOrders } from "../app/domain/orders.server";
-
+import { setSwitch } from "../app/domain/service-settings.server";
 import {
   deleteStoreData,
   disconnectStore,
   listStores,
   resumeStore,
 } from "../app/domain/stores.server";
-
-import { handleAuthRequest } from "../app/auth-route.server";
-
-import { applyFreePlans } from "../app/domain/free-store.server";
-
 import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
-
-import { insertEntitlement, insertStore, now } from "./fixtures/database-fixtures";
-
-import { syntheticEbay, syntheticOrderId } from "./fixtures/ebay-fixtures";
-
+import { action as storeLinkAction } from "../app/routes/store-link";
 import { verifiedSession } from "./fixtures/account-fixtures";
-
-import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
-
+import { insertWorkspace, insertEntitlement, insertStore, now } from "./fixtures/database-fixtures";
+import { syntheticEbay, syntheticOrderId } from "./fixtures/ebay-fixtures";
 import { queued } from "./fixtures/queue-fixture";
-
 import { areaShell, routeResponse } from "./fixtures/route-fixtures";
-
+import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
 import {
   day,
   hour,
@@ -310,10 +289,7 @@ describe("inattività del Free e ammissione", () => {
       waiting: false,
       purchasesOpen: true,
     });
-    expect(await admission(env.DB, seller.userId)).toEqual({
-      waiting: true,
-      purchasesOpen: true,
-    });
+    expect(await admission(env.DB, seller.userId)).toEqual({ waiting: true, purchasesOpen: true });
     // Collegamento e prima lettura, poi nessuna lettura del Free e nessuno sblocco.
     expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({ importedOrders: 1 });
     expect(await dispatchStoreSyncs(cron, new Date())).toEqual([]);

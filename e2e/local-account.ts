@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
+
 import { request, type APIResponse, type BrowserContext } from "@playwright/test";
+
 import { applyLocalMigrations, database } from "../scripts/local-d1.mjs";
 import type { PageRole } from "./page-cases";
 import { testAccount } from "./test-account.ts";
@@ -135,9 +137,9 @@ export async function useLocalAccount(
   // dei beacon intercettati: resta fuori dall'instradamento.
   await context.route(
     (url) =>
-      url.origin === origin &&
-      !url.pathname.startsWith("/assets/") &&
-      url.pathname !== "/api/v1/page-timing",
+      url.origin === origin
+      && !url.pathname.startsWith("/assets/")
+      && url.pathname !== "/api/v1/page-timing",
     async (route) => {
       const request = route.request();
       // I cookie scritti dalla pagina, come il fuso del dispositivo, restano accanto alla sessione.

@@ -72,8 +72,8 @@ export async function removePasskey(db: D1Database, userId: string, id: string):
 import type { Language } from "../i18n";
 
 /**
- * Lingua delle email di servizio all'utente `user`, espressione SQL del suo id: quella scelta
- * nelle preferenze, altrimenti quella dell'ultima accettazione dei Termini.
+ * Lingua delle email di servizio all'utente `user`, espressione SQL del suo id: quella scelta nelle
+ * preferenze, altrimenti quella dell'ultima accettazione dei Termini.
  */
 export const emailLanguageSql = (user: string) => `COALESCE(
   (SELECT p.language FROM user_preferences p WHERE p.user_id = ${user}),

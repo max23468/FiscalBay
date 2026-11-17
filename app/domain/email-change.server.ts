@@ -11,8 +11,8 @@ export const emailVerificationSeconds = 3600;
 const linkExpiry = () => new Date(Date.now() + emailVerificationSeconds * 1000).toISOString();
 
 /**
- * Richiesta in corso per l'indirizzo di accesso `email`: una scaduta, o nata da un indirizzo
- * che non è più quello di accesso, non vale. Le righe scadute le elimina la manutenzione.
+ * Richiesta in corso per l'indirizzo di accesso `email`: una scaduta, o nata da un indirizzo che
+ * non è più quello di accesso, non vale. Le righe scadute le elimina la manutenzione.
  */
 export function pendingEmailChange(
   db: D1Database,

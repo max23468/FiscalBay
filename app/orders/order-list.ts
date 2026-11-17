@@ -49,8 +49,8 @@ export function pendingList(
 }
 
 /**
- * L'unico cambio è l'istantanea aggiunta all'indirizzo che ne era privo: la pagina la riceve
- * già dalla risposta che sta mostrando e non serve una nuova lettura.
+ * L'unico cambio è l'istantanea aggiunta all'indirizzo che ne era privo: la pagina la riceve già
+ * dalla risposta che sta mostrando e non serve una nuova lettura.
  */
 function snapshotOnlyAdded(current: URL, next: URL): boolean {
   if (current.pathname !== next.pathname || current.searchParams.has(snapshotParam)) return false;

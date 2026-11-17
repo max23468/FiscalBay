@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
-import { storeActions } from "../app/components/admin/store-actions";
-
 import { describe, expect, it, vi } from "vitest";
+
+import { storeActions } from "../app/components/admin/store-actions";
 
 it.each([
   [true, [], 0, { sync: true, retryDetails: false }],
@@ -20,44 +20,28 @@ import {
   normalizedName,
   reviewAbuseSignal,
 } from "../app/domain/abuse-review.server";
-
 import { consoleSummary, listAllStores } from "../app/domain/admin-directory.server";
-
 import { grantHistoryExtension, revokeHistoryExtension } from "../app/domain/concessions.server";
-
 import {
   applyWorkspacePlan,
   assistFreeStore,
   chooseFreeStore,
 } from "../app/domain/free-store.server";
-
 import { orderAllowance } from "../app/domain/grants.server";
-
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-
 import { requestStoreSync } from "../app/domain/order-sync.server";
-
-import { confirmStoreTransfer, prepareStoreTransfer } from "../app/domain/store-transfer.server";
-
-import { listStores, resumeStore, setAdminPause } from "../app/domain/stores.server";
-
-import { action as exportAction } from "../app/routes/order-export";
-
-import { loader as ordersLoader } from "../app/routes/orders";
-
 import { completeStoreLink } from "../app/domain/store-link.server";
-
+import { confirmStoreTransfer, prepareStoreTransfer } from "../app/domain/store-transfer.server";
+import { listStores, resumeStore, setAdminPause } from "../app/domain/stores.server";
 import {
   claimStoreLinkSession,
   startStoreLink as beginLink,
 } from "../app/integrations/ebay/store-link.server";
-
-import { syntheticEbay } from "./fixtures/ebay-fixtures";
-
+import { action as exportAction } from "../app/routes/order-export";
+import { loader as ordersLoader } from "../app/routes/orders";
 import { loader as loadStores } from "../app/routes/stores";
-
 import { verifiedSession } from "./fixtures/account-fixtures";
-
+import { at, hour, later, admin, audit, act, setupScenarios } from "./fixtures/admin-scenarios";
 import {
   insertCredentials,
   insertEntitlement,
@@ -66,12 +50,9 @@ import {
   insertWorkspace,
   now,
 } from "./fixtures/database-fixtures";
-
+import { syntheticEbay } from "./fixtures/ebay-fixtures";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
-
 import { callRoute, routeResponse } from "./fixtures/route-fixtures";
-
-import { at, hour, later, admin, audit, act, setupScenarios } from "./fixtures/admin-scenarios";
 
 setupScenarios();
 
@@ -258,9 +239,7 @@ describe("trasferimento assistito di un negozio", () => {
     // Ripetuta, la conferma non esegue nulla di nuovo.
     expect(
       await confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(later(1000))),
-    ).toEqual({
-      result: "already",
-    });
+    ).toEqual({ result: "already" });
 
     expect((await listStores(env.DB, owner.userId)).map((store) => store.id)).toEqual(["s-a2"]);
     // Il nuovo spazio non vede ancora il negozio: lo ricollega con il proprio consenso.

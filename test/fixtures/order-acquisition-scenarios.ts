@@ -1,11 +1,8 @@
 import { env } from "cloudflare:workers";
-
 import { afterEach, beforeEach, vi } from "vitest";
 
 import { acquireOrders } from "../../app/domain/order-acquisition.server";
-
 import { consumeStoreSync, dispatchStoreSyncs } from "../../app/domain/order-sync.server";
-
 import {
   insertCredentials,
   now,
@@ -13,12 +10,9 @@ import {
   resetOrderFixtures,
   seed,
 } from "./database-fixtures";
-
-import { fakeQueue, queueMessage, queued } from "./queue-fixture";
-
-import { emptyTradingOrders } from "./ebay-fixtures";
-
 import { access, ack, order } from "./ebay-client-fixtures";
+import { emptyTradingOrders } from "./ebay-fixtures";
+import { fakeQueue, queueMessage, queued } from "./queue-fixture";
 
 export const grantedAt = "2026-09-01T00:00:00.000Z";
 
@@ -31,7 +25,7 @@ const storeResponse = ack(
 type FakeOrder = ReturnType<typeof order>;
 
 /**
- * eBay sintetico con paginazione reale: filtra per data, ordina dal più recente e restituisce
+ * EBay sintetico con paginazione reale: filtra per data, ordina dal più recente e restituisce
  * `next` con l'offset, al più `pageLimit` ordini per pagina. `before` interviene prima di ogni
  * richiesta.
  */
@@ -62,8 +56,8 @@ export const ebay = (
       return new Response(ack("<Ack>Success</Ack><User><FeedbackScore>7</FeedbackScore></User>"));
     if (call === "GetItem") {
       return (
-        options.getItem?.() ??
-        new Response(
+        options.getItem?.()
+        ?? new Response(
           ack(
             `<Ack>Success</Ack><Item><PictureDetails><PictureURL>${image}</PictureURL></PictureDetails></Item>`,
           ),
@@ -77,18 +71,18 @@ export const ebay = (
         ([, id]) => id!,
       );
       return (
-        options.trading?.() ??
-        new Response(
-          `<GetOrdersResponse><Ack>Success</Ack><OrderArray>` +
-            ids
+        options.trading?.()
+        ?? new Response(
+          `<GetOrdersResponse><Ack>Success</Ack><OrderArray>`
+            + ids
               .map(
                 (id) =>
-                  `<Order><OrderID>${id}</OrderID>` +
-                  `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier>` +
-                  `</Order>`,
+                  `<Order><OrderID>${id}</OrderID>`
+                  + `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier>`
+                  + `</Order>`,
               )
-              .join("") +
-            `</OrderArray></GetOrdersResponse>`,
+              .join("")
+            + `</OrderArray></GetOrdersResponse>`,
         )
       );
     }
@@ -126,8 +120,8 @@ export const ebay = (
 export const calls = (fetcher: ReturnType<typeof ebay>, name: string) =>
   fetcher.mock.calls.filter(
     ([, init]) =>
-      new Headers(init?.headers).get("x-ebay-api-call-name") === name &&
-      !String(init?.body).includes("<ModTimeFrom>"),
+      new Headers(init?.headers).get("x-ebay-api-call-name") === name
+      && !String(init?.body).includes("<ModTimeFrom>"),
   ).length;
 
 /** Intervalli delle letture dell'elenco per il campo indicato, con l'offset delle pagine seguite. */

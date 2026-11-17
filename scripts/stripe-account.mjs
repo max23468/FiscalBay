@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * Rilegge l'account Stripe di un ambiente e lo confronta con la configurazione del codice:
- * ambiente della chiave, profilo pubblico, impostazioni fiscali, prezzi del listino, endpoint del
- * webhook e portale clienti. Con `--apply` allinea ciò che l'API consente (impostazioni fiscali,
- * endpoint e portale), poi rilegge. Il profilo pubblico si cambia soltanto dalla dashboard.
+ * Rilegge l'account Stripe di un ambiente e lo confronta con la configurazione del codice: ambiente
+ * della chiave, profilo pubblico, impostazioni fiscali, prezzi del listino, endpoint del webhook e
+ * portale clienti. Con `--apply` allinea ciò che l'API consente (impostazioni fiscali, endpoint e
+ * portale), poi rilegge. Il profilo pubblico si cambia soltanto dalla dashboard.
  *
  * Le richieste passano dal profilo della CLI di Stripe, così nessuna chiave passa da qui. Il
  * resoconto riporta soltanto controlli e nomi dei campi diversi, mai valori dell'account; il
  * segreto di un endpoint creato si scrive soltanto in `--secret-file`, con permessi 600.
  *
- * Uso: node scripts/stripe-account.mjs [--mode live] [--project-name <profilo>]
- *        [--apply [--secret-file <percorso>]]
+ * Uso: node scripts/stripe-account.mjs [--mode live] [--project-name <profilo>] [--apply
+ * [--secret-file <percorso>]]
  */
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
@@ -60,9 +60,9 @@ export function formParams(value, prefix = "") {
 export function differences(expected, actual, prefix = "") {
   if (Array.isArray(expected)) {
     const same =
-      Array.isArray(actual) &&
-      actual.length === expected.length &&
-      expected.every((item) => actual.includes(item));
+      Array.isArray(actual)
+      && actual.length === expected.length
+      && expected.every((item) => actual.includes(item));
     return same ? [] : [prefix];
   }
   if (expected && typeof expected === "object")
@@ -119,19 +119,19 @@ function endpointsOf(endpoints, origin) {
     foreign: endpoints.filter((endpoint) => {
       const url = new URL(endpoint.url);
       return (
-        endpoint.url !== own &&
-        url.pathname === webhookPath &&
-        /(?:^|\.)fiscalbay\.it$/u.test(url.hostname)
+        endpoint.url !== own
+        && url.pathname === webhookPath
+        && /(?:^|\.)fiscalbay\.it$/u.test(url.hostname)
       );
     }),
   };
 }
 
 /**
- * Controlli dell'account rispetto al target: ciascuno con esito ed eventuali campi diversi.
- * Se la chiave della CLI appartiene all'altro ambiente, o il profilo legge un account senza
- * nessuno dei prezzi del listino, gli altri controlli non partono: elencherebbero soltanto
- * scostamenti apparenti.
+ * Controlli dell'account rispetto al target: ciascuno con esito ed eventuali campi diversi. Se la
+ * chiave della CLI appartiene all'altro ambiente, o il profilo legge un account senza nessuno dei
+ * prezzi del listino, gli altri controlli non partono: elencherebbero soltanto scostamenti
+ * apparenti.
  */
 export function checkAccount(request, target) {
   const results = [];
@@ -186,9 +186,9 @@ export function checkAccount(request, target) {
       ...(profile.support_email === expected.supportEmail ? [] : ["support_email"]),
       // Un indirizzo di assistenza diverso dal sito porterebbe i clienti altrove. La sandbox
       // conserva i valori di prova di Stripe, che nessun cliente vede.
-      ...(!target.live ||
-      !profile.support_url ||
-      profile.support_url.startsWith(`${target.origin}/`)
+      ...(!target.live
+      || !profile.support_url
+      || profile.support_url.startsWith(`${target.origin}/`)
         ? []
         : ["support_url"]),
     ];
@@ -244,9 +244,9 @@ export function checkAccount(request, target) {
 }
 
 /**
- * Allinea impostazioni fiscali, endpoint e portale. Un endpoint nuovo restituisce il segreto
- * una sola volta: si scrive in `secretFile` senza sovrascrivere un file esistente. Endpoint
- * duplicati o di un altro ambiente non si toccano: li decide l'owner dalla dashboard.
+ * Allinea impostazioni fiscali, endpoint e portale. Un endpoint nuovo restituisce il segreto una
+ * sola volta: si scrive in `secretFile` senza sovrascrivere un file esistente. Endpoint duplicati o
+ * di un altro ambiente non si toccano: li decide l'owner dalla dashboard.
  */
 export function applyAccount(request, target, { secretFile, writeSecret = writeSecretFile }) {
   const actions = [];
@@ -262,8 +262,8 @@ export function applyAccount(request, target, { secretFile, writeSecret = writeS
   }
   const taxCode = taxCodes.size === 1 ? [...taxCodes][0] : null;
   if (
-    taxCode &&
-    (tax.defaults?.tax_behavior !== "exclusive" || tax.defaults?.tax_code !== taxCode)
+    taxCode
+    && (tax.defaults?.tax_behavior !== "exclusive" || tax.defaults?.tax_code !== taxCode)
   ) {
     request("post", "/v1/tax/settings", {
       defaults: { tax_behavior: "exclusive", tax_code: taxCode },
@@ -287,8 +287,8 @@ export function applyAccount(request, target, { secretFile, writeSecret = writeS
   } else if (own.length === 1) {
     const [endpoint] = own;
     if (
-      endpoint.status !== "enabled" ||
-      differences(events.enabled_events, endpoint.enabled_events).length
+      endpoint.status !== "enabled"
+      || differences(events.enabled_events, endpoint.enabled_events).length
     ) {
       request("post", `/v1/webhook_endpoints/${endpoint.id}`, { ...events, disabled: false });
       actions.push("endpoint aggiornato");

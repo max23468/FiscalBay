@@ -1,6 +1,6 @@
+import { useCopy } from "~/components/copy-context";
 import { StatusIcon } from "~/components/status";
 import { SelectItem } from "~/components/ui/select";
-import { useCopy } from "~/components/copy-context";
 
 /**
  * Voce di un menu di scelta. Un'opzione del piano Premium resta visibile con la corona e la

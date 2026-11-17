@@ -1,26 +1,20 @@
-import { env } from "cloudflare:workers";
-
 import { sign } from "node:crypto";
 
+import { env } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { receiveWebhook, consumeWebhooks } from "../app/webhooks.server";
-
+import { listAnomalies } from "../app/domain/admin-operations.server";
+import {
+  resumeEbayAccountDeletions,
+  runEbayAccountDeletion,
+} from "../app/domain/ebay-account-deletion.server";
+import { bulkDataAnomalies, recordBulkDataThreshold } from "../app/domain/ebay-quotas.server";
 import {
   admitOrigin,
   NotificationLimit,
   verifyEbayNotification,
 } from "../app/integrations/ebay/notifications.server";
-
-import {
-  resumeEbayAccountDeletions,
-  runEbayAccountDeletion,
-} from "../app/domain/ebay-account-deletion.server";
-
-import { listAnomalies } from "../app/domain/admin-operations.server";
-
-import { bulkDataAnomalies, recordBulkDataThreshold } from "../app/domain/ebay-quotas.server";
-
+import { receiveWebhook, consumeWebhooks } from "../app/webhooks.server";
 import {
   now,
   grantedAt,
@@ -432,11 +426,7 @@ it("accetta la firma SHA-1 delle notifiche di cancellazione dichiarata dalla chi
   };
   const sha1Key = vi.fn<typeof fetch>(async (input, init) =>
     String(input).includes("/public_key/")
-      ? Response.json({
-          algorithm: "ECDSA",
-          digest: "SHA1",
-          key: publicKey.replaceAll("\n", ""),
-        })
+      ? Response.json({ algorithm: "ECDSA", digest: "SHA1", key: publicKey.replaceAll("\n", "") })
       : fetcher(input, init),
   );
   const payload = accountDeletion({ userId: "seller-synthetic", eiasToken: "eias-seller" });

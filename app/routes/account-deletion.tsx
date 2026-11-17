@@ -1,8 +1,9 @@
 import { AccountDeletionPage } from "~/components/account-deletion";
-import type { Route } from "./+types/account-deletion";
+
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
 import { publicPageHeaders } from "../site.server";
+import type { Route } from "./+types/account-deletion";
 
 export const headers = publicPageHeaders;
 

@@ -1,13 +1,14 @@
 /**
- * Copia locale della Build Output per `vite preview`, servita da `.cloudflare/preview`:
- * origine locale e segreti sintetici restano fuori dall'artefatto verificato, che non cambia.
- * Il plugin Cloudflare non sostituisce le variabili testuali in locale, quindi `APP_ORIGIN`
- * viene riscritta nella copia test; il collaudo Production conserva l'origine che esclude l'anteprima.
- * La copia test riceve anche un bot Telegram sintetico, senza alcun bot reale dietro: token e
- * segreto sono facoltativi e il plugin passa al Worker soltanto i binding dichiarati, quindi stanno
- * nella copia della configurazione insieme al nome.
+ * Copia locale della Build Output per `vite preview`, servita da `.cloudflare/preview`: origine
+ * locale e segreti sintetici restano fuori dall'artefatto verificato, che non cambia. Il plugin
+ * Cloudflare non sostituisce le variabili testuali in locale, quindi `APP_ORIGIN` viene riscritta
+ * nella copia test; il collaudo Production conserva l'origine che esclude l'anteprima. La copia
+ * test riceve anche un bot Telegram sintetico, senza alcun bot reale dietro: token e segreto sono
+ * facoltativi e il plugin passa al Worker soltanto i binding dichiarati, quindi stanno nella copia
+ * della configurazione insieme al nome.
  */
 import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+
 import { localOrigin, localSecret } from "../e2e/local-account.ts";
 
 if (process.env.E2E_BASE_URL)

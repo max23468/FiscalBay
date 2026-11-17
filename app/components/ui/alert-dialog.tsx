@@ -1,6 +1,6 @@
-import * as React from "react";
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
 import { cn } from "cn";
+import * as React from "react";
 
 import { Button } from "~/components/ui/button";
 
@@ -26,7 +26,7 @@ function AlertDialogOverlay({ className, ...props }: AlertDialogPrimitive.Backdr
       data-slot="alert-dialog-overlay"
       forceRender
       className={cn(
-        "fixed inset-0 isolate z-60 motion-backdrop bg-brand-navy/24 dark:bg-black/60",
+        "fixed inset-0 isolate z-60 bg-brand-navy/24 motion-backdrop dark:bg-black/60",
         className,
       )}
       {...props}
@@ -38,9 +38,7 @@ function AlertDialogContent({
   className,
   size = "default",
   ...props
-}: AlertDialogPrimitive.Popup.Props & {
-  size?: "default" | "sm";
-}) {
+}: AlertDialogPrimitive.Popup.Props & { size?: "default" | "sm" }) {
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
@@ -48,7 +46,7 @@ function AlertDialogContent({
         data-slot="alert-dialog-content"
         data-size={size}
         className={cn(
-          "group/alert-dialog-content fixed motion-modal top-1/2 left-1/2 z-60 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl shadow-md bg-popover p-4 text-popover-foreground ring-1 ring-foreground/10 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm",
+          "group/alert-dialog-content fixed top-1/2 left-1/2 z-60 grid w-full -translate-x-1/2 -translate-y-1/2 motion-modal gap-4 rounded-xl bg-popover p-4 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-sm",
           className,
         )}
         {...props}
@@ -71,8 +69,8 @@ function AlertDialogHeader({ className, ...props }: React.ComponentProps<"div">)
 }
 
 /**
- * Azioni nell'ordine del documento, anche impilate su schermi stretti: la tabulazione segue
- * quello che si vede, dall'annullamento alla conferma.
+ * Azioni nell'ordine del documento, anche impilate su schermi stretti: la tabulazione segue quello
+ * che si vede, dall'annullamento alla conferma.
  */
 function AlertDialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -121,8 +119,8 @@ function AlertDialogCancel({
   variant = "outline",
   size = "default",
   ...props
-}: AlertDialogPrimitive.Close.Props &
-  Pick<React.ComponentProps<typeof Button>, "variant" | "size">) {
+}: AlertDialogPrimitive.Close.Props
+  & Pick<React.ComponentProps<typeof Button>, "variant" | "size">) {
   return (
     <AlertDialogPrimitive.Close
       data-slot="alert-dialog-cancel"

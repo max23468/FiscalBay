@@ -1,19 +1,19 @@
+import { readSellerStanding, readStoreProfile } from "../integrations/ebay/trading.server";
+import { UpstreamError } from "../integrations/http.server";
+import { dayMilliseconds } from "../time";
 import {
   limitKey,
   rateLimitWait,
   recordRateLimit,
   type Context,
 } from "./order-acquisition-context.server";
-import { dayMilliseconds } from "../time";
-import { UpstreamError } from "../integrations/http.server";
-import { readSellerStanding, readStoreProfile } from "../integrations/ebay/trading.server";
 
 /** Profilo e feedback cambiano di rado: una lettura a settimana li tiene aggiornati. */
 export const storeProfileRefreshMilliseconds = 7 * dayMilliseconds;
 
 /**
- * Chiamata Trading del profilo: null se la sua quota è sospesa o la lettura non riesce. Il
- * limite della quota sospende soltanto quella chiamata.
+ * Chiamata Trading del profilo: null se la sua quota è sospesa o la lettura non riesce. Il limite
+ * della quota sospende soltanto quella chiamata.
  */
 async function profileCall<T>(ctx: Context, call: string, read: () => Promise<T>) {
   const now = new Date(ctx.at);
@@ -29,9 +29,9 @@ async function profileCall<T>(ctx: Context, call: string, read: () => Promise<T>
 }
 
 /**
- * Rilegge il profilo pubblico del negozio eBay (nome, logo e indirizzo con `GetStore`, feedback
- * e stato Top Rated con `GetUser`) quando l'ultima lettura è più vecchia di una settimana, anche
- * per i negozi collegati prima di questa lettura. È un dato accessorio: una chiamata non riuscita
+ * Rilegge il profilo pubblico del negozio eBay (nome, logo e indirizzo con `GetStore`, feedback e
+ * stato Top Rated con `GetUser`) quando l'ultima lettura è più vecchia di una settimana, anche per
+ * i negozi collegati prima di questa lettura. È un dato accessorio: una chiamata non riuscita
  * lascia i suoi valori precedenti e la settimana successiva li rilegge. Due chiamate a settimana
  * non scalano il budget delle passate sugli ordini, così non ne spostano l'ordine.
  */

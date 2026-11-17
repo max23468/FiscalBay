@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
  * Avvia il server MCP di eBay per gli agenti di sviluppo, soltanto in modalità applicazione:
- * specifiche, metadati e API pubbliche, mai dati dei venditori o degli acquirenti. Legge il
- * keyset Production dal Portachiavi macOS senza scriverlo in file o argomenti.
- * Uso: node scripts/ebay-mcp.mjs (dalla configurazione MCP del client)
+ * specifiche, metadati e API pubbliche, mai dati dei venditori o degli acquirenti. Legge il keyset
+ * Production dal Portachiavi macOS senza scriverlo in file o argomenti. Uso: node
+ * scripts/ebay-mcp.mjs (dalla configurazione MCP del client)
  */
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";

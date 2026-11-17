@@ -1,10 +1,10 @@
 import { env } from "cloudflare:workers";
 import { expect, vi } from "vitest";
 
-import { deliverTelegram } from "../../app/domain/telegram-deliveries.server";
-import { consumeWebhooks, receiveWebhook } from "../../app/webhooks.server";
 import { type TelegramReceipt } from "../../app/domain/telegram-bot.server";
+import { deliverTelegram } from "../../app/domain/telegram-deliveries.server";
 import { action as settingsAction } from "../../app/routes/settings";
+import { consumeWebhooks, receiveWebhook } from "../../app/webhooks.server";
 import { verifiedSession } from "./account-fixtures";
 import {
   insertEntitlement,
@@ -81,9 +81,9 @@ export function webhook(body: unknown, header: string | null = secret) {
 }
 
 /**
- * Aggiornamento ricevuto dall'ingresso, che risponde subito, come in esercizio. Se la risposta
- * non si completa la ricevuta va in coda: il consumer la riprende con la stessa Bot API e il
- * messaggio di coda è il risultato; null se ha risposto l'ingresso.
+ * Aggiornamento ricevuto dall'ingresso, che risponde subito, come in esercizio. Se la risposta non
+ * si completa la ricevuta va in coda: il consumer la riprende con la stessa Bot API e il messaggio
+ * di coda è il risultato; null se ha risposto l'ingresso.
  */
 export async function deliver(
   text: string,

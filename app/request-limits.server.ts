@@ -21,9 +21,9 @@ export function clientKey(ip: string): string {
 /**
  * Primo filtro per IP e operazione, con il binding Rate Limiting di Workers (§29): precede
  * sessione, Turnstile e contatori D1, e restituisce i secondi di attesa oltre il limite. Il
- * contatore è del data center e approssimato, mai scritto su D1; la chiave non contiene
- * l'account, quindi la risposta non dice se esiste. Attivo sui domini HTTPS, dove Cloudflare
- * fornisce l'IP del client.
+ * contatore è del data center e approssimato, mai scritto su D1; la chiave non contiene l'account,
+ * quindi la risposta non dice se esiste. Attivo sui domini HTTPS, dove Cloudflare fornisce l'IP del
+ * client.
  */
 export async function requestLimitWait(
   env: Pick<Env, "APP_ORIGIN" | (typeof limiters)[RequestLimit]>,

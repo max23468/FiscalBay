@@ -1,26 +1,26 @@
 /**
  * Costi per operazione sul dataset di riferimento, nel runtime Workers locale: righe D1 lette e
- * scritte, query, messaggi in coda e chiamate eBay. Sono valori esatti e ripetibili, la base
- * delle proiezioni mensili; i tempi si misurano sulla build servita (`scripts/capacity.mjs`),
- * perché qui l'orologio del runtime avanza soltanto con l'I/O.
- * Ogni misura esce su una riga `CAPACITY {json}` che lo script raccoglie.
+ * scritte, query, messaggi in coda e chiamate eBay. Sono valori esatti e ripetibili, la base delle
+ * proiezioni mensili; i tempi si misurano sulla build servita (`scripts/capacity.mjs`), perché qui
+ * l'orologio del runtime avanza soltanto con l'I/O. Ogni misura esce su una riga `CAPACITY {json}`
+ * che lo script raccoglie.
  */
 import { env } from "cloudflare:workers";
 import { beforeAll, expect, it, vi } from "vitest";
 
-import { loader as loadArea } from "../app/routes/account";
-import { loader as loadOrders } from "../app/routes/orders";
-import { action as exportAction } from "../app/routes/order-export";
 import { consumeExportJob } from "../app/domain/export-jobs.server";
-import { consumeStoreSync } from "../app/domain/order-sync.server";
-import { dispatchScheduledWork } from "../app/domain/scheduled-work.server";
 import { indexOrderSearch, purgeExpiredRecords } from "../app/domain/maintenance.server";
+import { consumeStoreSync } from "../app/domain/order-sync.server";
 import { legalVersions } from "../app/domain/registration.server";
+import { dispatchScheduledWork } from "../app/domain/scheduled-work.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
+import { loader as loadArea } from "../app/routes/account";
+import { action as exportAction } from "../app/routes/order-export";
+import { loader as loadOrders } from "../app/routes/orders";
 import { ack, order } from "../test/fixtures/ebay-client-fixtures";
 import { emptyTradingOrders } from "../test/fixtures/ebay-fixtures";
-import { fakeQueue, queueMessage, queued } from "../test/fixtures/queue-fixture";
 import { searchOrders } from "../test/fixtures/order-search-fixtures";
+import { fakeQueue, queueMessage, queued } from "../test/fixtures/queue-fixture";
 import { callRoute } from "../test/fixtures/route-fixtures";
 import {
   capacityStatements,
@@ -276,7 +276,7 @@ it("smista i negozi dovuti dal cron e poi un turno senza lavoro", async () => {
 });
 
 /**
- * eBay sintetico: elenco Fulfillment filtrato e paginato, nessun modificato in Trading, codice
+ * EBay sintetico: elenco Fulfillment filtrato e paginato, nessun modificato in Trading, codice
  * fiscale dal dettaglio Trading e immagine da GetItem.
  */
 function ebay(orders: Array<ReturnType<typeof order>>) {
@@ -293,8 +293,8 @@ function ebay(orders: Array<ReturnType<typeof order>>) {
       // Un ordine per ogni ID del lotto richiesto.
       const orders = [...String(init?.body).matchAll(/<OrderID>([^<]*)<\/OrderID>/gu)].map(
         ([, id]) =>
-          `<Order><OrderID>${id}</OrderID>` +
-          `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier></Order>`,
+          `<Order><OrderID>${id}</OrderID>`
+          + `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier></Order>`,
       );
       return new Response(
         `<GetOrdersResponse><Ack>Success</Ack><OrderArray>${orders.join("")}</OrderArray></GetOrdersResponse>`,

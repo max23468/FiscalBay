@@ -1,6 +1,6 @@
-import { useMemo } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
+import { useMemo } from "react";
 
 import { Label } from "~/components/ui/label";
 import { Separator } from "~/components/ui/separator";
@@ -59,9 +59,7 @@ const fieldVariants = cva("group/field flex w-full gap-2 data-[invalid=true]:tex
         "flex-col *:w-full @md/field-group:flex-row @md/field-group:items-center @md/field-group:*:w-auto @md/field-group:has-[>[data-slot=field-content]]:items-start @md/field-group:*:data-[slot=field-label]:flex-auto [&>.sr-only]:w-auto @md/field-group:has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px",
     },
   },
-  defaultVariants: {
-    orientation: "vertical",
-  },
+  defaultVariants: { orientation: "vertical" },
 });
 
 function Field({
@@ -100,7 +98,7 @@ function FieldLabel({
     <Label
       data-slot="field-label"
       className={cn(
-        "group/field-label peer/field-label flex w-fit gap-2 leading-snug pointer-coarse:has-[[role=radio],[role=switch],[role=checkbox]]:min-h-11 pointer-coarse:has-[[role=radio],[role=switch],[role=checkbox]]:items-center group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:has-data-checked:border-primary/30 has-[>[data-slot=field]]:has-data-checked:bg-primary/5 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:has-[:focus-visible]:ring-3 has-[>[data-slot=field]]:has-[:focus-visible]:ring-ring *:data-[slot=field]:p-2.5 dark:has-[>[data-slot=field]]:has-data-checked:border-primary/20 dark:has-[>[data-slot=field]]:has-data-checked:bg-primary/10",
+        "group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-[>[data-slot=field]]:has-data-checked:border-primary/30 has-[>[data-slot=field]]:has-data-checked:bg-primary/5 has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:has-[:focus-visible]:ring-3 has-[>[data-slot=field]]:has-[:focus-visible]:ring-ring *:data-[slot=field]:p-2.5 dark:has-[>[data-slot=field]]:has-data-checked:border-primary/20 dark:has-[>[data-slot=field]]:has-data-checked:bg-primary/10 pointer-coarse:has-[[role=radio],[role=switch],[role=checkbox]]:min-h-11 pointer-coarse:has-[[role=radio],[role=switch],[role=checkbox]]:items-center",
         "has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col",
         required && "gap-0.5",
         className,
@@ -132,9 +130,7 @@ function FieldSeparator({
   children,
   className,
   ...props
-}: React.ComponentProps<"div"> & {
-  children?: React.ReactNode;
-}) {
+}: React.ComponentProps<"div"> & { children?: React.ReactNode }) {
   return (
     <div
       data-slot="field-separator"
@@ -163,9 +159,7 @@ function FieldError({
   children,
   errors,
   ...props
-}: React.ComponentProps<"div"> & {
-  errors?: Array<{ message?: string } | undefined>;
-}) {
+}: React.ComponentProps<"div"> & { errors?: Array<{ message?: string } | undefined> }) {
   const content = useMemo(() => {
     if (children) {
       return children;

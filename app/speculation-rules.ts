@@ -2,8 +2,8 @@ import { accessPath, appBase, authErrorPath, previewBase, visitParam } from "./a
 import { languages, localizedPath } from "./i18n";
 
 /**
- * Sezioni che non si precaricano: area dell'account, accesso, console, API, anteprima ed errori
- * di accesso dipendono dalla sessione o cambiano stato; nelle due lingue.
+ * Sezioni che non si precaricano: area dell'account, accesso, console, API, anteprima ed errori di
+ * accesso dipendono dalla sessione o cambiano stato; nelle due lingue.
  */
 const privateSections = [appBase, accessPath, "/admin", "/api", previewBase, authErrorPath];
 

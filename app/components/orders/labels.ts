@@ -1,13 +1,13 @@
 import type { AppCopy } from "../../app-copy";
 import { buyerNameView } from "../../contact";
+import { addressRows } from "../../format";
 import type { Language } from "../../i18n";
 import { displayTaxValue } from "../../tax-quality";
 import { type OrderView, type TaxIdentifierView } from "../../view-models";
-import { addressRows } from "../../format";
 
 /**
- * Solo valori già autorizzati dal server; suggerimenti e identificativi bloccati esclusi.
- * CF e Partita IVA italiani nella forma mostrata nel riquadro fiscale.
+ * Solo valori già autorizzati dal server; suggerimenti e identificativi bloccati esclusi. CF e
+ * Partita IVA italiani nella forma mostrata nel riquadro fiscale.
  */
 export function billingCopyText(order: OrderView, language: Language, t: AppCopy): string {
   const name = order.maskedContacts?.includes("name") ? null : buyerNameView(order.buyerName);

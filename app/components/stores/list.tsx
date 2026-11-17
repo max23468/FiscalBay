@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
-import { formatNumber } from "../../format";
 import { Link } from "react-router";
 
+import { useCopy, useLinks } from "~/components/copy-context";
 import { StatusBadge } from "~/components/status";
 import {
   Table,
@@ -11,17 +11,14 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { useCopy, useLinks } from "~/components/copy-context";
-import { appHref } from "../../app-links";
-import type { StoreView } from "../../view-models";
-import { LastSync, StoreSubtitle, StoreTile } from "./store";
-import { connectionStatus, marketplaceText, notificationsLabel } from "./state";
 
-type ListProps = {
-  stores: StoreView[];
-  premium: boolean;
-  now: string;
-};
+import { appHref } from "../../app-links";
+import { formatNumber } from "../../format";
+import type { StoreView } from "../../view-models";
+import { connectionStatus, marketplaceText, notificationsLabel } from "./state";
+import { LastSync, StoreSubtitle, StoreTile } from "./store";
+
+type ListProps = { stores: StoreView[]; premium: boolean; now: string };
 
 /** Tabella da desktop: tutta la riga apre il pannello del negozio. */
 export function StoreTable({ stores, premium, now }: ListProps) {
@@ -86,7 +83,7 @@ export function StoreTable({ stores, premium, now }: ListProps) {
                     {notificationsLabel(store, t)}
                   </TableCell>
                 ) : null}
-                <TableCell className="font-code text-right">
+                <TableCell className="text-right font-code">
                   {formatNumber(store.importedOrders, language)}
                 </TableCell>
                 <TableCell className="pr-4">

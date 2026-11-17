@@ -62,8 +62,8 @@ export type BuyerSnapshot = z.output<typeof buyerSnapshotSchema>;
 
 /**
  * Lettura normalizzata di un ordine da una fonte eBay. `stableKey` è l'identità della riga
- * comprovata dalla fonte, null se la fonte non la fornisce. `taxIdentifiers.complete` dichiara
- * che l'assenza di un valore è una rimozione autorevole; altrimenti i valori assenti restano.
+ * comprovata dalla fonte, null se la fonte non la fornisce. `taxIdentifiers.complete` dichiara che
+ * l'assenza di un valore è una rimozione autorevole; altrimenti i valori assenti restano.
  */
 export const orderObservationSchema = z.object({
   source: z.enum(["fulfillment", "trading"]),
@@ -101,11 +101,7 @@ export const orderObservationSchema = z.object({
       verification: z.enum(["completed", "error"]).default("completed"),
       lastModifiedTime: utc.optional(),
       values: z.array(
-        z.object({
-          type: z.string().min(1),
-          issuingCountry: text,
-          value: z.string().min(1),
-        }),
+        z.object({ type: z.string().min(1), issuingCountry: text, value: z.string().min(1) }),
       ),
     })
     .optional(),

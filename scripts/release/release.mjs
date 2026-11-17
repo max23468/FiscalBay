@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /** Provenienza, migration e readback. Nessun effetto remoto nei comandi manifest/verify. */
-import { createHash } from "node:crypto";
+
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
@@ -12,13 +13,13 @@ import {
   rmSync,
   mkdtempSync,
 } from "node:fs";
-import path from "node:path";
 import { tmpdir } from "node:os";
-import { parseArgs } from "node:util";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
-import { cf as cfCli, cfJson, ghJson, retry } from "../lib/provider.mjs";
 import { fragmentEntries, headings, withChanges } from "../../app/changelog-fragments.mjs";
+import { cf as cfCli, cfJson, ghJson, retry } from "../lib/provider.mjs";
 import { downloadRecord, observedRelease } from "./records.mjs";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -40,9 +41,9 @@ const readOutput = () => ({
 });
 
 /**
- * Segreti dei servizi attivi nei due ambienti che la configurazione non dichiara, perché in
- * locale e nei test restano facoltativi: senza di loro il Worker distribuito perde acquisti,
- * webhook Stripe, Telegram o notifiche eBay, quindi il deploy li pretende.
+ * Segreti dei servizi attivi nei due ambienti che la configurazione non dichiara, perché in locale
+ * e nei test restano facoltativi: senza di loro il Worker distribuito perde acquisti, webhook
+ * Stripe, Telegram o notifiche eBay, quindi il deploy li pretende.
  */
 export const serviceSecrets = [
   "STRIPE_SECRET_KEY",
@@ -113,16 +114,16 @@ export function requiredReview(added) {
 }
 
 /**
- * Le migration non additive aggiunte da una PR si approvano prima del merge: il digest
- * coincide con quello del deploy test quando il test distribuisce già la base della PR.
+ * Le migration non additive aggiunte da una PR si approvano prima del merge: il digest coincide con
+ * quello del deploy test quando il test distribuisce già la base della PR.
  */
 export function reviewAdded(added, body) {
   const required = requiredReview(added);
   if (!required) return "";
   if (declaredReview(body) !== required.digest)
     throw new Error(
-      `Migration da approvare prima del merge: ${required.names.join(", ")}. ` +
-        `Dopo l'esame aggiungere al corpo della PR la riga "reviewed-migrations: ${required.digest}".`,
+      `Migration da approvare prima del merge: ${required.names.join(", ")}. `
+        + `Dopo l'esame aggiungere al corpo della PR la riga "reviewed-migrations: ${required.digest}".`,
     );
   return required.digest;
 }
@@ -134,13 +135,13 @@ export function migrationPlan(migrations, applied, reviewed = "", approved) {
   const digest = migrationDigest(pending);
   const unsafe = unsafeMigrations(pending);
   const resumed =
-    approved &&
-    reviewed === approved.digest &&
-    hash(JSON.stringify(approved.pending)) === approved.digest &&
-    approved.pending.every((entry) =>
+    approved
+    && reviewed === approved.digest
+    && hash(JSON.stringify(approved.pending)) === approved.digest
+    && approved.pending.every((entry) =>
       migrations.some((item) => item.name === entry.name && item.digest === entry.digest),
-    ) &&
-    pending.every((entry) =>
+    )
+    && pending.every((entry) =>
       approved.pending.some((item) => item.name === entry.name && item.digest === entry.digest),
     );
   if (unsafe.length && reviewed !== digest && !resumed)
@@ -172,7 +173,10 @@ export const topVersion = (changelog) => changelog.match(/^## \[?([^\]\s]+)\]?/m
 export const romeDay = (date = new Date()) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(date);
 
-/** Intestazione della prima versione: `## [2.0.1]` in preparazione, `## [2.0.1] - AAAA-MM-GG` pubblicata. */
+/**
+ * Intestazione della prima versione: `## [2.0.1]` in preparazione, `## [2.0.1] - AAAA-MM-GG`
+ * pubblicata.
+ */
 export function topSection(changelog) {
   const match = /^## \[?([^\]\s]+)\]?(?: - (\S+))?[ \t]*$/mu.exec(changelog);
   return match && { header: match[0], version: match[1], day: match[2] };
@@ -252,6 +256,7 @@ export function rebaseLinks(text, from, to) {
  * Voci di un frammento per gli utenti dell'app, nelle parti «Novità» e «What's new»: soltanto
  * queste chiedono una versione nuova e cambiano ciò che l'app mostra. «Altre modifiche», come i
  * cambi del sito pubblico, della console o interni, viaggiano con la versione già pubblicata.
+ *
  * @param {string} fragment
  */
 export const userEntries = (fragment) =>
@@ -261,6 +266,7 @@ export const userEntries = (fragment) =>
  * Ciò che la pagina Novità mostra di un changelog: per ogni versione con Novità, intestazione con
  * il giorno e righe delle parti «Novità» e «What's new». Due changelog con la stessa impronta
  * producono la stessa pagina, anche se cambiano le altre parti o versioni senza Novità.
+ *
  * @param {string} changelog
  */
 export function visibleNews(changelog) {
@@ -292,10 +298,10 @@ export function visibleNews(changelog) {
 
 /**
  * Giorno della pubblicazione su `develop`: i frammenti del commit pubblicato entrano nella
- * versione, che riceve il giorno, e le loro decisioni nel registro; poi si eliminano. Frammenti
- * con Novità entrati dopo quel commit restano e aprono la versione di correzione successiva, perché
- * non appartengono a quella pubblicata; quelli con le sole altre modifiche restano senza aprirla.
- * Un lotto senza Novità ripubblica la versione già datata: i suoi frammenti vi si aggiungono.
+ * versione, che riceve il giorno, e le loro decisioni nel registro; poi si eliminano. Frammenti con
+ * Novità entrati dopo quel commit restano e aprono la versione di correzione successiva, perché non
+ * appartengono a quella pubblicata; quelli con le sole altre modifiche restano senza aprirla. Un
+ * lotto senza Novità ripubblica la versione già datata: i suoi frammenti vi si aggiungono.
  */
 export function publicationDay({ changelog, register, published, later }, version, day) {
   const dated = datedChangelog(
@@ -323,8 +329,8 @@ export function publicationDay({ changelog, register, published, later }, versio
 }
 
 /**
- * Parte di un frammento entrata dopo la pubblicazione: senza le voci e le decisioni già
- * pubblicate; vuota se non resta nessuna voce né decisione.
+ * Parte di un frammento entrata dopo la pubblicazione: senza le voci e le decisioni già pubblicate;
+ * vuota se non resta nessuna voce né decisione.
  */
 export function laterPart(current, published) {
   if (current === published) return "";
@@ -339,14 +345,14 @@ export function laterPart(current, published) {
 }
 
 /**
- * Le Novità di un frammento appartengono alla versione in preparazione: con la versione in cima
- * già pubblicata la PR apre prima quella successiva. Le sole altre modifiche non la chiedono.
+ * Le Novità di un frammento appartengono alla versione in preparazione: con la versione in cima già
+ * pubblicata la PR apre prima quella successiva. Le sole altre modifiche non la chiedono.
  */
 export function assertChangesVersion(changelog, fragments, releasedTags = []) {
   const top = topVersion(changelog);
   if (
-    fragments.some((fragment) => userEntries(fragment).length) &&
-    (topSection(changelog)?.day || releasedTags.includes(`v${top}`))
+    fragments.some((fragment) => userEntries(fragment).length)
+    && (topSection(changelog)?.day || releasedTags.includes(`v${top}`))
   )
     throw new Error(
       `Le Novità di changes/ richiedono una versione in preparazione: in cima c'è la ${top}, già pubblicata.`,
@@ -366,9 +372,9 @@ export function assertMergedChangesVersion(developChangelog, headChangelog, frag
 
 /**
  * Versione che il ciclo apre quando unisce la PR alla base: le voci dei frammenti vogliono una
- * versione in preparazione e, se quella in cima è stata pubblicata mentre la PR aspettava, si
- * apre la patch successiva all'ultima pubblicata. Una PR che apre già una versione libera la
- * tiene. Null quando non serve aprirne una.
+ * versione in preparazione e, se quella in cima è stata pubblicata mentre la PR aspettava, si apre
+ * la patch successiva all'ultima pubblicata. Una PR che apre già una versione libera la tiene. Null
+ * quando non serve aprirne una.
  */
 export function versionToOpen(developChangelog, headChangelog, fragments, releasedTags) {
   try {
@@ -417,9 +423,9 @@ export function assertVersionStep(changelog, baseChangelog, releasedTags = []) {
   // Una versione promossa e ritirata perde il tag e la sezione, una aperta e ancora vuota si può
   // richiudere: in entrambi i casi torna l'ultima pubblicata.
   if (
-    head === released &&
-    !releasedTags.includes(`v${base}`) &&
-    (topSection(baseChangelog)?.day || emptyTop(baseChangelog))
+    head === released
+    && !releasedTags.includes(`v${base}`)
+    && (topSection(baseChangelog)?.day || emptyTop(baseChangelog))
   )
     return;
   const next = parseVersion(head);
@@ -437,8 +443,8 @@ export function assertVersionStep(changelog, baseChangelog, releasedTags = []) {
 /**
  * Etichetta della versione del Worker. Fino alla prima versione 2.x pubblicata resta il prefisso
  * del commit; dopo, in Production è la versione pubblicata e sul test la versione in cima al
- * changelog con `-dev.` e il tree distribuito. Un deploy Production di sole modifiche interne,
- * con la versione già pubblicata, aggiunge il commit: `2.0.0+<commit>`.
+ * changelog con `-dev.` e il tree distribuito. Un deploy Production di sole modifiche interne, con
+ * la versione già pubblicata, aggiunge il commit: `2.0.0+<commit>`.
  */
 export function deployTag({ changelog, environment, sha, tree, releasedTags, expected, day }) {
   if (!latestReleased(releasedTags)) return sha.slice(0, 12);
@@ -459,23 +465,23 @@ export function deployTag({ changelog, environment, sha, tree, releasedTags, exp
 /** Collaudo remoto completo del test sullo stesso commit: smoke e pagine dopo il deploy. */
 export function assertTestEvidence(report, sha) {
   if (
-    report.status !== "passed" ||
-    report.partial ||
-    report.dirty !== false ||
-    report.sha !== sha ||
-    report.environment !== "test" ||
-    report.baseURL !== targets.test.origin ||
-    !(report.counts?.passed > 0)
+    report.status !== "passed"
+    || report.partial
+    || report.dirty !== false
+    || report.sha !== sha
+    || report.environment !== "test"
+    || report.baseURL !== targets.test.origin
+    || !(report.counts?.passed > 0)
   )
     throw new Error("Collaudo remoto test incompleto o di un altro candidato.");
 }
 
 export function assertResume(receipt, manifest) {
   if (
-    receipt &&
-    (receipt.tree !== manifest.tree ||
-      receipt.digest !== manifest.digest ||
-      receipt.environment !== manifest.environment)
+    receipt
+    && (receipt.tree !== manifest.tree
+      || receipt.digest !== manifest.digest
+      || receipt.environment !== manifest.environment)
   )
     throw new Error("Ricevuta di un candidato diverso.");
 }
@@ -494,8 +500,9 @@ export function assertAppliedMigrations(migrations, previous, applied) {
  * contiene vale soltanto se, fra la versione e il candidato, il file è stato aggiunto una volta e
  * mai modificato: ogni candidato intermedio, anche ritirato dopo averla applicata, ne aveva gli
  * stessi byte del candidato.
+ *
  * @param {(sha: string) => Buffer | undefined} show
- * @param {string[]} changes commit che toccano il file fra la versione attiva e il candidato
+ * @param {string[]} changes Commit che toccano il file fra la versione attiva e il candidato
  */
 export function previousMigration(previousSha, sha, show, changes) {
   const before = show(previousSha);
@@ -526,8 +533,8 @@ export const versionOverride = (worker, version) => `${worker}="${version}"`;
 /**
  * Passi riprendibili: la fonte dell'esito remoto viene riletta anche dopo un'interruzione. La
  * versione si carica al 0% del traffico quando la configurazione non cambia: il collaudo la prova
- * sul dominio reale e `activate` la porta al 100%. Con una configurazione diversa, che soltanto
- * un deploy applica a route e cron, il traffico passa subito.
+ * sul dominio reale e `activate` la porta al 100%. Con una configurazione diversa, che soltanto un
+ * deploy applica a route e cron, il traffico passa subito.
  */
 export async function publish(manifest, io, receipt = {}) {
   assertResume(Object.keys(receipt).length ? receipt : null, manifest);
@@ -649,10 +656,10 @@ function manifests(environment) {
   const { root, worker } = readOutput();
   const target = targets[environment];
   if (
-    !target ||
-    worker.name !== target.worker ||
-    worker.env.APP_ORIGIN?.value !== target.origin ||
-    root.buildContext?.mode !== target.mode
+    !target
+    || worker.name !== target.worker
+    || worker.env.APP_ORIGIN?.value !== target.origin
+    || root.buildContext?.mode !== target.mode
   )
     throw new Error("Build o configurazione dell'ambiente errata.");
   const migrations = readdirSync("migrations")
@@ -692,8 +699,8 @@ function verify(environment) {
 }
 
 /**
- * Dopo un deploy l'edge può servire ancora la versione precedente per qualche secondo:
- * il readback riprova entro una finestra limitata e fallisce con l'ultimo errore.
+ * Dopo un deploy l'edge può servire ancora la versione precedente per qualche secondo: il readback
+ * riprova entro una finestra limitata e fallisce con l'ultimo errore.
  */
 export const retryReadback = (check, attempts = 12, delayMs = 5000) =>
   retry(check, { attempts, delay: () => delayMs });
@@ -748,11 +755,11 @@ export function rollbackRequired(receipt) {
  */
 export function assertConfirmable(manifest, receipt, onBranch, current) {
   if (
-    !onBranch ||
-    !receipt.readback ||
-    receipt.rolledBack ||
-    current.version !== receipt.version ||
-    current.identity !== releaseIdentity(manifest)
+    !onBranch
+    || !receipt.readback
+    || receipt.rolledBack
+    || current.version !== receipt.version
+    || current.identity !== releaseIdentity(manifest)
   )
     throw new Error("Distribuzione o candidato cambiato: release rifiutata.");
 }
@@ -1005,16 +1012,16 @@ export async function rollbackRelease(manifest, target, remote, receipt, save = 
   const current = remote.activeDeployment();
   const expected = unused ? receipt.stagedVersion : receipt.version;
   const restored =
-    current?.versions.length === 1 &&
-    current.versions[0].version_id === receipt.previous &&
-    current.versions[0].percentage === 100;
+    current?.versions.length === 1
+    && current.versions[0].version_id === receipt.previous
+    && current.versions[0].percentage === 100;
   const traffic = current?.versions.find(({ version_id }) => version_id === expected)?.percentage;
   if (!restored && !current?.versions.some(({ version_id }) => version_id === expected))
     throw new Error("Stato remoto cambiato: rollback rifiutato.");
   if (
-    !restored &&
-    !(unused && traffic === 0) &&
-    !rollbackRequired({
+    !restored
+    && !(unused && traffic === 0)
+    && !rollbackRequired({
       ...receipt,
       deployed: traffic > 0 || receipt.activationAttempted || receipt.deployed,
     })
@@ -1035,9 +1042,10 @@ export async function rollbackRelease(manifest, target, remote, receipt, save = 
 }
 
 /**
- * Versione a cui tornare in un incidente: la prima diversa da quella attiva e interamente assegnata.
- * `compatible` confronta configurazione e migration dei due commit: senza compatibilità serve una
- * correzione in avanti, perché il codice precedente potrebbe non capire lo schema attuale.
+ * Versione a cui tornare in un incidente: la prima diversa da quella attiva e interamente
+ * assegnata. `compatible` confronta configurazione e migration dei due commit: senza compatibilità
+ * serve una correzione in avanti, perché il codice precedente potrebbe non capire lo schema
+ * attuale.
  */
 export function incidentTarget(deployments, identityOf, compatible) {
   const single = deployments.filter(({ versions }) => versions.length === 1);
@@ -1229,8 +1237,8 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
           );
           return (Array.isArray(listed) ? listed : (listed.items ?? [])).find(
             (entry) =>
-              (entry.annotations?.["workers/message"] ??
-                json("workers", "versions", "get", entry.id, "--worker-id", target.worker)
+              (entry.annotations?.["workers/message"]
+                ?? json("workers", "versions", "get", entry.id, "--worker-id", target.worker)
                   .annotations?.["workers/message"]) === identity,
           )?.id;
         };
@@ -1266,8 +1274,8 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
         } catch (error) {
           const versions = remote.activeDeployment()?.versions ?? [];
           if (
-            !versions.some((entry) => entry.version_id === version && entry.percentage === 0) ||
-            !versions.some((entry) => entry.version_id === previous && entry.percentage === 100)
+            !versions.some((entry) => entry.version_id === version && entry.percentage === 0)
+            || !versions.some((entry) => entry.version_id === previous && entry.percentage === 100)
           )
             throw error;
         }

@@ -5,12 +5,18 @@ import { AccessNotice } from "~/components/access-notice";
 import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores/page";
 import { useReadWait } from "~/components/stores/read-wait";
+
 import { accessNotice, withStoreNotice } from "../access-notice";
-import { unconfirmedOnFailure } from "../client-action";
 import { areaPage, areaStores, assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { storeLinkPath, storesPath } from "../app-links";
 import { actionFailure, limitedAction, suspendedEbayRead } from "../area-actions.server";
+import { unconfirmedOnFailure } from "../client-action";
+import { subscriptionRenews } from "../domain/billing.server";
+import { releaseOrderEvents } from "../domain/order-events.server";
+import { requestStoreSync, type SyncRequestResult } from "../domain/order-sync.server";
+import { issueTimingTicket } from "../domain/page-timing.server";
+import { serviceSetting } from "../domain/service-settings.server";
 import {
   deleteStoreData,
   disconnectStore,
@@ -21,20 +27,15 @@ import {
   type StoreDeletionResult,
   type StoreStatus,
 } from "../domain/stores.server";
-import { subscriptionRenews } from "../domain/billing.server";
 import { storeNotifications } from "../domain/telegram.server";
-import { telegramConfigured } from "../integrations/telegram.server";
-import { requestStoreSync, type SyncRequestResult } from "../domain/order-sync.server";
-import { releaseOrderEvents } from "../domain/order-events.server";
-import { languageFromPath, localizedPath } from "../i18n";
-import type { ActionResult, EbayEnvironment, StoreView } from "../view-models";
-import { serviceSetting } from "../domain/service-settings.server";
 import { logFailure } from "../errors";
+import { languageFromPath, localizedPath } from "../i18n";
+import { telegramConfigured } from "../integrations/telegram.server";
 import { describeRequest, measure } from "../observability.server";
-import { issueTimingTicket } from "../domain/page-timing.server";
-import { settleList } from "../settle.server";
-import type { Route } from "./+types/stores";
 import { pageHeaders } from "../request-limits.server";
+import { settleList } from "../settle.server";
+import type { ActionResult, EbayEnvironment, StoreView } from "../view-models";
+import type { Route } from "./+types/stores";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
@@ -45,10 +46,9 @@ export const headers = pageHeaders;
 
 /**
  * Vista del negozio con i soli dati che FiscalBay possiede: lo storico compare dal primo avvio
- * dell'importazione e resta «in corso» finché non è completo e la sincronizzazione risulta in
- * corso mentre un'acquisizione tiene il negozio.
- * Frequenza e ultimi aggiornamenti vengono dalla lettura periodica. Le notifiche sono null senza
- * Premium o senza il bot dell'ambiente.
+ * dell'importazione e resta «in corso» finché non è completo e la sincronizzazione risulta in corso
+ * mentre un'acquisizione tiene il negozio. Frequenza e ultimi aggiornamenti vengono dalla lettura
+ * periodica. Le notifiche sono null senza Premium o senza il bot dell'ambiente.
  */
 function storeView(store: StoreStatus, notifications: Map<string, boolean> | null): StoreView {
   return {
@@ -175,8 +175,8 @@ const syncActions: Record<string, { reimport: boolean }> = {
 };
 
 /**
- * Pausa, ripresa, scollegamento, eliminazione e letture a richiesta, solo sui negozi del
- * proprio spazio. Una lettura richiesta dice se è in coda, già richiesta o in attesa di eBay.
+ * Pausa, ripresa, scollegamento, eliminazione e letture a richiesta, solo sui negozi del proprio
+ * spazio. Una lettura richiesta dice se è in coda, già richiesta o in attesa di eBay.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);

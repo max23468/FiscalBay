@@ -25,8 +25,8 @@ export async function action({ request }: Route.ActionArgs) {
   const target = URL.parse(String(form.get("returnTo") ?? ""), env.APP_ORIGIN);
   const bare = target ? canonicalPath(target.pathname) : "";
   const inArea =
-    target?.origin === new URL(env.APP_ORIGIN).origin &&
-    (bare === appBase || bare.startsWith(`${appBase}/`));
+    target?.origin === new URL(env.APP_ORIGIN).origin
+    && (bare === appBase || bare.startsWith(`${appBase}/`));
   return redirect(
     target && inArea
       ? `${localizedPath(change.value, bare)}${target.search}`

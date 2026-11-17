@@ -2,13 +2,13 @@ import { originUrl } from "../app-links";
 import { adminCopy } from "../copy/admin-copy";
 import { ownerTelegramCopy as copy } from "../copy/owner-telegram";
 import { logFailure } from "../errors";
-import { untilStopped } from "../sequence";
 import { formatAmount } from "../i18n";
 import { ownerChatId, telegramConfigured } from "../integrations/telegram.server";
-import { activeCoverageSql } from "./grants.server";
+import { untilStopped } from "../sequence";
 import { exitOfNotification } from "./exit-feedback.server";
-import { listSignInMethods } from "./sign-in-methods.server";
+import { activeCoverageSql } from "./grants.server";
 import { at, ownerRetryMs, sendPanel, type Panel, type Row } from "./owner-panels.server";
+import { listSignInMethods } from "./sign-in-methods.server";
 import { workLockMilliseconds } from "./work-timing";
 
 /**
@@ -16,15 +16,15 @@ import { workLockMilliseconds } from "./work-timing";
  * acquisti, disdette, rinnovi non pagati, rimborsi, dispute, cancellazioni finanziarie, posti
  * lifetime e cancellazioni dell'account. I fatti arrivano in `owner_notifications` dai trigger
  * delle tabelle che li registrano, con una chiave univoca per fatto: webhook ripetuti, la
- * riconciliazione oraria e scritture concorrenti non producono doppioni. Qui si aggiungono le
- * prove concluse, che non hanno una scrittura propria, e la disputa aperta.
+ * riconciliazione oraria e scritture concorrenti non producono doppioni. Qui si aggiungono le prove
+ * concluse, che non hanno una scrittura propria, e la disputa aperta.
  *
- * L'invio è seriale, al più dieci messaggi per turno: ogni avviso si prende con un claim, così
- * due turni sovrapposti non lo inviano due volte. Cinque tentativi con attese crescenti fino a
- * sei ore; il primo invio fallito ferma gli altri fino al turno successivo, come per gli
- * incidenti. Gli avvisi di un account o di uno spazio riportano nome, email, ragione sociale e
- * metodi di accesso del titolare, riletti all'invio; la cancellazione dell'account li porta nel
- * proprio dettaglio, perché l'utente esce prima. Mai dati dei buyer.
+ * L'invio è seriale, al più dieci messaggi per turno: ogni avviso si prende con un claim, così due
+ * turni sovrapposti non lo inviano due volte. Cinque tentativi con attese crescenti fino a sei ore;
+ * il primo invio fallito ferma gli altri fino al turno successivo, come per gli incidenti. Gli
+ * avvisi di un account o di uno spazio riportano nome, email, ragione sociale e metodi di accesso
+ * del titolare, riletti all'invio; la cancellazione dell'account li porta nel proprio dettaglio,
+ * perché l'utente esce prima. Mai dati dei buyer.
  */
 
 export type NotificationKind =
@@ -121,8 +121,8 @@ export async function recordEndedTrials(db: D1Database, now = new Date()) {
 
 /**
  * Disputa aperta su un pagamento di uno spazio di questo ambiente: Stripe la gestisce e nulla
- * cambia nei diritti, quindi non ha una riga propria. Un pagamento estraneo, o senza un
- * abbonamento o un lifetime, non avvisa.
+ * cambia nei diritti, quindi non ha una riga propria. Un pagamento estraneo, o senza un abbonamento
+ * o un lifetime, non avvisa.
  */
 export async function recordDisputeOpened(
   db: D1Database,
@@ -304,8 +304,8 @@ export function notificationPanel(
 }
 
 /**
- * Titolare e spazio dell'avviso: dalla chiave per registrazione e ammissione, dal ruolo di
- * titolare per gli avvisi di uno spazio, dal dettaglio per la cancellazione dell'account.
+ * Titolare e spazio dell'avviso: dalla chiave per registrazione e ammissione, dal ruolo di titolare
+ * per gli avvisi di uno spazio, dal dettaglio per la cancellazione dell'account.
  */
 async function subjectOf(db: D1Database, row: NotificationRow, now: Date) {
   if (row.kind === "account_deleted") {
@@ -370,8 +370,8 @@ async function spaceOf(db: D1Database, workspaceId: string | null, now: Date) {
 }
 
 /**
- * Prende il prossimo avviso dovuto: nuovo, da ritentare o rimasto in un turno interrotto. Un
- * avviso interrotto che ha già esaurito i tentativi passa fra quelli non riusciti.
+ * Prende il prossimo avviso dovuto: nuovo, da ritentare o rimasto in un turno interrotto. Un avviso
+ * interrotto che ha già esaurito i tentativi passa fra quelli non riusciti.
  */
 async function claim(db: D1Database, now: Date) {
   const time = now.toISOString();

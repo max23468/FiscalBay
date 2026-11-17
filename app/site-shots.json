@@ -1,134 +1,46 @@
 {
   "ordini": {
-    "it": {
-      "width": 1280,
-      "height": 800,
-      "version": "a369375884"
-    },
-    "en": {
-      "width": 1280,
-      "height": 800,
-      "version": "4ec8f40535"
-    }
+    "it": { "width": 1280, "height": 800, "version": "a369375884" },
+    "en": { "width": 1280, "height": 800, "version": "4ec8f40535" }
   },
   "ordini-mobile": {
-    "it": {
-      "width": 390,
-      "height": 640,
-      "version": "2acd33ce9d"
-    },
-    "en": {
-      "width": 390,
-      "height": 640,
-      "version": "c03414e911"
-    }
+    "it": { "width": 390, "height": 640, "version": "2acd33ce9d" },
+    "en": { "width": 390, "height": 640, "version": "c03414e911" }
   },
   "scheda": {
-    "it": {
-      "width": 688,
-      "height": 401,
-      "version": "5f635aee06"
-    },
-    "en": {
-      "width": 688,
-      "height": 401,
-      "version": "69fb8ad217"
-    }
+    "it": { "width": 688, "height": 401, "version": "5f635aee06" },
+    "en": { "width": 688, "height": 401, "version": "69fb8ad217" }
   },
   "scheda-mobile": {
-    "it": {
-      "width": 358,
-      "height": 500,
-      "version": "7f6b16c42c"
-    },
-    "en": {
-      "width": 358,
-      "height": 500,
-      "version": "4c93fd245a"
-    }
+    "it": { "width": 358, "height": 500, "version": "7f6b16c42c" },
+    "en": { "width": 358, "height": 500, "version": "4c93fd245a" }
   },
   "negozi": {
-    "it": {
-      "width": 1178,
-      "height": 369,
-      "version": "95ab861c1e"
-    },
-    "en": {
-      "width": 1178,
-      "height": 369,
-      "version": "ac51e18f83"
-    }
+    "it": { "width": 1178, "height": 369, "version": "95ab861c1e" },
+    "en": { "width": 1178, "height": 369, "version": "ac51e18f83" }
   },
   "negozi-mobile": {
-    "it": {
-      "width": 390,
-      "height": 690,
-      "version": "d914b03562"
-    },
-    "en": {
-      "width": 390,
-      "height": 618,
-      "version": "358666de43"
-    }
+    "it": { "width": 390, "height": 690, "version": "d914b03562" },
+    "en": { "width": 390, "height": 618, "version": "358666de43" }
   },
   "sicurezza": {
-    "it": {
-      "width": 670,
-      "height": 870,
-      "version": "c307b4a159"
-    },
-    "en": {
-      "width": 670,
-      "height": 870,
-      "version": "bdfbc137a8"
-    }
+    "it": { "width": 670, "height": 870, "version": "c307b4a159" },
+    "en": { "width": 670, "height": 870, "version": "bdfbc137a8" }
   },
   "sicurezza-mobile": {
-    "it": {
-      "width": 390,
-      "height": 616,
-      "version": "0a7019063b"
-    },
-    "en": {
-      "width": 390,
-      "height": 616,
-      "version": "30a199d5a0"
-    }
+    "it": { "width": 390, "height": 616, "version": "0a7019063b" },
+    "en": { "width": 390, "height": 616, "version": "30a199d5a0" }
   },
   "telegram": {
-    "it": {
-      "width": 420,
-      "height": 448,
-      "version": "0bec06ed39"
-    },
-    "en": {
-      "width": 420,
-      "height": 448,
-      "version": "a184c6129b"
-    }
+    "it": { "width": 420, "height": 448, "version": "0bec06ed39" },
+    "en": { "width": 420, "height": 448, "version": "a184c6129b" }
   },
   "esportazione": {
-    "it": {
-      "width": 862,
-      "height": 218,
-      "version": "fae6b73599"
-    },
-    "en": {
-      "width": 848,
-      "height": 218,
-      "version": "f285844e30"
-    }
+    "it": { "width": 862, "height": 218, "version": "fae6b73599" },
+    "en": { "width": 848, "height": 218, "version": "f285844e30" }
   },
   "esportazione-mobile": {
-    "it": {
-      "width": 382,
-      "height": 192,
-      "version": "a956d11fae"
-    },
-    "en": {
-      "width": 382,
-      "height": 192,
-      "version": "ab33af5d36"
-    }
+    "it": { "width": 382, "height": 192, "version": "a956d11fae" },
+    "en": { "width": 382, "height": 192, "version": "ab33af5d36" }
   }
 }

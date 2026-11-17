@@ -8,11 +8,11 @@ import type { Route } from "./+types/password-check";
 export const loader = postOnly;
 
 /**
- * Esito del controllo delle password trapelate di Cloudflare: con il rilevamento attivo sulla
- * zona, l'edge confronta la password del corpo JSON con le credenziali di violazioni note e
- * aggiunge `Exposed-Credential-Check` (1 coppia nota, 4 password nota). Il Worker non legge il
- * corpo e non conserva nulla; senza l'header, in locale o con il rilevamento spento, la password
- * risulta non trapelata.
+ * Esito del controllo delle password trapelate di Cloudflare: con il rilevamento attivo sulla zona,
+ * l'edge confronta la password del corpo JSON con le credenziali di violazioni note e aggiunge
+ * `Exposed-Credential-Check` (1 coppia nota, 4 password nota). Il Worker non legge il corpo e non
+ * conserva nulla; senza l'header, in locale o con il rilevamento spento, la password risulta non
+ * trapelata.
  */
 export async function action({ request }: Route.ActionArgs) {
   if (!isSameOrigin(request)) return new Response(null, { status: 403 });

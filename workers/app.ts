@@ -1,21 +1,6 @@
 import type { createRequestHandler } from "react-router";
-import {
-  consumeWebhooks,
-  isWebhookMessage,
-  isWebhookPath,
-  receiveWebhook,
-} from "../app/webhooks.server";
+
 import { indexable } from "../app/app-links";
-import { movedEnglishPath } from "../app/i18n";
-import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
-import type { InvocationDetail, InvocationOutcome } from "../app/metrics.server";
-import { withInvocationMetrics, withPhaseTimings } from "../app/observability.server";
-import { withResponseCookies } from "../app/response-cookies.server";
-import { withPageCache } from "../app/page-cache.server";
-import { queueRetryDelay } from "../app/domain/work-timing";
-import { duringServiceActivity } from "../app/service-activity.server";
-import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
-import { consumeExportJob, isExportJobMessage } from "../app/domain/export-jobs.server";
 import {
   consumeAccountDeletion,
   isAccountDeletionMessage,
@@ -24,11 +9,27 @@ import {
   consumeEbayAccountDeletion,
   isEbayAccountDeletionMessage,
 } from "../app/domain/ebay-account-deletion.server";
+import { consumeExportJob, isExportJobMessage } from "../app/domain/export-jobs.server";
+import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
 import {
   consumeTask,
   dispatchScheduledWork,
   isTaskMessage,
 } from "../app/domain/scheduled-work.server";
+import { queueRetryDelay } from "../app/domain/work-timing";
+import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
+import { movedEnglishPath } from "../app/i18n";
+import type { InvocationDetail, InvocationOutcome } from "../app/metrics.server";
+import { withInvocationMetrics, withPhaseTimings } from "../app/observability.server";
+import { withPageCache } from "../app/page-cache.server";
+import { withResponseCookies } from "../app/response-cookies.server";
+import { duringServiceActivity } from "../app/service-activity.server";
+import {
+  consumeWebhooks,
+  isWebhookMessage,
+  isWebhookPath,
+  receiveWebhook,
+} from "../app/webhooks.server";
 
 // Sospensione del servizio durante un ripristino dei dati (§32.1): un segreto del Worker, fuori
 // dal database che il ripristino sostituisce. Dichiararlo con `bindings.secret()` lo renderebbe
@@ -85,8 +86,8 @@ async function loadRequestHandler() {
 }
 
 /**
- * Messaggi della coda osservati: l'esito è `retry` se il consumer ne rimette in coda almeno uno.
- * Il consumer riceve gli stessi messaggi, con un `retry` che lo annota.
+ * Messaggi della coda osservati: l'esito è `retry` se il consumer ne rimette in coda almeno uno. Il
+ * consumer riceve gli stessi messaggi, con un `retry` che lo annota.
  */
 function observedMessages<T extends Message<unknown>>(messages: readonly T[]) {
   let retried = false;
@@ -280,11 +281,7 @@ export default {
         async () => {
           throw error;
         },
-        {
-          dataset: env.METRICS,
-          version: env.VERSION_METADATA?.id,
-          count: batch.messages.length,
-        },
+        { dataset: env.METRICS, version: env.VERSION_METADATA?.id, count: batch.messages.length },
       ).catch(() => {
         for (const message of pending())
           message.retry({ delaySeconds: queueRetryDelay(message.attempts) });

@@ -60,8 +60,8 @@ export function wallInstant(wall: number, timeZone: string): Date {
   const offset = (instant: number) => {
     const parts = wallClock(instant, timeZone);
     return (
-      Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute) -
-      Math.floor(instant / 60_000) * 60_000
+      Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute)
+      - Math.floor(instant / 60_000) * 60_000
     );
   };
   // La seconda correzione usa la differenza valida all'istante trovato, anche vicino a un cambio

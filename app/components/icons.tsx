@@ -2,9 +2,9 @@ import { cn } from "cn";
 import type { SVGProps } from "react";
 
 /**
- * Ordine da sbloccare: la tessera del logo con due righe e una serratura.
- * Disegnata sulla griglia Lucide (24 px, tratto 2, estremi arrotondati) per
- * affiancarsi alle altre icone; distinta dalla corona del piano Premium.
+ * Ordine da sbloccare: la tessera del logo con due righe e una serratura. Disegnata sulla griglia
+ * Lucide (24 px, tratto 2, estremi arrotondati) per affiancarsi alle altre icone; distinta dalla
+ * corona del piano Premium.
  */
 export function UnlockIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (

@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 /**
- * Budget del JavaScript client per pagina: per ogni route con una pagina somma il gzip
- * dei moduli che il browser carica all'apertura (entry, route e antenati con i loro
- * import statici, letti dal manifest di React Router), più i testi della lingua più
- * pesante, che il browser scarica prima dell'idratazione. Gli altri import dinamici arrivano
- * dopo il primo disegno e restano fuori. La build fallisce se una pagina supera la soglia
- * della sua classe; rivedere i valori solo con una motivazione. Il totale di tutti i
- * file è soltanto informativo: cresce con ogni pagina anche se nessuna diventa più pesante.
- * La build fallisce anche se `_headers` perde la cache permanente degli asset con l'hash.
- * Uso: node scripts/check-bundle-size.mjs [cartella]
+ * Budget del JavaScript client per pagina: per ogni route con una pagina somma il gzip dei moduli
+ * che il browser carica all'apertura (entry, route e antenati con i loro import statici, letti dal
+ * manifest di React Router), più i testi della lingua più pesante, che il browser scarica prima
+ * dell'idratazione. Gli altri import dinamici arrivano dopo il primo disegno e restano fuori. La
+ * build fallisce se una pagina supera la soglia della sua classe; rivedere i valori solo con una
+ * motivazione. Il totale di tutti i file è soltanto informativo: cresce con ogni pagina anche se
+ * nessuna diventa più pesante. La build fallisce anche se `_headers` perde la cache permanente
+ * degli asset con l'hash. Uso: node scripts/check-bundle-size.mjs [cartella]
  */
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -18,8 +17,8 @@ import { gzipSync } from "node:zlib";
 
 /**
  * Soglie in KiB gzip: sito, documenti legali ed errori; area riservata, accesso e anteprima.
- * Lasciano una ventina di KiB sopra la pagina più pesante: fermano un aumento accidentale, non
- * la crescita ordinaria dei testi (D182).
+ * Lasciano una ventina di KiB sopra la pagina più pesante: fermano un aumento accidentale, non la
+ * crescita ordinaria dei testi (D182).
  */
 export const budgetKiB = { public: 170, app: 300 };
 
@@ -78,8 +77,8 @@ export function measure(directory) {
         .join("/");
       const copy = copies.toSorted(
         (a, b) =>
-          b.filter((url) => !urls.has(url)).reduce((sum, url) => sum + gzip(url), 0) -
-          a.filter((url) => !urls.has(url)).reduce((sum, url) => sum + gzip(url), 0),
+          b.filter((url) => !urls.has(url)).reduce((sum, url) => sum + gzip(url), 0)
+          - a.filter((url) => !urls.has(url)).reduce((sum, url) => sum + gzip(url), 0),
       )[0];
       copy?.forEach((url) => urls.add(url));
       const bytes = [...urls].reduce((sum, url) => sum + gzip(url), 0);
@@ -132,8 +131,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const heaviest = pages.find((page) => page.kind === kind);
     if (heaviest)
       console.log(
-        `JavaScript iniziale ${kind === "app" ? "area riservata" : "pagine pubbliche"}: ` +
-          `${kib(heaviest.bytes)} KiB gzip su ${budgetKiB[kind]} KiB (${heaviest.path}).`,
+        `JavaScript iniziale ${kind === "app" ? "area riservata" : "pagine pubbliche"}: `
+          + `${kib(heaviest.bytes)} KiB gzip su ${budgetKiB[kind]} KiB (${heaviest.path}).`,
       );
   }
   console.log(`Totale informativo: ${kib(total)} KiB gzip in ${files} file.`);

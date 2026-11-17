@@ -2,6 +2,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
 import { gh, ghJson } from "../lib/provider.mjs";
 
 /** Identità osservata, con SHA e digest dell'artefatto registrati da Cloudflare. */
@@ -38,11 +39,11 @@ export function receiptActive(receipt, version) {
   }
   // Ricevute anteriori all'introduzione della riconciliazione finale: sempre legate al readback.
   if (
-    receipt.version === version &&
-    receipt.readback &&
-    !receipt.rolledBack &&
-    /^[a-f0-9]{40}$/u.test(receipt.sha ?? "") &&
-    /^[a-f0-9]{64}$/u.test(receipt.digest ?? "")
+    receipt.version === version
+    && receipt.readback
+    && !receipt.rolledBack
+    && /^[a-f0-9]{40}$/u.test(receipt.sha ?? "")
+    && /^[a-f0-9]{64}$/u.test(receipt.digest ?? "")
   )
     return observedRelease(
       { version, identity: `${receipt.sha}:${receipt.digest.slice(0, 32)}` },
@@ -87,9 +88,9 @@ export function publicationRecord(
 ) {
   const repositoryId = api(`repos/${repository}`).id;
   const valid = (artifact) =>
-    !artifact.expired &&
-    artifact.workflow_run?.repository_id === repositoryId &&
-    artifact.workflow_run.head_repository_id === repositoryId;
+    !artifact.expired
+    && artifact.workflow_run?.repository_id === repositoryId
+    && artifact.workflow_run.head_repository_id === repositoryId;
   const named = api(
     `repos/${repository}/actions/artifacts?name=production-state-${version}&per_page=20`,
   ).artifacts;
@@ -97,8 +98,8 @@ export function publicationRecord(
     if (!valid(artifact)) return undefined;
     const run = knownRun ?? api(`repos/${repository}/actions/runs/${artifact.workflow_run.id}`);
     if (
-      ![".github/workflows/publish.yml", ".github/workflows/rollback.yml"].includes(run.path) ||
-      run.head_branch !== "main"
+      ![".github/workflows/publish.yml", ".github/workflows/rollback.yml"].includes(run.path)
+      || run.head_branch !== "main"
     )
       return undefined;
     const receipt = download(repository, artifact);

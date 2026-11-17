@@ -7,9 +7,9 @@ export type LegalSection = { title: string; blocks: LegalBlock[] };
 
 /**
  * Testo completo di Termini e Privacy nelle due lingue, approvato dall’owner (D230). Resta sul
- * server come gli altri testi del sito. I fornitori compaiono per categoria, con il nome
- * soltanto per eBay, Stripe, Google e Telegram; l’operatore Temisfera compare soltanto qui.
- * Un cambio sostanziale richiede una nuova versione in `legalVersions`.
+ * server come gli altri testi del sito. I fornitori compaiono per categoria, con il nome soltanto
+ * per eBay, Stripe, Google e Telegram; l’operatore Temisfera compare soltanto qui. Un cambio
+ * sostanziale richiede una nuova versione in `legalVersions`.
  */
 export const legalDocuments: Record<Language, Record<"termini" | "privacy", LegalSection[]>> = {
   it: {
@@ -336,10 +336,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           "Non prendiamo decisioni basate soltanto su trattamenti automatizzati che producano effetti giuridici su di te: i controlli antiabuso sono esaminati da una persona.",
         ],
       },
-      {
-        title: "Minori",
-        blocks: ["FiscalBay è riservato a chi ha almeno 18 anni."],
-      },
+      { title: "Minori", blocks: ["FiscalBay è riservato a chi ha almeno 18 anni."] },
       {
         title: "Modifiche",
         blocks: [
@@ -672,10 +669,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           "We do not take decisions based solely on automated processing that produce legal effects on you: anti-abuse checks are reviewed by a person.",
         ],
       },
-      {
-        title: "Minors",
-        blocks: ["FiscalBay is for people aged 18 or over."],
-      },
+      { title: "Minors", blocks: ["FiscalBay is for people aged 18 or over."] },
       {
         title: "Changes",
         blocks: [

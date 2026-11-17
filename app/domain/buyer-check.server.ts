@@ -1,16 +1,16 @@
+import { logFailure } from "../errors";
+import { orderIdsLimit, readFulfillmentOrders } from "../integrations/ebay/fulfillment.server";
+import { UpstreamError } from "../integrations/http.server";
+import { dayMilliseconds } from "../time";
 import { limitKey, recordRateLimit, spend, type Context } from "./order-acquisition-context.server";
 import { recordFulfillmentOrders } from "./order-acquisition-details.server";
-import { logFailure } from "../errors";
-import { dayMilliseconds } from "../time";
-import { UpstreamError } from "../integrations/http.server";
-import { orderIdsLimit, readFulfillmentOrders } from "../integrations/ebay/fulfillment.server";
 
 /**
  * Rilettura dello username dell'acquirente (§30). Una cancellazione richiesta da eBay trova gli
- * ordini dell'acquirente per token eIAS, che soltanto Trading fornisce entro novanta giorni, e
- * per gli altri soltanto per username, che l'acquirente può cambiare. Gli ordini senza token
- * letti da più di una settimana si rileggono da Fulfillment fino a 50 per chiamata, dalla
- * lettura più vecchia: la rilettura passa dall'import come ogni altra e aggiorna lo username.
+ * ordini dell'acquirente per token eIAS, che soltanto Trading fornisce entro novanta giorni, e per
+ * gli altri soltanto per username, che l'acquirente può cambiare. Gli ordini senza token letti da
+ * più di una settimana si rileggono da Fulfillment fino a 50 per chiamata, dalla lettura più
+ * vecchia: la rilettura passa dall'import come ogni altra e aggiorna lo username.
  */
 
 /** Intervallo fra due letture dello username di un ordine senza token eIAS. */
@@ -28,8 +28,8 @@ const fulfillmentReachMilliseconds = 729 * dayMilliseconds;
  * budget dell'esecuzione. È un controllo accessorio: una quota esaurita registra l'attesa e
  * un'indisponibilità lascia il gruppo alla prossima esecuzione, senza segnare la lettura del
  * negozio come non riuscita; un gruppo rifiutato da eBay o con una risposta illeggibile si segna
- * letto, così non si ripete a ogni esecuzione. Le credenziali rifiutate fermano l'esecuzione
- * come nelle altre letture.
+ * letto, così non si ripete a ogni esecuzione. Le credenziali rifiutate fermano l'esecuzione come
+ * nelle altre letture.
  */
 export async function checkBuyerNames(ctx: Context): Promise<void> {
   const at = Date.parse(ctx.at);

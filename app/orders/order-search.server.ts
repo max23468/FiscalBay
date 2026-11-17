@@ -1,11 +1,11 @@
-import { searchParam, searchQuery } from "./order-search";
 import { seal, unseal } from "../sealed.server";
+import { searchParam, searchQuery } from "./order-search";
 
 /**
- * La ricerca attiva resta nell'indirizzo cifrata, così dettaglio, Indietro e ricarica la
- * conservano senza esporre un Codice Fiscale o una Partita IVA in URL, referrer o log. Il testo
- * è legato a utente e sessione: in un'altra sessione, o per un altro utente, non si apre e la
- * ricerca si dimentica.
+ * La ricerca attiva resta nell'indirizzo cifrata, così dettaglio, Indietro e ricarica la conservano
+ * senza esporre un Codice Fiscale o una Partita IVA in URL, referrer o log. Il testo è legato a
+ * utente e sessione: in un'altra sessione, o per un altro utente, non si apre e la ricerca si
+ * dimentica.
  */
 const purpose = "fiscalbay/order-search/v1";
 

@@ -3,10 +3,9 @@ import { strToU8, Zip, ZipDeflate } from "fflate";
 import { escapeMarkup } from "../markup";
 
 /**
- * Cartella XLSX con un solo foglio, scritta in streaming (§12). Le stringhe sono celle di testo
- * in linea con il formato Testo, mai formule: un valore che inizia con `=` resta testo. Importi
- * e quantità sono numeri, date e ore valori di data. Niente macro, collegamenti esterni o
- * hyperlink.
+ * Cartella XLSX con un solo foglio, scritta in streaming (§12). Le stringhe sono celle di testo in
+ * linea con il formato Testo, mai formule: un valore che inizia con `=` resta testo. Importi e
+ * quantità sono numeri, date e ore valori di data. Niente macro, collegamenti esterni o hyperlink.
  */
 
 /** Cella del foglio; un valore vuoto lascia la cella vuota. */
@@ -21,8 +20,8 @@ export type XlsxCell =
 export const xlsxMaxRows = 1_048_576;
 
 /**
- * Righe oltre `xlsxMaxRows`: il file non si crea, perché nessun tentativo lo farebbe stare. I
- * log riportano soltanto campi enumerati, quindi l'errore non porta un messaggio.
+ * Righe oltre `xlsxMaxRows`: il file non si crea, perché nessun tentativo lo farebbe stare. I log
+ * riportano soltanto campi enumerati, quindi l'errore non porta un messaggio.
  */
 export class XlsxRowLimitError extends Error {}
 
@@ -46,20 +45,13 @@ function xml() {
 }
 
 /** Stili delle celle, nell'ordine di `cellXfs`. */
-const style = {
-  header: 1,
-  text: 2,
-  integer: 3,
-  decimal2: 4,
-  date: 5,
-  decimal3: 6,
-} as const;
+const style = { header: 1, text: 2, integer: 3, decimal2: 4, date: 5, decimal3: 6 } as const;
 
 /**
  * Testo per XML: caratteri non ammessi da XML 1.0 e ritorno a capo come `_xHHHH_`, che Excel
  * riconverte nel carattere; una sequenza `_xHHHH_` già presente nel valore riceve il proprio
- * prefisso, così il foglio mostra gli stessi caratteri della fonte. Un surrogato isolato non è
- * un carattere e diventa U+FFFD.
+ * prefisso, così il foglio mostra gli stessi caratteri della fonte. Un surrogato isolato non è un
+ * carattere e diventa U+FFFD.
  */
 export function xlsxText(value: string): string {
   return escapeMarkup(
@@ -183,11 +175,11 @@ function sheetEnd(sheet: XlsxSheet, rows: number) {
 }
 
 /**
- * File XLSX in streaming: il foglio si comprime pagina per pagina, la cartella di lavoro si
- * scrive per ultima con l'intervallo del filtro. Un errore a metà interrompe il flusso, così
- * il file incompleto non risulta scaricato; interrompere il download chiude anche le pagine.
- * Una pagina che porterebbe il foglio oltre `maxRows` righe interrompe il flusso con
- * `XlsxRowLimitError`, prima di scriverla.
+ * File XLSX in streaming: il foglio si comprime pagina per pagina, la cartella di lavoro si scrive
+ * per ultima con l'intervallo del filtro. Un errore a metà interrompe il flusso, così il file
+ * incompleto non risulta scaricato; interrompere il download chiude anche le pagine. Una pagina che
+ * porterebbe il foglio oltre `maxRows` righe interrompe il flusso con `XlsxRowLimitError`, prima di
+ * scriverla.
  */
 export function xlsxStream<Page>(
   sheet: XlsxSheet,
@@ -224,8 +216,8 @@ export function xlsxStream<Page>(
       worksheet.push(strToU8(sheetStart(sheet)));
     },
     /**
-     * La compressione trattiene i byte finché non completa un blocco: una lettura senza byte
-     * nuovi non verrebbe ripetuta, quindi si leggono pagine finché non ne esce almeno uno.
+     * La compressione trattiene i byte finché non completa un blocco: una lettura senza byte nuovi
+     * non verrebbe ripetuta, quindi si leggono pagine finché non ne esce almeno uno.
      */
     async pull() {
       const before = chunks;

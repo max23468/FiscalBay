@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Worker del bot Telegram (`telegram-worker/`), separato dal Worker principale perché le tracce
- * di quest'ultimo registrano l'indirizzo delle chiamate in uscita e la Bot API vuole il token nel
+ * Worker del bot Telegram (`telegram-worker/`), separato dal Worker principale perché le tracce di
+ * quest'ultimo registrano l'indirizzo delle chiamate in uscita e la Bot API vuole il token nel
  * percorso (D293). Cambia di rado e non passa dal ciclo di pubblicazione.
  *
- * - `deploy` costruisce il Worker e lo distribuisce con il segreto `TELEGRAM_BOT_TOKEN`, letto
- *   dalla variabile del solo comando (per esempio dal Portachiavi), poi rilegge;
+ * - `deploy` costruisce il Worker e lo distribuisce con il segreto `TELEGRAM_BOT_TOKEN`, letto dalla
+ *   variabile del solo comando (per esempio dal Portachiavi), poi rilegge;
  * - `readback` controlla che il Worker esista senza domini, con il segreto, e che il Worker
  *   principale lo raggiunga con il binding `TELEGRAM`.
  *
@@ -13,15 +13,16 @@
  *
  * Uso: [TELEGRAM_BOT_TOKEN=…] node scripts/telegram-worker.mjs <deploy|readback> [--mode live]
  */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import telegramConfig from "../telegram-worker/cloudflare.config.ts";
 import config from "../cloudflare.config.ts";
+import telegramConfig from "../telegram-worker/cloudflare.config.ts";
 import * as provider from "./lib/provider.mjs";
 
 const root = path.resolve(fileURLToPath(import.meta.url), "../../telegram-worker");

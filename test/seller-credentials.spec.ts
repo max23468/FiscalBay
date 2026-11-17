@@ -1,17 +1,18 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import { handleAuthRequest } from "../app/auth-route.server";
+import { sendReconnectNotices } from "../app/domain/reconnect-notices.server";
+import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
 import {
   openToken,
   refreshStoreToken,
   sealToken,
 } from "../app/integrations/ebay/seller-credentials.server";
-import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
-import { sendReconnectNotices } from "../app/domain/reconnect-notices.server";
 import { UpstreamError } from "../app/integrations/http.server";
+import { verifiedSession } from "./fixtures/account-fixtures";
 import { insertCredentials, resetDatabase } from "./fixtures/database-fixtures";
 import { syntheticEbay } from "./fixtures/ebay-fixtures";
-import { verifiedSession } from "./fixtures/account-fixtures";
 import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
 
 beforeEach(resetDatabase);
@@ -179,12 +180,7 @@ describe("rinnovo dei token del negozio", () => {
     const storeId = await linkedStore("consenso-scaduto@example.invalid");
     const fetcher = vi.fn<typeof fetch>();
     expect(
-      await refreshStoreToken({
-        env,
-        storeId,
-        fetcher,
-        now: new Date("2028-04-01T10:00:00.000Z"),
-      }),
+      await refreshStoreToken({ env, storeId, fetcher, now: new Date("2028-04-01T10:00:00.000Z") }),
     ).toBe("rejected");
     expect(fetcher).not.toHaveBeenCalled();
   });

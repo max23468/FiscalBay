@@ -1,6 +1,6 @@
 /**
- * Provenienza degli iscritti (D304): la categoria del canale da cui un visitatore arriva sul sito
- * e la prima pagina vista. Il Worker la ricava dal Referer, che con `strict-origin-when-cross-origin`
+ * Provenienza degli iscritti (D304): la categoria del canale da cui un visitatore arriva sul sito e
+ * la prima pagina vista. Il Worker la ricava dal Referer, che con `strict-origin-when-cross-origin`
  * porta la sola origine, o da un'etichetta nei link che pubblichiamo; poi viaggia nell'indirizzo
  * dei link interni fino alla registrazione. Nessun cookie né archivio del browser.
  */
@@ -104,13 +104,16 @@ export function sitePage(url: URL): string | null {
   return pagePattern.test(url.pathname) ? url.pathname : null;
 }
 
-/** Pagine dove la provenienza non serve, sul percorso italiano: area, console, anteprima, API e file. */
+/**
+ * Pagine dove la provenienza non serve, sul percorso italiano: area, console, anteprima, API e
+ * file.
+ */
 const outsideSite = /^\/(app|admin|anteprima|api)(\/|$)|\.[a-z0-9]+$/u;
 
 /**
- * Link interno con la provenienza, per le sole pagine del sito e dell'accesso. Query e
- * frammento restano come sono, così `?registrati` non diventa `?registrati=`; un valore già
- * presente si sostituisce. Gli altri link tornano invariati.
+ * Link interno con la provenienza, per le sole pagine del sito e dell'accesso. Query e frammento
+ * restano come sono, così `?registrati` non diventa `?registrati=`; un valore già presente si
+ * sostituisce. Gli altri link tornano invariati.
  */
 export function withSource(href: string, source: string, origin: string): string {
   // Soltanto percorsi assoluti o indirizzi completi: un frammento resta nella pagina.
@@ -146,10 +149,10 @@ export function withoutSource(href: string): string {
 type View = Pick<Window, "location" | "history" | "document">;
 
 /**
- * Porta la provenienza nei link interni della pagina e la toglie dalla barra dell'indirizzo,
- * così un link copiato o condiviso non la trasmette. Usa soltanto gli attributi dei link e la
- * voce corrente della cronologia: nessun cookie né archivio del browser. I link disegnati dopo
- * l'avvio la ricevono al clic. Restituisce la funzione che rimuove gli ascoltatori.
+ * Porta la provenienza nei link interni della pagina e la toglie dalla barra dell'indirizzo, così
+ * un link copiato o condiviso non la trasmette. Usa soltanto gli attributi dei link e la voce
+ * corrente della cronologia: nessun cookie né archivio del browser. I link disegnati dopo l'avvio
+ * la ricevono al clic. Restituisce la funzione che rimuove gli ascoltatori.
  */
 export function carrySource(arrival: string, view: View): () => void {
   const { document, history, location } = view;

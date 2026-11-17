@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { upstreamJson, UpstreamError, type UpstreamOptions } from "../http.server";
 import type { EbayEnvironment } from "../../view-models";
+import { upstreamJson, UpstreamError, type UpstreamOptions } from "../http.server";
 
 /** Segreti eBay facoltativi: senza valore Sandbox e verifica delle notifiche restano spente. */
 type OptionalEbaySecrets = {
@@ -31,9 +31,11 @@ export function sandboxAvailable(env: EbayBindings): boolean {
   return (
     ["test.fiscalbay.it", "localhost", "127.0.0.1", "[::1]"].includes(
       new URL(env.APP_ORIGIN).hostname,
-    ) &&
-    env.EBAY_SANDBOX_ENABLED === "true" &&
-    Boolean(env.EBAY_SANDBOX_CLIENT_ID && env.EBAY_SANDBOX_CLIENT_SECRET && env.EBAY_SANDBOX_RUNAME)
+    )
+    && env.EBAY_SANDBOX_ENABLED === "true"
+    && Boolean(
+      env.EBAY_SANDBOX_CLIENT_ID && env.EBAY_SANDBOX_CLIENT_SECRET && env.EBAY_SANDBOX_RUNAME,
+    )
   );
 }
 
@@ -67,8 +69,8 @@ export function ebayConfiguration(env: EbayBindings, environment: EbayEnvironmen
 export type EbayConfiguration = ReturnType<typeof ebayConfiguration>;
 
 /**
- * Richiesta al token endpoint OAuth di eBay con le credenziali dell'applicazione: `grant` porta
- * il tipo di concessione e i suoi campi.
+ * Richiesta al token endpoint OAuth di eBay con le credenziali dell'applicazione: `grant` porta il
+ * tipo di concessione e i suoi campi.
  */
 export function requestToken<Schema extends z.ZodType>(
   configuration: EbayConfiguration,
@@ -94,8 +96,8 @@ export function requestToken<Schema extends z.ZodType>(
 }
 
 /**
- * Token dell'applicazione (`client_credentials`) per le API che non agiscono per un negozio,
- * come quote e chiavi delle notifiche.
+ * Token dell'applicazione (`client_credentials`) per le API che non agiscono per un negozio, come
+ * quote e chiavi delle notifiche.
  */
 export async function applicationToken(
   configuration: EbayConfiguration,
@@ -120,9 +122,9 @@ export type EbayAccess = {
 };
 
 /**
- * URL restituito da eBay (per esempio il link `next`) accettato solo se HTTPS, sulla stessa
- * origine API dell'ambiente, senza credenziali e sotto il percorso atteso. Altrimenti la lettura
- * fallisce chiusa prima di inviare il token.
+ * URL restituito da eBay (per esempio il link `next`) accettato solo se HTTPS, sulla stessa origine
+ * API dell'ambiente, senza credenziali e sotto il percorso atteso. Altrimenti la lettura fallisce
+ * chiusa prima di inviare il token.
  */
 export function ebayApiUrl(configuration: EbayConfiguration, value: string, path: string): URL {
   let url: URL;
@@ -132,12 +134,12 @@ export function ebayApiUrl(configuration: EbayConfiguration, value: string, path
     throw new UpstreamError("invalid_response");
   }
   if (
-    url.origin !== configuration.apiOrigin ||
+    url.origin !== configuration.apiOrigin
     // Stryker disable next-line ConditionalExpression: l'origine include lo schema, quindi ogni URL non HTTPS è già rifiutato dal confronto con `apiOrigin`.
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    (url.pathname !== path && !url.pathname.startsWith(`${path}/`))
+    || url.protocol !== "https:"
+    || url.username
+    || url.password
+    || (url.pathname !== path && !url.pathname.startsWith(`${path}/`))
   ) {
     throw new UpstreamError("invalid_response");
   }

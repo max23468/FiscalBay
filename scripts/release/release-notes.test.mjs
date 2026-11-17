@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+
 import { assertBrowserEvidence, releaseStep } from "./release-notes.mjs";
 
 describe("pubblicazione riprendibile", () => {

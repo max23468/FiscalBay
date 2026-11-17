@@ -14,7 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { requiredReview } from "./release.mjs";
+
 import {
   assertBase,
   assertContained,
@@ -74,6 +74,7 @@ import {
   resumeEnvironment,
   withRemoteLock,
 } from "./release-cycle.mjs";
+import { requiredReview } from "./release.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
   it("blocca soltanto lo stesso oggetto del ciclo e recupera i blocchi rimasti", () => {
@@ -88,9 +89,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       const ended = spawnSync(
         process.execPath,
         ["-e", "process.stdout.write(String(process.pid))"],
-        {
-          encoding: "utf8",
-        },
+        { encoding: "utf8" },
       );
       writeFileSync(
         path.join(lock("pr-1"), "owner.json"),
@@ -379,10 +378,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       const status = spawnSync(
         process.execPath,
         ["scripts/release/release-cycle.mjs", "status", "123"],
-        {
-          encoding: "utf8",
-          env,
-        },
+        { encoding: "utf8", env },
       );
       assert.equal(status.status, 0, status.stderr);
       const output = JSON.parse(status.stdout);
@@ -800,12 +796,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       now: () => time,
       wait: async (sha) => {
         time += 20 * 60_000;
-        return {
-          id: shas.indexOf(sha) + 1,
-          head_sha: sha,
-          conclusion: "cancelled",
-          jobs: [],
-        };
+        return { id: shas.indexOf(sha) + 1, head_sha: sha, conclusion: "cancelled", jobs: [] };
       },
       jobs: (run) => run.jobs,
       head: () => shas[++current],
@@ -1573,11 +1564,7 @@ describe("pubblicazioni in parallelo", () => {
     // Senza un commit certificato si promuove la testa, dopo la sua qualifica.
     assert.deepEqual(
       promotionTarget(commits, () => false),
-      {
-        sha: "c3",
-        later: 0,
-        certified: false,
-      },
+      { sha: "c3", later: 0, certified: false },
     );
   });
 

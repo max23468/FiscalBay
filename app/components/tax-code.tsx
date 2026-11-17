@@ -1,14 +1,14 @@
+import { cn } from "cn";
 import { Check, Copy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { cn } from "cn";
 
 import { UnlockIcon } from "~/components/icons";
 import { Button } from "~/components/ui/button";
 
 /**
- * Testi già tradotti. `copy` è il nome accessibile del pulsante e deve
- * distinguere la riga (per esempio «Copia Codice Fiscale: Maria Rossi»),
- * perché in un elenco più pulsanti con lo stesso nome non si distinguono.
+ * Testi già tradotti. `copy` è il nome accessibile del pulsante e deve distinguere la riga (per
+ * esempio «Copia Codice Fiscale: Maria Rossi»), perché in un elenco più pulsanti con lo stesso nome
+ * non si distinguono.
  */
 type Labels = { copy: string; copied: string; copyFailed: string; locked: string };
 
@@ -17,10 +17,9 @@ type Labels = { copy: string; copied: string; copyFailed: string; locked: string
 const box = "min-h-10 w-fit min-w-56 text-[0.9375rem]";
 
 /**
- * Identificativo fiscale mostrato sempre intero, leggibile e copiabile.
- * Da bloccato non riceve il valore: mostra segnaposto generici, perché il
- * dato non deve arrivare al browser prima dello sblocco. `reveal` anima la
- * comparsa dopo uno sblocco.
+ * Identificativo fiscale mostrato sempre intero, leggibile e copiabile. Da bloccato non riceve il
+ * valore: mostra segnaposto generici, perché il dato non deve arrivare al browser prima dello
+ * sblocco. `reveal` anima la comparsa dopo uno sblocco.
  */
 export function TaxCode({
   value,
@@ -53,7 +52,7 @@ export function TaxCode({
   return (
     <span
       className={cn(
-        "inline-flex max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border pl-3 pr-1 py-1",
+        "inline-flex max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border py-1 pr-1 pl-3",
         box,
         reveal && "fiscal-reveal",
         warning
@@ -63,7 +62,7 @@ export function TaxCode({
     >
       <span
         className={cn(
-          "font-code min-w-0 [overflow-wrap:anywhere] font-semibold",
+          "min-w-0 font-code font-semibold [overflow-wrap:anywhere]",
           warning ? "text-warning" : "text-info",
           reveal && "inline-block animate-[value-reveal_var(--duration-quick)_ease-out_both]",
         )}
@@ -138,7 +137,7 @@ export function CopyButton({
           />
           <Check
             aria-hidden="true"
-            className="absolute inset-0 text-success opacity-0 blur-[2px] motion-safe:scale-25 transition-[opacity,scale,filter] duration-(--duration-fast) ease-in-out group-data-[state=copied]/copy:scale-100 group-data-[state=copied]/copy:opacity-100 group-data-[state=copied]/copy:blur-none"
+            className="absolute inset-0 text-success opacity-0 blur-[2px] transition-[opacity,scale,filter] duration-(--duration-fast) ease-in-out group-data-[state=copied]/copy:scale-100 group-data-[state=copied]/copy:opacity-100 group-data-[state=copied]/copy:blur-none motion-safe:scale-25"
           />
         </span>
         {text}

@@ -2,11 +2,12 @@ import { cn } from "cn";
 
 import { siteColumn } from "~/components/site-column";
 import { PageIntro, SiteLayout } from "~/components/site-layout";
+
 import { guidePaths, guidesPath } from "../app-links";
 import { guides } from "../copy/guides.server";
 import { localizedPath } from "../i18n";
-import { publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
+import { publicPage, publicPageHeaders } from "../site.server";
 import type { Route } from "./+types/guides";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -52,7 +53,7 @@ export default function Guides({ loaderData }: Route.ComponentProps) {
             <li key={article.href}>
               <a
                 href={article.href}
-                className="grid gap-1.5 rounded-2xl border bg-card p-5 outline-none transition-colors duration-(--duration-quick) hover:border-primary focus-visible:ring-3 focus-visible:ring-ring sm:p-6"
+                className="grid gap-1.5 rounded-2xl border bg-card p-5 transition-colors duration-(--duration-quick) outline-none hover:border-primary focus-visible:ring-3 focus-visible:ring-ring sm:p-6"
               >
                 <h2 className="text-lg font-semibold text-balance">{article.title}</h2>
                 <p className="leading-relaxed text-pretty text-muted-foreground">

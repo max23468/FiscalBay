@@ -1,7 +1,8 @@
-import type { EntryContext, RouterContextProvider } from "react-router";
-import { isRouteErrorResponse, ServerRouter } from "react-router";
 import { isbot } from "isbot";
 import { renderToReadableStream } from "react-dom/server";
+import type { EntryContext, RouterContextProvider } from "react-router";
+import { isRouteErrorResponse, ServerRouter } from "react-router";
+
 import { documentSecurityHeaders, scriptNonce } from "./content-security.server";
 import { logFailure } from "./errors";
 
@@ -16,10 +17,7 @@ export default async function handleRequest(
 ) {
   // https://httpwg.org/specs/rfc9110.html#HEAD
   if (request.method.toUpperCase() === "HEAD") {
-    return new Response(null, {
-      status: responseStatusCode,
-      headers: responseHeaders,
-    });
+    return new Response(null, { status: responseStatusCode, headers: responseHeaders });
   }
 
   let shellRendered = false;
@@ -50,10 +48,7 @@ export default async function handleRequest(
   responseHeaders.set("Content-Type", "text/html");
   for (const [name, value] of Object.entries(documentSecurityHeaders(nonce)))
     responseHeaders.set(name, value);
-  return new Response(body, {
-    headers: responseHeaders,
-    status: responseStatusCode,
-  });
+  return new Response(body, { headers: responseHeaders, status: responseStatusCode });
 }
 
 export function handleError(error: unknown, { request }: { request: Request }) {

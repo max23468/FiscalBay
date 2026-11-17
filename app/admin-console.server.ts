@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
 import { data } from "react-router";
-import { maxConsoleField } from "./limits";
 
 import { assertSameOrigin } from "./account-area.server";
+import { readSession } from "./auth.server";
 import { adminCopy, type AdminCopy, type AuditOutcome } from "./copy/admin-copy";
 import { listAbuseSignals, reviewAbuseSignal } from "./domain/abuse-review.server";
 import {
@@ -26,6 +26,7 @@ import {
   listAccounts,
   listAllStores,
   workspaceDetail,
+  storeAuditTarget,
 } from "./domain/admin-directory.server";
 import {
   listAnomalies,
@@ -33,6 +34,7 @@ import {
   retryOrderDetails,
   taskStates,
 } from "./domain/admin-operations.server";
+import { authAttemptWait, countAuthAttempt } from "./domain/auth-attempts.server";
 import { recordSupportErasure } from "./domain/billing.server";
 import {
   grantHistoryExtension,
@@ -43,9 +45,8 @@ import {
 import { bulkDataAnomalies, quotaAnomalies, readEbayQuotas } from "./domain/ebay-quotas.server";
 import { exitOverview } from "./domain/exit-feedback.server";
 import { assistFreeStore } from "./domain/free-store.server";
-import { metricWindowFrom, productMetrics } from "./domain/product-metrics.server";
-import { readTechnicalMetrics } from "./domain/technical-metrics.server";
 import { requestStoreSync } from "./domain/order-sync.server";
+import { metricWindowFrom, productMetrics } from "./domain/product-metrics.server";
 import { isScheduledTask, requeueTask } from "./domain/scheduled-work.server";
 import {
   listServiceNotices,
@@ -53,8 +54,6 @@ import {
   serviceNoticeSchema,
   withdrawServiceNotice,
 } from "./domain/service-notices.server";
-import { readSession } from "./auth.server";
-import { adminAccess, type AuthSession } from "./domain/sessions.server";
 import {
   admitWorkspace,
   isSwitchName,
@@ -62,25 +61,25 @@ import {
   setSwitch,
   switchboard,
 } from "./domain/service-settings.server";
+import { adminAccess, type AuthSession, agentTokenLabel } from "./domain/sessions.server";
 import { confirmStoreTransfer, prepareStoreTransfer } from "./domain/store-transfer.server";
 import { setAdminPause } from "./domain/stores.server";
+import { readTechnicalMetrics } from "./domain/technical-metrics.server";
+import { resumeStalledReceipts } from "./domain/webhook-receipts.server";
 import { logFailure } from "./errors";
 import { displayTimeZone, formatDate } from "./format";
 import type { Language } from "./i18n";
-import { sha256Hex } from "./sealed.server";
-import { agentTokenLabel } from "./domain/sessions.server";
-import { authAttemptWait, countAuthAttempt } from "./domain/auth-attempts.server";
+import { maxConsoleField } from "./limits";
 import { clientKey, limitedHeaders } from "./request-limits.server";
-import { storeAuditTarget } from "./domain/admin-directory.server";
+import { sha256Hex } from "./sealed.server";
 import { wallInstant } from "./time";
-import { resumeStalledReceipts } from "./domain/webhook-receipts.server";
 
 /**
- * Console amministrativa (§15): sezioni, letture e operazioni. Ogni richiesta rilegge la
- * sessione e il ruolo dal database; chi non è admin riceve la stessa risposta di un indirizzo
- * inesistente, e senza la conferma con passkey le sezioni non si caricano. Ogni operazione è
- * nell'elenco qui sotto, rilegge lo stato al momento dell'esecuzione e lascia autore, motivo ed
- * esito nel registro: non esiste un accesso generico ai dati.
+ * Console amministrativa (§15): sezioni, letture e operazioni. Ogni richiesta rilegge la sessione e
+ * il ruolo dal database; chi non è admin riceve la stessa risposta di un indirizzo inesistente, e
+ * senza la conferma con passkey le sezioni non si caricano. Ogni operazione è nell'elenco qui
+ * sotto, rilegge lo stato al momento dell'esecuzione e lascia autore, motivo ed esito nel registro:
+ * non esiste un accesso generico ai dati.
  */
 
 export const adminSections = [
@@ -109,16 +108,16 @@ export function sectionFrom(value: string | undefined): AdminSection | null {
 const agentTokenPrefix = "fbat_";
 
 /**
- * Token rifiutati per IP prima del blocco: un token valido non conta, così l'agente lavora
- * senza soglia, mentre chi prova token a caso si ferma dopo pochi tentativi.
+ * Token rifiutati per IP prima del blocco: un token valido non conta, così l'agente lavora senza
+ * soglia, mentre chi prova token a caso si ferma dopo pochi tentativi.
  */
 const agentTokenFailures = { window: 900, max: 10 };
 
 /**
- * Accesso tecnico (D213): un token `Bearer` il cui SHA-256 è registrato, non revocato e non
- * scaduto apre la console all'agente che assiste l'owner, anche senza passkey, con le stesse
- * operazioni della sessione admin. Restituisce l'etichetta del token, o null; oltre il limite
- * dei token rifiutati risponde 429 prima di leggerlo.
+ * Accesso tecnico (D213): un token `Bearer` il cui SHA-256 è registrato, non revocato e non scaduto
+ * apre la console all'agente che assiste l'owner, anche senza passkey, con le stesse operazioni
+ * della sessione admin. Restituisce l'etichetta del token, o null; oltre il limite dei token
+ * rifiutati risponde 429 prima di leggerlo.
  */
 async function agentAccess(request: Request, now: Date) {
   const header = request.headers.get("authorization") ?? "";
@@ -140,9 +139,7 @@ async function agentAccess(request: Request, now: Date) {
  */
 export async function adminSession(request: Request) {
   const session = (await readSession(env, request)) as
-    | (AuthSession & {
-        user: { email: string };
-      })
+    | (AuthSession & { user: { email: string } })
     | null;
   const access = adminAccess(session);
   if (access === "granted") return { session, access, agent: null };
@@ -182,10 +179,7 @@ export async function loadSection(section: AdminSection, item: string | undefine
         summary,
         revenue: { last30: commerce.revenue.last30, total: commerce.revenue.total },
         seats: { available: commerce.seats.available, total: commerce.seats.total },
-        tasks: {
-          regular: tasks.filter((task) => !task.stalled).length,
-          total: tasks.length,
-        },
+        tasks: { regular: tasks.filter((task) => !task.stalled).length, total: tasks.length },
         recent,
       } as const;
     }
@@ -276,8 +270,8 @@ export function localInstant(value: string, timeZone = displayTimeZone): string 
 type Field = (name: string) => string;
 
 /**
- * Oggetto del registro per un'operazione su un negozio: lo spazio è quello che lo possiede
- * adesso, riletto dal database, non quello indicato dal modulo.
+ * Oggetto del registro per un'operazione su un negozio: lo spazio è quello che lo possiede adesso,
+ * riletto dal database, non quello indicato dal modulo.
  */
 async function storeTarget(storeId: string) {
   return storeAuditTarget(env.DB, storeId);
@@ -719,13 +713,13 @@ async function twice<T>(write: () => Promise<T>) {
 }
 
 /**
- * Esegue un'operazione e ne registra l'esito. Ogni ramo restituisce l'oggetto del registro,
- * l'esito tecnico e l'avviso; il motivo, dove serve, è obbligatorio. Anche i rifiuti decisi dal
- * modulo, come il motivo mancante o l'origine estranea, lasciano la loro riga.
+ * Esegue un'operazione e ne registra l'esito. Ogni ramo restituisce l'oggetto del registro, l'esito
+ * tecnico e l'avviso; il motivo, dove serve, è obbligatorio. Anche i rifiuti decisi dal modulo,
+ * come il motivo mancante o l'origine estranea, lasciano la loro riga.
  *
  * La riga dell'operazione si scrive prima, «in corso» con l'oggetto del modulo: senza registro
- * l'operazione non parte. Dopo riceve l'oggetto riletto e l'esito; se questa scrittura non
- * riesce la riga resta «in corso», la panoramica la segnala e la risposta riflette l'esito reale.
+ * l'operazione non parte. Dopo riceve l'oggetto riletto e l'esito; se questa scrittura non riesce
+ * la riga resta «in corso», la panoramica la segnala e la risposta riflette l'esito reale.
  */
 export async function runAdminAction(
   request: Request,
@@ -743,8 +737,8 @@ export async function runAdminAction(
   const why = reason.success ? reason.data : "";
   const failed = (error: unknown) => logFailure({ request, error, operation: "admin" });
   /**
-   * Riga completa in una sola scrittura, per i rifiuti decisi prima dell'operazione e per le
-   * righe che accompagnano quella dell'operazione. Un errore resta nei log.
+   * Riga completa in una sola scrittura, per i rifiuti decisi prima dell'operazione e per le righe
+   * che accompagnano quella dell'operazione. Un errore resta nei log.
    */
   const audit = async (target: string | null, outcome: AuditOutcome, kind = operation) => {
     const entry = { actor, operation: kind, target, reason: why || null, outcome };

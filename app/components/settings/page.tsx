@@ -24,10 +24,16 @@ import { Link } from "react-router";
 
 import { useCopy, useLinks } from "~/components/copy-context";
 import { IconTile, PageTitle } from "~/components/icon-tile";
+
 import { appHref } from "../../app-links";
-import { canonicalPath, type Language } from "../../i18n";
-import type { Theme, TimeZoneChoice } from "../../preferences";
 import { settingsGroups, type SettingsSection } from "../../area-sections";
+import type { ExportConfiguration } from "../../domain/export-configurations.server";
+import type { ExportFileView } from "../../domain/export-jobs.server";
+import { canonicalPath, type Language } from "../../i18n";
+import type { ExportSample } from "../../orders/export-columns";
+import type { ExportContext } from "../../orders/export-scope";
+import type { OrderTally } from "../../orders/order-criteria";
+import type { Theme, TimeZoneChoice } from "../../preferences";
 import {
   type AccountView,
   type DiagnosticsView,
@@ -36,11 +42,6 @@ import {
 } from "../../view-models";
 import { AppearanceSection } from "./appearance";
 import { Group } from "./controls";
-import type { ExportConfiguration } from "../../domain/export-configurations.server";
-import type { ExportFileView } from "../../domain/export-jobs.server";
-import type { ExportContext } from "../../orders/export-scope";
-import type { OrderTally } from "../../orders/order-criteria";
-import type { ExportSample } from "../../orders/export-columns";
 import { ExportSection } from "./export";
 import { NotificationsSection } from "./notifications";
 import { PlanSection, type FreeStoreView, type PurchaseView } from "./plan";
@@ -82,7 +83,10 @@ export interface SettingsPageData {
   telegram: TelegramView | null;
   /** Ordini di ogni periodo dell'esportazione aperta dalle Impostazioni; null con un ambito. */
   exportPeriods: Record<OrderPeriod, OrderTally> | null;
-  /** Ambito ricevuto dagli Ordini, con i suoi ordini; null se l'esportazione è aperta dalle Impostazioni. */
+  /**
+   * Ambito ricevuto dagli Ordini, con i suoi ordini; null se l'esportazione è aperta dalle
+   * Impostazioni.
+   */
   exportContext: ExportContext | null;
   /** Prime righe del file per l'anteprima tabellare; null fuori dalla sezione Esportazione. */
   exportSample: ExportSample | null;
@@ -94,8 +98,8 @@ export interface SettingsPageData {
 }
 
 /**
- * Servizi dietro le azioni: pagamenti e prova (Stripe), gestione dell'abbonamento e documenti
- * su Stripe, Telegram, esportazione e cancellazione dell'account, modulo di assistenza. Senza il
+ * Servizi dietro le azioni: pagamenti e prova (Stripe), gestione dell'abbonamento e documenti su
+ * Stripe, Telegram, esportazione e cancellazione dell'account, modulo di assistenza. Senza il
  * servizio l'azione non compare.
  */
 interface SettingsServices {
@@ -142,8 +146,8 @@ const spyOffset = 140;
  * Sezione attiva su desktop, dove le categorie formano una sola pagina che scorre: l'indicatore
  * segue la sezione visibile e, durante lo scorrimento avviato dal menu, resta sulla voce scelta.
  * All'apertura, al cambio lingua e al ritorno dal pagamento la pagina torna sulla categoria
- * dell'indirizzo; i clic fra categorie scorrono dal menu con `goTo`, e un link interno a
- * un'altra categoria, come «Passa a Premium» da Telegram, scorre fino a quella dell'indirizzo.
+ * dell'indirizzo; i clic fra categorie scorrono dal menu con `goTo`, e un link interno a un'altra
+ * categoria, come «Passa a Premium» da Telegram, scorre fino a quella dell'indirizzo.
  */
 function useScrollSpy(
   ids: readonly SettingsSection[],
@@ -223,9 +227,9 @@ function useScrollSpy(
 }
 
 /**
- * Impostazioni. Su desktop le categorie formano una sola pagina che scorre:
- * il menu resta fisso e l'indicatore segue la sezione visibile. Su mobile
- * restano elenco e poi pagina della singola categoria.
+ * Impostazioni. Su desktop le categorie formano una sola pagina che scorre: il menu resta fisso e
+ * l'indicatore segue la sezione visibile. Su mobile restano elenco e poi pagina della singola
+ * categoria.
  */
 export function SettingsPage({ data }: { data: SettingsPageData }) {
   const { t, language } = useCopy();
@@ -422,7 +426,7 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
         <div className={cn("grid min-w-0 content-start gap-6", !data.section && "max-md:hidden")}>
           <Link
             to={appHref(links, "impostazioni")}
-            className="-ml-1 inline-flex w-fit items-center gap-1 rounded-md py-1 pr-2 text-sm pointer-coarse:min-h-11 font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring md:hidden"
+            className="-ml-1 inline-flex w-fit items-center gap-1 rounded-md py-1 pr-2 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring md:hidden pointer-coarse:min-h-11"
           >
             <ChevronLeft aria-hidden="true" className="size-4" />
             {t.settings.title}

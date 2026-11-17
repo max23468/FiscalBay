@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { setSwitch } from "../app/domain/service-settings.server";
+import { configureBotCommands } from "../app/domain/telegram-bot.server";
 import { deliverTelegram } from "../app/domain/telegram-deliveries.server";
-import { localClock, zonedInstant } from "../app/time";
 import { escape, splitBlocks, when } from "../app/domain/telegram-messages.server";
 import { saveTelegramChange, telegramSettings } from "../app/domain/telegram.server";
-import { configureBotCommands } from "../app/domain/telegram-bot.server";
 import { ebayOrderHref } from "../app/orders/ebay-links";
+import { localClock, zonedInstant } from "../app/time";
 import {
   insertEntitlement,
   insertTaxIdentifiers,

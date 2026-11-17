@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
+
 import type { SaveState } from "./controls";
 
 /**
@@ -62,8 +63,8 @@ export function useDraft<T extends Record<string, string>>(stored: T, intent: st
 export type Draft<T extends Record<string, string>> = ReturnType<typeof useDraft<T>>;
 
 /**
- * Modifiche non salvate: lasciare l'area, ricaricare o chiudere la pagina chiede conferma.
- * `area` riduce l'indirizzo alla parte che conta: dentro la stessa area la bozza resta.
+ * Modifiche non salvate: lasciare l'area, ricaricare o chiudere la pagina chiede conferma. `area`
+ * riduce l'indirizzo alla parte che conta: dentro la stessa area la bozza resta.
  */
 export function useUnsavedGuard(dirty: boolean, area = (pathname: string) => pathname) {
   const blocker = useNavigationGuard(

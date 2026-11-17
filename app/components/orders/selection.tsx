@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useCopy } from "~/components/copy-context";
 import { UnlockIcon } from "~/components/icons";
 import {
   AlertDialog,
@@ -13,7 +14,7 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
-import { useCopy } from "~/components/copy-context";
+
 import { forgetExportedSelection } from "../../orders/export-scope";
 import { FreeSuspendedNote } from "./fiscal";
 

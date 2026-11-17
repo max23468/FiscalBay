@@ -2,7 +2,8 @@
  * Log del Worker: un oggetto JSON per messaggio, con eventi e chiavi da elenchi chiusi e valori
  * scalari. Workers Logs e l'archivio a 90 giorni li conservano così come sono, quindi qui non
  * entrano mai errori serializzati, richieste, header, payload o dati dell'utente; la verifica
- * dell'archivio (`scripts/log-archive.mjs`) segnala ogni messaggio esportato fuori da questi elenchi.
+ * dell'archivio (`scripts/log-archive.mjs`) segnala ogni messaggio esportato fuori da questi
+ * elenchi.
  */
 export const logEvents = [
   "application_error",

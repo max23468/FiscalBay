@@ -19,9 +19,9 @@ export function ogImage(language: Language, path: string) {
 }
 
 /**
- * Metadati di una pagina pubblica: titolo, descrizione, canonical sulla lingua servita,
- * alternate per ogni lingua con l'italiano come `x-default`, Open Graph e scheda Twitter.
- * `path` è il percorso senza prefisso di lingua.
+ * Metadati di una pagina pubblica: titolo, descrizione, canonical sulla lingua servita, alternate
+ * per ogni lingua con l'italiano come `x-default`, Open Graph e scheda Twitter. `path` è il
+ * percorso senza prefisso di lingua.
  */
 export function siteMeta({
   language,

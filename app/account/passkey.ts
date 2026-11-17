@@ -1,8 +1,8 @@
 import type { PasskeySignals } from "../domain/passkey-user.server";
 
 /**
- * Client delle passkey, caricato soltanto al momento dell'uso per non pesare sulle pagine;
- * null quando il browser non supporta WebAuthn.
+ * Client delle passkey, caricato soltanto al momento dell'uso per non pesare sulle pagine; null
+ * quando il browser non supporta WebAuthn.
  */
 export async function loadPasskeyClient() {
   if (!window.PublicKeyCredential) return null;
@@ -33,8 +33,8 @@ function signalApi(): SignalApi | null {
 }
 
 /**
- * RP ID delle cerimonie: il plugin lo fissa all'hostname dell'origine dell'app e accetta
- * soltanto quell'origine, quindi dove una passkey funziona coincide con l'hostname corrente.
+ * RP ID delle cerimonie: il plugin lo fissa all'hostname dell'origine dell'app e accetta soltanto
+ * quell'origine, quindi dove una passkey funziona coincide con l'hostname corrente.
  */
 const rpId = () => window.location.hostname;
 
@@ -44,8 +44,8 @@ function ignore(signal: Promise<void> | undefined) {
 }
 
 /**
- * Accesso con passkey, dal pulsante o dal suggerimento del campo email (`autoFill`). Se il
- * server non conosce la passkey usata, il browser lo sa e può toglierla dal gestore.
+ * Accesso con passkey, dal pulsante o dal suggerimento del campo email (`autoFill`). Se il server
+ * non conosce la passkey usata, il browser lo sa e può toglierla dal gestore.
  */
 export async function signInWithPasskey(client: PasskeyClient, autoFill = false) {
   const result = await client.signIn.passkey({ autoFill, returnWebAuthnResponse: true });

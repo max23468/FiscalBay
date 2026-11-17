@@ -26,16 +26,16 @@ const tokenErrors = new Set([
 
 /**
  * Esito della verifica: `invalid` per un token assente, scaduto, riusato o di un altro modulo o
- * hostname; `unavailable` quando Siteverify o la chiave non permettono di decidere. In entrambi
- * i casi la richiesta si rifiuta e l'utente può riprovare.
+ * hostname; `unavailable` quando Siteverify o la chiave non permettono di decidere. In entrambi i
+ * casi la richiesta si rifiuta e l'utente può riprovare.
  */
 export type TurnstileOutcome = "valid" | "invalid" | "unavailable";
 
 /**
- * Verifica lato server del token Turnstile di un modulo (§29). Siteverify accetta un token una
- * sola volta entro cinque minuti; qui si confrontano anche l'hostname dell'ambiente e l'azione
- * del modulo. Le chiavi di prova di Cloudflare rispondono con un hostname fisso e senza azione:
- * il loro esito vale soltanto fuori dai domini HTTPS, quindi mai sul test o in Production.
+ * Verifica lato server del token Turnstile di un modulo (§29). Siteverify accetta un token una sola
+ * volta entro cinque minuti; qui si confrontano anche l'hostname dell'ambiente e l'azione del
+ * modulo. Le chiavi di prova di Cloudflare rispondono con un hostname fisso e senza azione: il loro
+ * esito vale soltanto fuori dai domini HTTPS, quindi mai sul test o in Production.
  */
 export async function verifyTurnstile(
   env: Pick<Env, "APP_ORIGIN" | "TURNSTILE_SECRET_KEY">,

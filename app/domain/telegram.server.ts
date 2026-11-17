@@ -1,5 +1,7 @@
-import { activeEntitlementSql } from "./grants.server";
-import { planPausedStore, storeNameSql } from "./store-state.server";
+import { isProduction } from "../app-links";
+import { telegramReplyCopy as replies } from "../copy/telegram";
+import { type Language, languages } from "../i18n";
+import { UpstreamError } from "../integrations/http.server";
 import {
   chatLabel,
   deepLink,
@@ -8,14 +10,12 @@ import {
   tokenHash,
   type TelegramStart,
 } from "../integrations/telegram.server";
-import { UpstreamError } from "../integrations/http.server";
-import { isProduction } from "../app-links";
-import { type Language, languages } from "../i18n";
 import { telegramDigestTimes, telegramLinkMinutes } from "../preferences";
-import type { TelegramView } from "../view-models";
 import { dayMilliseconds } from "../time";
+import type { TelegramView } from "../view-models";
+import { activeEntitlementSql } from "./grants.server";
+import { planPausedStore, storeNameSql } from "./store-state.server";
 import { settingsUrl } from "./telegram-messages.server";
-import { telegramReplyCopy as replies } from "../copy/telegram";
 
 // Le richieste consumate restano un giorno oltre la scadenza: un nuovo tentativo della stessa
 // ricevuta riconosce ancora il proprio collegamento.
@@ -32,9 +32,9 @@ const defaults = {
 };
 
 /**
- * Preferenze della chat con i predefiniti dello schema per uno spazio senza riga, come
- * `enabled`, `filter`, `mode`, `digestTime` e `timeZone`. Argomenti: alias di
- * `telegram_preferences` ed espressione SQL del fuso predefinito.
+ * Preferenze della chat con i predefiniti dello schema per uno spazio senza riga, come `enabled`,
+ * `filter`, `mode`, `digestTime` e `timeZone`. Argomenti: alias di `telegram_preferences` ed
+ * espressione SQL del fuso predefinito.
  */
 export const telegramPreferencesSql = (preferences: string, timeZone = "'Europe/Rome'") =>
   `COALESCE(${preferences}.enabled, 1) AS enabled,
@@ -44,9 +44,9 @@ export const telegramPreferencesSql = (preferences: string, timeZone = "'Europe/
    COALESCE(${preferences}.time_zone, ${timeZone}) AS timeZone`;
 
 /**
- * Nuovo deep link per lo spazio dell'utente, legato alla sessione che lo chiede. Sostituisce
- * quelli non ancora usati: vale soltanto l'ultimo. Le notifiche sono di Premium, prova e
- * lifetime: senza copertura nessun link.
+ * Nuovo deep link per lo spazio dell'utente, legato alla sessione che lo chiede. Sostituisce quelli
+ * non ancora usati: vale soltanto l'ultimo. Le notifiche sono di Premium, prova e lifetime: senza
+ * copertura nessun link.
  */
 export async function startTelegramLink(
   db: D1Database,
@@ -86,8 +86,8 @@ export async function startTelegramLink(
 
 /**
  * Risposta a una chat senza collegamento, in entrambe le lingue: in Production il rimando alle
- * Impostazioni. Sul test il bot parla soltanto con chi arriva da un link di un suo account: a
- * una chat sconosciuta non risponde, così il bot di prova non si presenta a chi lo trova per caso.
+ * Impostazioni. Sul test il bot parla soltanto con chi arriva da un link di un suo account: a una
+ * chat sconosciuta non risponde, così il bot di prova non si presenta a chi lo trova per caso.
  */
 export async function unknownChatReply(
   env: Env,
@@ -104,11 +104,7 @@ export async function unknownChatReply(
   );
 }
 
-type LinkRequest = {
-  workspace_id: string;
-  language: Language;
-  consumed_by: string | null;
-};
+type LinkRequest = { workspace_id: string; language: Language; consumed_by: string | null };
 
 /**
  * Effetto del comando `/start` ricevuto dal webhook. Il token si consuma una volta sola, entro la
@@ -116,8 +112,8 @@ type LinkRequest = {
  * ancora nello spazio. La chat nuova sostituisce la precedente nello stesso commit: da allora la
  * precedente non è più il destinatario di nessuna consegna. Il collegamento fissa il fuso del
  * riepilogo a quello dell'account nella richiesta. Lo stesso aggiornamento riprovato non scrive
- * nulla: ripete la conferma soltanto se lo spazio è ancora collegato a quella chat, con la
- * stessa generazione.
+ * nulla: ripete la conferma soltanto se lo spazio è ancora collegato a quella chat, con la stessa
+ * generazione.
  */
 export async function consumeTelegramStart(
   env: Env,
@@ -333,10 +329,10 @@ export function parseTelegramChange(name: string, value: string): TelegramChange
 const columns = { enabled: "enabled", filter: "filter", mode: "mode", digestTime: "digest_time" };
 
 /**
- * Salva una scelta dello spazio dell'utente. La riattivazione, dello spazio o di un negozio,
- * vale per gli eventi successivi: quelli del periodo disattivato non arrivano più. Frequenza e
- * orario fissano anche il fuso del riepilogo, quello dell'account in quel momento. False se lo
- * spazio o il negozio non sono dell'utente.
+ * Salva una scelta dello spazio dell'utente. La riattivazione, dello spazio o di un negozio, vale
+ * per gli eventi successivi: quelli del periodo disattivato non arrivano più. Frequenza e orario
+ * fissano anche il fuso del riepilogo, quello dell'account in quel momento. False se lo spazio o il
+ * negozio non sono dell'utente.
  */
 export async function saveTelegramChange(
   db: D1Database,
@@ -409,8 +405,8 @@ export function telegramRecipientSql(eventAt: string, at: string) {
 
 /**
  * Destinatario di un evento di un negozio, riletto al momento dell'invio secondo
- * `telegramRecipientSql`. Con `linkId` la consegna è stata preparata per quel collegamento: dopo
- * un cambio di chat non ha più destinatario. Null se non va inviato.
+ * `telegramRecipientSql`. Con `linkId` la consegna è stata preparata per quel collegamento: dopo un
+ * cambio di chat non ha più destinatario. Null se non va inviato.
  */
 export async function telegramRecipient(
   db: D1Database,

@@ -1,9 +1,9 @@
 import { baseFreeQuota, openPromotionEnd } from "../catalog";
+import { dayMilliseconds } from "../time";
+import type { EbayEnvironment } from "../view-models";
 import { purchasesOpenSql, waitingSql } from "./admission-state.server";
 import { openSubscriptionSql } from "./billing-subscriptions.server";
 import { consultableStore, orderLineageSql } from "./store-state.server";
-import type { EbayEnvironment } from "../view-models";
-import { dayMilliseconds } from "../time";
 
 /** Predicato condiviso: nessun valore fiscale entra nel risultato prima dell'autorizzazione. */
 export function orderAccessSql(order: string, workspace: string, at: string) {
@@ -22,8 +22,8 @@ export function orderAccessSql(order: string, workspace: string, at: string) {
 }
 
 /**
- * Diritto `alias` di `workspace_entitlements` non revocato e in vigore all'istante `at`: iniziato
- * e non ancora finito, senza fine per il lifetime.
+ * Diritto `alias` di `workspace_entitlements` non revocato e in vigore all'istante `at`: iniziato e
+ * non ancora finito, senza fine per il lifetime.
  */
 export function entitlementInForce(alias: string, at: string) {
   return `${alias}.revoked_at IS NULL AND julianday(${alias}.starts_at) <= julianday(${at})
@@ -40,8 +40,8 @@ export function activeEntitlementSql(workspace: string, at: string) {
 }
 
 /**
- * Copertura attiva mostrata all'utente: prima un diritto diverso dalla prova, poi quello che
- * dura di più. Argomenti come in `activeEntitlementSql`.
+ * Copertura attiva mostrata all'utente: prima un diritto diverso dalla prova, poi quello che dura
+ * di più. Argomenti come in `activeEntitlementSql`.
  */
 export function activeCoverageSql(column: "source" | "ends_at", workspace: string, at: string) {
   return `(SELECT e.${column} FROM workspace_entitlements e WHERE e.workspace_id = ${workspace}
@@ -61,8 +61,8 @@ export const trialDays = 14;
 const trialLength = trialDays * dayMilliseconds;
 
 /**
- * Prima lettura riuscita di un negozio dello spazio, anche senza ordini: abilita prova e
- * acquisto. Lo scollegamento successivo non la toglie, il negozio è già stato letto.
+ * Prima lettura riuscita di un negozio dello spazio, anche senza ordini: abilita prova e acquisto.
+ * Lo scollegamento successivo non la toglie, il negozio è già stato letto.
  */
 export function storeReadSql(workspace: string) {
   return `EXISTS (SELECT 1 FROM ebay_stores s JOIN sync_state ss ON ss.store_id = s.id
@@ -78,8 +78,8 @@ export const abuseSuspendedSql = (workspace: string) =>
     AND r.outcome = 'suspended')`;
 
 /**
- * Copertura pagata o concessa in corso all'istante `at`: ogni diritto attivo tranne la prova.
- * La sospensione antiabuso non la tocca.
+ * Copertura pagata o concessa in corso all'istante `at`: ogni diritto attivo tranne la prova. La
+ * sospensione antiabuso non la tocca.
  */
 export function paidCoverageSql(workspace: string, at: string) {
   return `EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = ${workspace}
@@ -87,11 +87,11 @@ export function paidCoverageSql(workspace: string, at: string) {
 }
 
 /**
- * La prova si offre allo spazio che non l'ha mai avuta, né con i suoi negozi in un altro
- * spazio, senza una copertura in corso né un abbonamento che può ancora incassare, dopo la
- * prima lettura riuscita di un suo negozio, e soltanto con gli acquisti aperti: senza capacità
- * per nuovi Premium la prova non è erogabile. Uno spazio con il Free sospeso dalla revisione
- * antiabuso non la riceve.
+ * La prova si offre allo spazio che non l'ha mai avuta, né con i suoi negozi in un altro spazio,
+ * senza una copertura in corso né un abbonamento che può ancora incassare, dopo la prima lettura
+ * riuscita di un suo negozio, e soltanto con gli acquisti aperti: senza capacità per nuovi Premium
+ * la prova non è erogabile. Uno spazio con il Free sospeso dalla revisione antiabuso non la
+ * riceve.
  */
 function trialAvailableSql(workspace: string, at: string) {
   return `(NOT EXISTS (SELECT 1 FROM workspace_entitlements e
@@ -104,10 +104,10 @@ function trialAvailableSql(workspace: string, at: string) {
 }
 
 /**
- * Attivazione volontaria della prova: 14 giorni fissi da adesso, senza pause né ripartenze,
- * che scorrono anche scollegando il negozio. Nessun abbonamento o pagamento. Restituisce la
- * fine della prova, o null se non era disponibile: già usata, anche da una richiesta
- * concorrente, con un'altra copertura in corso o prima della prima lettura riuscita.
+ * Attivazione volontaria della prova: 14 giorni fissi da adesso, senza pause né ripartenze, che
+ * scorrono anche scollegando il negozio. Nessun abbonamento o pagamento. Restituisce la fine della
+ * prova, o null se non era disponibile: già usata, anche da una richiesta concorrente, con un'altra
+ * copertura in corso o prima della prima lettura riuscita.
  */
 export async function startTrial(db: D1Database, userId: string, now = new Date()) {
   const at = now.toISOString();
@@ -155,10 +155,10 @@ const unlockTriggerCodes: UnlockErrorCode[] = [
 const unlockTriggerPattern = new RegExp(unlockTriggerCodes.join("|"), "u");
 
 /**
- * Codice dello sblocco rifiutato dal database; null per un errore di altra natura. Un ordine
- * fuori dallo spazio, nell'altro ambiente o senza dato lascia nulla la colonna dell'ordine e lo
- * fermano i trigger o, in loro assenza, il vincolo NOT NULL; un grant già esistente, anche
- * scaduto o revocato, viola l'unicità per spazio e ordine.
+ * Codice dello sblocco rifiutato dal database; null per un errore di altra natura. Un ordine fuori
+ * dallo spazio, nell'altro ambiente o senza dato lascia nulla la colonna dell'ordine e lo fermano i
+ * trigger o, in loro assenza, il vincolo NOT NULL; un grant già esistente, anche scaduto o
+ * revocato, viola l'unicità per spazio e ordine.
  */
 function unlockErrorCode(error: unknown): UnlockErrorCode | null {
   for (let cause = error; cause instanceof Error; cause = cause.cause) {
@@ -255,9 +255,9 @@ export async function currentFreePromotion(db: D1Database, now = new Date()) {
 }
 
 /**
- * Creazione del ciclo che contiene l'istante, sui confini fissati dall'ancoraggio dello spazio,
- * con la quota decisa al suo inizio; null senza ancoraggio. Richieste concorrenti calcolano la
- * stessa finestra e la stessa quota: vince una riga.
+ * Creazione del ciclo che contiene l'istante, sui confini fissati dall'ancoraggio dello spazio, con
+ * la quota decisa al suo inizio; null senza ancoraggio. Richieste concorrenti calcolano la stessa
+ * finestra e la stessa quota: vince una riga.
  */
 export function freeCycleStatement(
   db: D1Database,
@@ -285,9 +285,9 @@ type EntitlementSource = "premium" | "trial" | "lifetime" | "admin";
 type FreeCycle = { id: string; used: number; quota: number; ends_at: string; next_quota: number };
 
 /**
- * Cicli consecutivi di 7×24 ore sul tempo UTC, fissati al primo collegamento riuscito e mai
- * alla riconnessione: ora legale e fuso dell'utente non spostano i confini. Il ciclo si crea
- * quando serve, con la quota decisa al suo inizio; `next_quota` è quella del ciclo seguente.
+ * Cicli consecutivi di 7×24 ore sul tempo UTC, fissati al primo collegamento riuscito e mai alla
+ * riconnessione: ora legale e fuso dell'utente non spostano i confini. Il ciclo si crea quando
+ * serve, con la quota decisa al suo inizio; `next_quota` è quella del ciclo seguente.
  */
 export async function orderAllowance(db: D1Database, userId: string, now = new Date()) {
   const at = now.toISOString();
@@ -346,8 +346,8 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
     /** In lista d'attesa senza copertura: il Free, con i suoi sblocchi, non è ancora erogato. */
     waiting: !workspace.premium && !!workspace.waiting,
     /**
-     * Beneficio Free sospeso dalla revisione antiabuso senza copertura: nessuno sblocco del
-     * Free, neppure sugli ordini già importati; quelli già fatti restano.
+     * Beneficio Free sospeso dalla revisione antiabuso senza copertura: nessuno sblocco del Free,
+     * neppure sugli ordini già importati; quelli già fatti restano.
      */
     suspended: !workspace.premium && !!workspace.suspended,
     /** Acquisti e prove aperti. */

@@ -1,3 +1,8 @@
 {
-  "ignorePatterns": ["**/*.md"]
+  "ignorePatterns": ["**/*.md"],
+  "experimentalOperatorPosition": "start",
+  "jsdoc": true,
+  "objectWrap": "collapse",
+  "sortImports": true,
+  "sortTailwindcss": { "stylesheet": "./app/app.css", "functions": ["cn", "cva"] }
 }

@@ -1,17 +1,10 @@
 import { env } from "cloudflare:workers";
-
 import { describe, expect, it, vi } from "vitest";
 
-import { listVisibleOrders } from "../app/domain/orders.server";
-
 import { recordOrderObservation } from "../app/domain/order-import.server";
-
+import { listVisibleOrders } from "../app/domain/orders.server";
 import { setSwitch } from "../app/domain/service-settings.server";
-
 import { now } from "./fixtures/database-fixtures";
-
-import { line, observation } from "./fixtures/order-import-scenarios";
-
 import {
   grantedAt,
   ebay,
@@ -21,6 +14,7 @@ import {
   tradingPasses,
   setupScenarios,
 } from "./fixtures/order-acquisition-scenarios";
+import { line, observation } from "./fixtures/order-import-scenarios";
 
 setupScenarios();
 
@@ -113,9 +107,7 @@ it("riprende le pagine Trading senza avanzare il limite e consolida gli acquisti
 });
 
 it("ferma l'esecuzione per le credenziali rifiutate da Trading", async () => {
-  await expect(acquire(tradingFailure("931"))).rejects.toMatchObject({
-    failure: "credentials",
-  });
+  await expect(acquire(tradingFailure("931"))).rejects.toMatchObject({ failure: "credentials" });
 });
 
 it("con la quota GetOrders esaurita sospende soltanto Trading", async () => {
@@ -145,8 +137,8 @@ describe("cadenza della passata Trading", () => {
       fail: (_, init) =>
         String(init?.body).includes("<ModTimeFrom>")
           ? new Response(
-              `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>0</TotalNumberOfEntries></PaginationResult>` +
-                `<HasMoreOrders>false</HasMoreOrders><OrderArray></OrderArray></GetOrdersResponse>`,
+              `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>0</TotalNumberOfEntries></PaginationResult>`
+                + `<HasMoreOrders>false</HasMoreOrders><OrderArray></OrderArray></GetOrdersResponse>`,
             )
           : undefined,
     });
@@ -219,21 +211,21 @@ describe("cadenza della passata Trading", () => {
 
 it("legge Trading nella finestra dello storico, salta l'ordine illeggibile e ricomincia se il totale cambia", async () => {
   const tradingOrder = (id: string, created: string, keys: string[]) =>
-    `<Order><OrderID>${id}</OrderID><OrderStatus>Active</OrderStatus><CreatedTime>${created}</CreatedTime>` +
-    `<CheckoutStatus><LastModifiedTime>2026-09-01T11:00:00Z</LastModifiedTime></CheckoutStatus>` +
-    `<Total currencyID="EUR">1.00</Total><TransactionArray>` +
-    keys
+    `<Order><OrderID>${id}</OrderID><OrderStatus>Active</OrderStatus><CreatedTime>${created}</CreatedTime>`
+    + `<CheckoutStatus><LastModifiedTime>2026-09-01T11:00:00Z</LastModifiedTime></CheckoutStatus>`
+    + `<Total currencyID="EUR">1.00</Total><TransactionArray>`
+    + keys
       .map(
         (key) =>
-          `<Transaction><Item><ItemID>123</ItemID><Title>Sintetico</Title></Item>` +
-          `<TransactionID>${key}</TransactionID><QuantityPurchased>1</QuantityPurchased></Transaction>`,
+          `<Transaction><Item><ItemID>123</ItemID><Title>Sintetico</Title></Item>`
+          + `<TransactionID>${key}</TransactionID><QuantityPurchased>1</QuantityPurchased></Transaction>`,
       )
-      .join("") +
-    `</TransactionArray></Order>`;
+      .join("")
+    + `</TransactionArray></Order>`;
   const tradingPage = (total: number, more: boolean, orders: string[]) =>
     new Response(
-      `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>${total}</TotalNumberOfEntries></PaginationResult>` +
-        `<HasMoreOrders>${more}</HasMoreOrders><OrderArray>${orders.join("")}</OrderArray></GetOrdersResponse>`,
+      `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>${total}</TotalNumberOfEntries></PaginationResult>`
+        + `<HasMoreOrders>${more}</HasMoreOrders><OrderArray>${orders.join("")}</OrderArray></GetOrdersResponse>`,
     );
   let responses: Array<() => Response> = [];
   const requested: string[] = [];
@@ -353,11 +345,11 @@ it("non salta l'ordine Trading se cambia il consenso durante la passata", async 
     fail: (_, init) =>
       String(init?.body).includes("<ModTimeFrom>")
         ? new Response(
-            `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>1</TotalNumberOfEntries></PaginationResult>` +
-              `<HasMoreOrders>false</HasMoreOrders><OrderArray><Order><OrderID>P-1</OrderID><OrderStatus>Active</OrderStatus>` +
-              `<CreatedTime>2026-09-01T10:00:00Z</CreatedTime><CheckoutStatus><LastModifiedTime>2026-09-01T11:00:00Z</LastModifiedTime></CheckoutStatus>` +
-              `<Total currencyID="EUR">1.00</Total><TransactionArray><Transaction><Item><ItemID>123</ItemID><Title>Sintetico</Title></Item>` +
-              `<TransactionID>1</TransactionID><QuantityPurchased>1</QuantityPurchased></Transaction></TransactionArray></Order></OrderArray></GetOrdersResponse>`,
+            `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>1</TotalNumberOfEntries></PaginationResult>`
+              + `<HasMoreOrders>false</HasMoreOrders><OrderArray><Order><OrderID>P-1</OrderID><OrderStatus>Active</OrderStatus>`
+              + `<CreatedTime>2026-09-01T10:00:00Z</CreatedTime><CheckoutStatus><LastModifiedTime>2026-09-01T11:00:00Z</LastModifiedTime></CheckoutStatus>`
+              + `<Total currencyID="EUR">1.00</Total><TransactionArray><Transaction><Item><ItemID>123</ItemID><Title>Sintetico</Title></Item>`
+              + `<TransactionID>1</TransactionID><QuantityPurchased>1</QuantityPurchased></Transaction></TransactionArray></Order></OrderArray></GetOrdersResponse>`,
           )
         : undefined,
   });

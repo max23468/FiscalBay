@@ -117,11 +117,7 @@ describe("archivio dei log", () => {
   it("accetta il readback configurato e ignora i job degli altri progetti", () => {
     const result = checkReadback(target, configured());
     assert.equal(result.ok, true, JSON.stringify(result.checks));
-    assert.deepEqual(result.job, {
-      id: 8,
-      lastComplete: "2026-10-29T10:05:00Z",
-      lastError: null,
-    });
+    assert.deepEqual(result.job, { id: 8, lastComplete: "2026-10-29T10:05:00Z", lastError: null });
   });
 
   it("rifiuta un readback diverso dalla configurazione prevista", () => {

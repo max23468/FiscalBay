@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 import { handleAuthRequest } from "../app/auth-route.server";
-import { consumeStepJob, runToEnd } from "../app/domain/deletion-steps.server";
 import { createAuth } from "../app/auth.server";
 import {
   consumeAccountDeletion,
@@ -10,16 +9,10 @@ import {
   runAccountDeletion,
   startAccountDeletion,
 } from "../app/domain/account-deletion.server";
-import {
-  applyStoreMark,
-  readStoreMark,
-  storeIdentityHash,
-  trialMarkDays,
-} from "../app/domain/store-marks.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
-import { reconcileOwnerIncidents } from "../app/domain/owner-incidents.server";
 import { applyStripeEvent } from "../app/domain/billing.server";
-import { consumeExportJob } from "../app/domain/export-jobs.server";
+import { grantLifetimeConcession } from "../app/domain/concessions.server";
+import { consumeStepJob, runToEnd } from "../app/domain/deletion-steps.server";
 import {
   deletionFeedbackStatements,
   exitMonth,
@@ -28,18 +21,26 @@ import {
   saveDeletionFeedback,
   tenureBand,
 } from "../app/domain/exit-feedback.server";
+import { consumeExportJob } from "../app/domain/export-jobs.server";
 import { orderAllowance } from "../app/domain/grants.server";
-import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { vacantLifetimeSeats } from "../app/domain/lifetime.server";
-import { grantLifetimeConcession } from "../app/domain/concessions.server";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { consumeStoreSync } from "../app/domain/order-sync.server";
+import { reconcileOwnerIncidents } from "../app/domain/owner-incidents.server";
+import { completeRegistration } from "../app/domain/registration.server";
 import { completeStoreLink } from "../app/domain/store-link.server";
+import {
+  applyStoreMark,
+  readStoreMark,
+  storeIdentityHash,
+  trialMarkDays,
+} from "../app/domain/store-marks.server";
 import {
   claimStoreLinkSession,
   startStoreLink as beginLink,
 } from "../app/integrations/ebay/store-link.server";
-import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { loader as ordersLoader } from "../app/routes/orders";
+import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
 import {
   emailLink,
@@ -47,7 +48,6 @@ import {
   syntheticProfile,
   verifiedSession,
 } from "./fixtures/account-fixtures";
-import { completeRegistration } from "../app/domain/registration.server";
 import {
   insertCredentials,
   insertEntitlement,
@@ -106,8 +106,8 @@ async function leftovers(userId: string, workspaceId = "w-a") {
 
 /**
  * Una riga in ogni altra tabella con dati dell'utente, dello spazio, dei negozi o degli ordini,
- * oltre a quelle di `populatedAccount`. Un trasferimento verso un altro spazio, un posto
- * lifetime e una voce del registro della console restano dopo la cancellazione.
+ * oltre a quelle di `populatedAccount`. Un trasferimento verso un altro spazio, un posto lifetime e
+ * una voce del registro della console restano dopo la cancellazione.
  */
 async function everyTable(userId: string) {
   const sessionId = (await env.DB.prepare('SELECT "id" FROM "session" WHERE "userId" = ?')
@@ -301,9 +301,9 @@ async function everyTable(userId: string) {
 }
 
 /**
- * Righe rimaste per tabella, diverse da zero: ogni tabella dello schema, così una nuova
- * migration è coperta. Le tabelle con una colonna dell'utente Auth contano soltanto le sue
- * righe, perché gli utenti delle altre prove restano; i limiti dei tentativi non hanno utente.
+ * Righe rimaste per tabella, diverse da zero: ogni tabella dello schema, così una nuova migration è
+ * coperta. Le tabelle con una colonna dell'utente Auth contano soltanto le sue righe, perché gli
+ * utenti delle altre prove restano; i limiti dei tentativi non hanno utente.
  */
 async function remainingRows(userId: string) {
   const { results } = await env.DB.prepare(
@@ -462,9 +462,7 @@ describe("cancellazione dell'account", () => {
       cookie,
       params: { sezione: "privacy" },
     });
-    expect(page).toMatchObject({
-      page: { security: { deletionReady: true } },
-    });
+    expect(page).toMatchObject({ page: { security: { deletionReady: true } } });
     expect(await request("altro@example.invalid")).toMatchObject({
       data: { ok: false, notice: "L’indirizzo non corrisponde a quello dell’account." },
       init: { status: 400 },
@@ -1224,9 +1222,7 @@ describe("cancellazione dell'account", () => {
       await env.DB.prepare(
         "SELECT kind, severity FROM owner_incidents WHERE kind = 'account_deletion'",
       ).all(),
-    ).toMatchObject({
-      results: [{ kind: "account_deletion", severity: "p1" }],
-    });
+    ).toMatchObject({ results: [{ kind: "account_deletion", severity: "p1" }] });
     expect(sentTo(send, email).filter((sent) => sent.subject.includes("eliminato"))).toEqual([]);
 
     // Il secondo tentativo non ripete la segnalazione.

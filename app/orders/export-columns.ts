@@ -1,8 +1,8 @@
 import type { AppCopy } from "../copy/copy-it";
 
 /**
- * Colonne del file degli ordini (§12), uguali per CSV e XLSX, nell'area reale e nell'anteprima.
- * Lo schema standard è stabile; con Premium le colonne scelte cambiano presenza e ordine.
+ * Colonne del file degli ordini (§12), uguali per CSV e XLSX, nell'area reale e nell'anteprima. Lo
+ * schema standard è stabile; con Premium le colonne scelte cambiano presenza e ordine.
  */
 
 /** Lunghezza massima del nome di una configurazione salvata. */
@@ -16,8 +16,8 @@ export type ExportFormat = "csv" | "xlsx";
 export type ExportColumn = Exclude<keyof AppCopy["settings"]["export"]["file"]["columns"], "item">;
 
 /**
- * Colonne standard di una granularità, calcolate a ogni uso. Per articolo l'importo è della
- * riga e il totale dell'ordine compare una sola volta.
+ * Colonne standard di una granularità, calcolate a ogni uso. Per articolo l'importo è della riga e
+ * il totale dell'ordine compare una sola volta.
  */
 export function standardColumns(rows: ExportRows): ExportColumn[] {
   const columns: ExportColumn[] = [
@@ -54,9 +54,9 @@ export function standardColumns(rows: ExportRows): ExportColumn[] {
 }
 
 /**
- * Colonne scelte con Premium, separate da virgole, nell'ordine del file: ogni colonna nota al
- * più una volta. Quelle che la granularità non prevede si tralasciano. null se il valore non è
- * valido o non resta nessuna colonna.
+ * Colonne scelte con Premium, separate da virgole, nell'ordine del file: ogni colonna nota al più
+ * una volta. Quelle che la granularità non prevede si tralasciano. null se il valore non è valido o
+ * non resta nessuna colonna.
  */
 export function parseColumns(value: string, rows: ExportRows): ExportColumn[] | null {
   const known = new Set<string>(standardColumns("item"));
@@ -69,8 +69,8 @@ export function parseColumns(value: string, rows: ExportRows): ExportColumn[] | 
 }
 
 /**
- * Colonne che cambiano lo schema standard della granularità; null se sono le stesse, nello
- * stesso ordine: soltanto una scelta diversa chiede Premium.
+ * Colonne che cambiano lo schema standard della granularità; null se sono le stesse, nello stesso
+ * ordine: soltanto una scelta diversa chiede Premium.
  */
 export function customColumns(
   columns: readonly ExportColumn[],

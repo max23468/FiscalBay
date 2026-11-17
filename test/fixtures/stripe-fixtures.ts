@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import Stripe from "stripe";
 import { expect, vi } from "vitest";
+
 import { action as settingsAction } from "../../app/routes/settings";
 import { insertStore, insertWorkspace, now } from "./database-fixtures";
 import { callRoute } from "./route-fixtures";
@@ -220,8 +221,10 @@ export function stripeAccount() {
           product: "prod_test",
           recurring: {
             interval:
-              state.subscription.price?.interval ??
-              ((state.subscription.metadata?.offer ?? "monthly") === "annual" ? "year" : "month"),
+              state.subscription.price?.interval
+              ?? ((state.subscription.metadata?.offer ?? "monthly") === "annual"
+                ? "year"
+                : "month"),
           },
         },
       })),
@@ -439,12 +442,7 @@ export function stripeAccount() {
     if (url.pathname === "/v1/prices/price_test_lifetime")
       return Response.json(
         catalogPrice(
-          {
-            id: "price_test_lifetime",
-            unit_amount: 14900,
-            type: "one_time",
-            recurring: null,
-          },
+          { id: "price_test_lifetime", unit_amount: 14900, type: "one_time", recurring: null },
           { id: "prod_lifetime" },
         ),
       );

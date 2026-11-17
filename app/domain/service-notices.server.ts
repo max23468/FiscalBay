@@ -1,15 +1,15 @@
 import { z } from "zod";
 
 import type { Language } from "../i18n";
-import type { NotificationView } from "../view-models";
 import { maxNoticeBody, maxNoticeTitle } from "../limits";
 import { dayMilliseconds } from "../time";
+import type { NotificationView } from "../view-models";
 import { utc } from "./order-observation.server";
 
 /**
- * Comunicazioni di servizio o manutenzione scritte dalla console (§15): compaiono nella
- * campanella di tutti gli utenti nella loro lingua, dall'inizio alla fine della validità, e
- * escono quando scadono o vengono ritirate. Una modifica del testo le fa tornare da leggere.
+ * Comunicazioni di servizio o manutenzione scritte dalla console (§15): compaiono nella campanella
+ * di tutti gli utenti nella loro lingua, dall'inizio alla fine della validità, e escono quando
+ * scadono o vengono ritirate. Una modifica del testo le fa tornare da leggere.
  */
 
 /** Validità massima: la campanella conserva le letture per trenta giorni. */

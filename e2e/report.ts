@@ -1,5 +1,6 @@
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+
 import type { FullResult, Reporter, TestCase, TestResult } from "@playwright/test/reporter";
 
 /** Ricevuta senza DOM, cookie, password o dati applicativi; fallimenti nei trace locali. */

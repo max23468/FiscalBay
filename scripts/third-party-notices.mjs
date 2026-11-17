@@ -1,6 +1,6 @@
 /**
- * Avvisi delle licenze di terze parti per il codice e i font che il browser riceve: i pacchetti
- * si ricavano dai moduli e dagli asset della build client, così l'elenco segue ciò che viene
+ * Avvisi delle licenze di terze parti per il codice e i font che il browser riceve: i pacchetti si
+ * ricavano dai moduli e dagli asset della build client, così l'elenco segue ciò che viene
  * distribuito davvero. Il bundle minificato non conserva i commenti di licenza.
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -12,6 +12,7 @@ const licenseFile = /^(?:licen[cs]e|copying|ofl)(?:[-.].*)?$/iu;
 
 /**
  * Cartella del pacchetto che contiene il file, oppure null fuori da `node_modules`.
+ *
  * @param {string} file
  */
 export function packageRoot(file) {
@@ -27,6 +28,7 @@ export function packageRoot(file) {
 
 /**
  * Nome, versione, licenza dichiarata e testi di licenza di un pacchetto.
+ *
  * @param {string} root
  * @returns {NoticePackage}
  */
@@ -62,6 +64,7 @@ const permissiveLicenses = new Set([
 /**
  * Pacchetti con una licenza non permissiva o non dichiarata. In un'espressione SPDX basta una
  * alternativa (`OR`) le cui licenze congiunte (`AND`) siano tutte ammesse.
+ *
  * @param {Iterable<NoticePackage>} packages
  */
 export function unpermittedLicenses(packages) {
@@ -80,6 +83,7 @@ export function unpermittedLicenses(packages) {
 
 /**
  * Testo degli avvisi, un pacchetto per sezione in ordine di nome.
+ *
  * @param {Iterable<NoticePackage>} packages
  */
 export function formatNotices(packages) {

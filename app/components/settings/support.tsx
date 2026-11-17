@@ -3,8 +3,11 @@ import { useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { useAction } from "~/components/action";
+import { CheckboxOption } from "~/components/checkbox-option";
+import { useCopy } from "~/components/copy-context";
 import { useFieldErrors } from "~/components/form-validation";
 import { StatusAlert } from "~/components/status";
+import { useTurnstile } from "~/components/turnstile";
 import { Button } from "~/components/ui/button";
 import {
   Field,
@@ -15,13 +18,11 @@ import {
   FieldSet,
 } from "~/components/ui/field";
 import { Textarea } from "~/components/ui/textarea";
-import { useCopy } from "~/components/copy-context";
-import { useTurnstile } from "~/components/turnstile";
+
 import { supportEmail } from "../../app-copy";
 import { maxSupportMessage, supportFields, supportTopics } from "../../support";
 import { turnstileActions, turnstileField } from "../../turnstile";
 import type { DiagnosticsView } from "../../view-models";
-import { CheckboxOption } from "~/components/checkbox-option";
 import { Group, SimpleSelect } from "./controls";
 
 export function SupportSection({
@@ -172,7 +173,7 @@ function SupportForm({
                     {rows.map(([label, value]) => (
                       <div key={label} className="contents">
                         <dt className="text-muted-foreground">{label}</dt>
-                        <dd className="font-code min-w-0 break-words">{value}</dd>
+                        <dd className="min-w-0 font-code break-words">{value}</dd>
                       </div>
                     ))}
                   </dl>

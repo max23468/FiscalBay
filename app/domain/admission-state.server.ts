@@ -1,6 +1,6 @@
 /**
- * Frammenti SQL dell'ammissione, condivisi da diritti, letture e acquisti. Gli interruttori
- * vivono in `admission_settings`; senza la riga nessuna lista d'attesa e acquisti aperti.
+ * Frammenti SQL dell'ammissione, condivisi da diritti, letture e acquisti. Gli interruttori vivono
+ * in `admission_settings`; senza la riga nessuna lista d'attesa e acquisti aperti.
  */
 
 /** Lista d'attesa per i nuovi Free attiva. */

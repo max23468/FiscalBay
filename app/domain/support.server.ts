@@ -1,15 +1,15 @@
 import { appCopy, supportEmail } from "../app-copy";
 import { isProduction } from "../app-links";
 import { formatDate } from "../format";
-import { maxSupportMessage, supportTopics, type SupportTopic } from "../support";
 import type { Language } from "../i18n";
+import { maxSupportMessage, supportTopics, type SupportTopic } from "../support";
 import type { DiagnosticsView } from "../view-models";
 import { readsFailing, type StoreStatus } from "./stores.server";
 
 /**
- * Richieste del modulo di assistenza (§14). La richiesta arriva soltanto alla casella
- * `supporto@`, con Reply-To sull'indirizzo dell'account: D1 non ne conserva testo né riepilogo
- * (limite per account in `support-requests.server.ts`).
+ * Richieste del modulo di assistenza (§14). La richiesta arriva soltanto alla casella `supporto@`,
+ * con Reply-To sull'indirizzo dell'account: D1 non ne conserva testo né riepilogo (limite per
+ * account in `support-requests.server.ts`).
  */
 
 export interface SupportRequest {
@@ -19,7 +19,8 @@ export interface SupportRequest {
   diagnostics: boolean;
   /**
    * Correlation ID del riepilogo mostrato, quello del caricamento della pagina: l'email riporta lo
-   * stesso riferimento che l'utente ha visto. Null se manca o non ha la forma di un correlation ID.
+   * stesso riferimento che l'utente ha visto. Null se manca o non ha la forma di un correlation
+   * ID.
    */
   reference: string | null;
 }
@@ -52,28 +53,28 @@ export function appVersion(env: Pick<Env, "VERSION_METADATA">): string | null {
 }
 
 /**
- * Negozio interessato: prima quello con un problema, poi quello letto per ultimo fra i
- * collegati, infine il primo dell'elenco. Sempre e soltanto fra i negozi dello spazio.
+ * Negozio interessato: prima quello con un problema, poi quello letto per ultimo fra i collegati,
+ * infine il primo dell'elenco. Sempre e soltanto fra i negozi dello spazio.
  */
 function concernedStore(stores: StoreStatus[]): StoreStatus | null {
   const linked = stores.filter((store) => store.connection !== "disconnected");
   return (
-    linked.find((store) => store.connection === "reconnect_required" || readsFailing(store)) ??
-    linked
+    linked.find((store) => store.connection === "reconnect_required" || readsFailing(store))
+    ?? linked
       .filter((store) => store.lastSyncAt)
-      .sort((a, b) => b.lastSyncAt!.localeCompare(a.lastSyncAt!))[0] ??
-    linked[0] ??
-    stores[0] ??
-    null
+      .sort((a, b) => b.lastSyncAt!.localeCompare(a.lastSyncAt!))[0]
+    ?? linked[0]
+    ?? stores[0]
+    ?? null
   );
 }
 
 /**
  * Riepilogo allowlistato: versione, riferimento interno del negozio, fase ed esito dell'ultima
- * lettura, codice errore stabile, diritti e correlation ID. Mai token, nomi o username eBay,
- * dati fiscali, acquirenti o altri spazi: i campi nascono qui, non da una copia dei record. Le
- * letture dei negozi partono dalla coda e non conservano un correlation ID: il riferimento è
- * quello della pagina che mostra il riepilogo, lo stesso che riceve l'assistenza.
+ * lettura, codice errore stabile, diritti e correlation ID. Mai token, nomi o username eBay, dati
+ * fiscali, acquirenti o altri spazi: i campi nascono qui, non da una copia dei record. Le letture
+ * dei negozi partono dalla coda e non conservano un correlation ID: il riferimento è quello della
+ * pagina che mostra il riepilogo, lo stesso che riceve l'assistenza.
  */
 export function supportDiagnostics(input: {
   stores: StoreStatus[];

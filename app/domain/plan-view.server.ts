@@ -1,17 +1,17 @@
-import { lapsedStatuses, pricePromiseMs } from "./billing.server";
-import { isRenewingSubscription, openSubscriptionFilterSql } from "./billing-subscriptions.server";
-import { accountCoverage, type orderAllowance } from "./grants.server";
 import { stripeEnvironment } from "../integrations/stripe.server";
 import type { AccountView } from "../view-models";
+import { isRenewingSubscription, openSubscriptionFilterSql } from "./billing-subscriptions.server";
+import { lapsedStatuses, pricePromiseMs } from "./billing.server";
+import { accountCoverage, type orderAllowance } from "./grants.server";
 
 type Allowance = Awaited<ReturnType<typeof orderAllowance>>;
 
 /**
  * Piano, prova, sospensione del Free e sblocchi del ciclo, uguali in Ordini e nel Piano salvo la
  * quota. Il Piano la mostra soltanto con un ciclo avviato, con la quota del ciclo seguente se
- * cambia. Negli Ordini la quota assente vale «senza limite», cioè Premium: un Free senza ciclo
- * o in lista d'attesa ha zero sblocchi. `waitlisted` viene dal profilo dell'utente, noto anche
- * prima che lo spazio nasca con il primo negozio.
+ * cambia. Negli Ordini la quota assente vale «senza limite», cioè Premium: un Free senza ciclo o in
+ * lista d'attesa ha zero sblocchi. `waitlisted` viene dal profilo dell'utente, noto anche prima che
+ * lo spazio nasca con il primo negozio.
  */
 export function planView(
   allowance: Allowance,
@@ -54,10 +54,10 @@ export function planView(
 
 /**
  * Stato del pagamento mostrato nel piano. Il lifetime prevale su tutto, senza rinnovi. Con una
- * copertura pagata, o concessa a un abbonamento che si rinnova: periodicità, rinnovo o fine
- * dopo la disdetta. Una concessione senza abbonamento indica la sua fine. Senza copertura, o con
- * la sola prova: pagamento in attesa di conferma, rinnovo non riuscito, con il prezzo protetto
- * fino a sette giorni dall'inizio del periodo non pagato, oppure pagamento rimborsato.
+ * copertura pagata, o concessa a un abbonamento che si rinnova: periodicità, rinnovo o fine dopo la
+ * disdetta. Una concessione senza abbonamento indica la sua fine. Senza copertura, o con la sola
+ * prova: pagamento in attesa di conferma, rinnovo non riuscito, con il prezzo protetto fino a sette
+ * giorni dall'inizio del periodo non pagato, oppure pagamento rimborsato.
  */
 export async function subscriptionView(
   db: D1Database,
@@ -136,8 +136,8 @@ export async function subscriptionView(
   if (!row) return { ...grant, ...pending };
   // Una concessione a un abbonamento che si rinnova ne ha rinviato il rinnovo alla sua fine.
   if (
-    coverage?.source === "premium" ||
-    (coverage?.source === "admin" && isRenewingSubscription(row.status))
+    coverage?.source === "premium"
+    || (coverage?.source === "admin" && isRenewingSubscription(row.status))
   ) {
     if (!row.cancel_at_period_end)
       return {

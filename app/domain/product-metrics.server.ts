@@ -1,16 +1,16 @@
 import { priceGeneration } from "../catalog";
 import { stripeEnvironment } from "../integrations/stripe.server";
+import { signupChannels, type SignupChannel } from "../signup-source";
+import { dayMilliseconds } from "../time";
 import { renewingSubscriptionStatuses } from "./billing-subscriptions.server";
 import { activeCoverageSql, activeEntitlementSql, entitlementInForce } from "./grants.server";
 import { dormantSyncMinutes } from "./order-sync.server";
 import { sqlList } from "./sql.server";
 import { dormantWorkspaceSql } from "./store-state.server";
-import { dayMilliseconds } from "../time";
-import { signupChannels, type SignupChannel } from "../signup-source";
 
 /**
- * KPI della console (§31): conteggi aggregati con finestra e denominatore espliciti, calcolati
- * a ogni lettura da D1. I primi passaggi degli spazi sono le righe deduplicate di
+ * KPI della console (§31): conteggi aggregati con finestra e denominatore espliciti, calcolati a
+ * ogni lettura da D1. I primi passaggi degli spazi sono le righe deduplicate di
  * `workspace_funnel_steps`, scritte dai trigger; le letture sono gli aggregati giornalieri di
  * `sync_daily`. Nessun dato fiscale, buyer o identificativo esce dalla funzione: soltanto numeri.
  */
@@ -72,9 +72,9 @@ const readingStoreSql = `s.data_deleted_at IS NULL AND s.disconnected_at IS NULL
 /**
  * Abbonamento pagante all'istante `at`: si rinnova da solo e il suo spazio ha una copertura Pro
  * pagata in vigore. Stripe registra come `trialing` anche l'abbonato che ha programmato un cambio
- * di periodicità o ricevuto una concessione che rinvia il rinnovo, e lui resta pagante finché
- * dura il periodo pagato; l'abbonamento scelto durante la prova non lo è ancora. Un rinnovo non
- * pagato torna subito al Free e resta fuori.
+ * di periodicità o ricevuto una concessione che rinvia il rinnovo, e lui resta pagante finché dura
+ * il periodo pagato; l'abbonamento scelto durante la prova non lo è ancora. Un rinnovo non pagato
+ * torna subito al Free e resta fuori.
  */
 const payingSubscriptionSql = (alias: string, at: string) =>
   `${alias}.status IN (${sqlList(renewingSubscriptionStatuses)}) AND ${alias}.unavailable_at IS NULL
@@ -142,13 +142,7 @@ async function funnel(db: D1Database, from: string, to: string) {
     ["registered", reachedBy.get("registered")!],
   ]);
   const steps: FunnelStep[] = [
-    {
-      step: "registered",
-      after: null,
-      count: users.length,
-      of: users.length,
-      medianHours: null,
-    },
+    { step: "registered", after: null, count: users.length, of: users.length, medianHours: null },
   ];
   for (const [step, after] of Object.entries(funnelBase) as [
     keyof typeof funnelBase,
@@ -158,13 +152,7 @@ async function funnel(db: D1Database, from: string, to: string) {
     const inside = new Map([...reachedBy.get(step)!].filter(([user]) => base.has(user)));
     counted.set(step, inside);
     const hours = [...inside.values()].filter((value) => value !== null);
-    steps.push({
-      step,
-      after,
-      count: inside.size,
-      of: base.size,
-      medianHours: median(hours),
-    });
+    steps.push({ step, after, count: inside.size, of: base.size, medianHours: median(hours) });
   }
   const synced = counted.get("first_sync")!;
   // Provenienza della coorte (D304): attivazione del merchant e primo acquisto valgono a
@@ -273,12 +261,12 @@ async function commerce(env: Env, from: string, to: string) {
       unlisted: rows.filter((row) => !row.listed).reduce((sum, row) => sum + row.count, 0),
     },
     /**
-     * Ricavo ricorrente mensile netto dal listino: l'annuale vale un dodicesimo, il lifetime e
-     * le prove ne restano fuori.
+     * Ricavo ricorrente mensile netto dal listino: l'annuale vale un dodicesimo, il lifetime e le
+     * prove ne restano fuori.
      */
     mrr: Math.round(
-      listed("monthly") * priceGeneration.net.monthly +
-        (listed("annual") * priceGeneration.net.annual) / 12,
+      listed("monthly") * priceGeneration.net.monthly
+        + (listed("annual") * priceGeneration.net.annual) / 12,
     ),
     paying: count("monthly") + count("annual") + totals.lifetimePaid,
     ...totals,
@@ -367,8 +355,8 @@ async function operations(db: D1Database, from: string, to: string) {
 }
 
 /**
- * KPI della finestra che termina adesso. La coorte del funnel è quella registrata nella
- * finestra; abbonamenti, prove aperte, ritardo e capacità valgono all'istante della lettura.
+ * KPI della finestra che termina adesso. La coorte del funnel è quella registrata nella finestra;
+ * abbonamenti, prove aperte, ritardo e capacità valgono all'istante della lettura.
  */
 export async function productMetrics(env: Env, days: MetricWindow, now = new Date()) {
   const to = now.toISOString();

@@ -1,22 +1,23 @@
 import { cn } from "cn";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { useCopy } from "~/components/copy-context";
 import { useFieldErrors } from "~/components/form-validation";
 import { useHydrated } from "~/components/hydrated";
 import { Button } from "~/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "~/components/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Textarea } from "~/components/ui/textarea";
-import { useCopy } from "~/components/copy-context";
+
 import { languageNames, languages, type Language } from "../../i18n";
 import { maxTemplateLength } from "../../preferences";
 import type { Draft } from "./unsaved";
 
 /**
- * Modello di messaggio: si salva con Salva. Un salvataggio non riuscito lascia il testo scritto
- * e lo dice; uno riuscito diventa il nuovo riferimento delle modifiche. La bozza appartiene
- * alla pagina, che ne tiene l'avviso d'uscita. Salva si attiva con una modifica, come nel
- * profilo; un testo vuoto porta alla sua lingua con il messaggio accanto al campo.
+ * Modello di messaggio: si salva con Salva. Un salvataggio non riuscito lascia il testo scritto e
+ * lo dice; uno riuscito diventa il nuovo riferimento delle modifiche. La bozza appartiene alla
+ * pagina, che ne tiene l'avviso d'uscita. Salva si attiva con una modifica, come nel profilo; un
+ * testo vuoto porta alla sua lingua con il messaggio accanto al campo.
  */
 export function TemplateSection({ form }: { form: Draft<Record<Language, string>> }) {
   const { t } = useCopy();

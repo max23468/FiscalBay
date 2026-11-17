@@ -65,11 +65,7 @@ function ebay(state) {
   return { request: notificationRequest("app-token", fetcher), calls, state };
 }
 
-const ours = {
-  destinationId: "ours",
-  status: "ENABLED",
-  deliveryConfig: { endpoint },
-};
+const ours = { destinationId: "ours", status: "ENABLED", deliveryConfig: { endpoint } };
 const other = {
   destinationId: "other",
   status: "ENABLED",

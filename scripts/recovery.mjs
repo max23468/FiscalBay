@@ -1,27 +1,25 @@
 #!/usr/bin/env node
 /**
  * Ripristino della D1 di un ambiente con Time Travel senza reintrodurre cancellazioni, revoche o
- * credenziali superate (§32.1). Il servizio resta sospeso dalla cattura alla riapertura: un
- * segreto del Worker, fuori dal database, ferma pagine, webhook e cron, e la coda sospende la
- * consegna. La cattura legge dal database corrente le chiavi primarie di ogni tabella, i marker
- * di cancellazione e le revoche successive al punto scelto, e le cifra in un file temporaneo.
- * Dopo il ripristino ogni riga del database ripristinato che oggi non esiste più si elimina di
- * nuovo, i marker e le revoche si riapplicano, sessioni e collegamenti in corso decadono e le
- * password cambiate dopo il punto non tornano valide. Pagamenti e diritti si riconciliano poi
- * con il reinvio degli eventi Stripe, gli ordini con le letture eBay.
+ * credenziali superate (§32.1). Il servizio resta sospeso dalla cattura alla riapertura: un segreto
+ * del Worker, fuori dal database, ferma pagine, webhook e cron, e la coda sospende la consegna. La
+ * cattura legge dal database corrente le chiavi primarie di ogni tabella, i marker di cancellazione
+ * e le revoche successive al punto scelto, e le cifra in un file temporaneo. Dopo il ripristino
+ * ogni riga del database ripristinato che oggi non esiste più si elimina di nuovo, i marker e le
+ * revoche si riapplicano, sessioni e collegamenti in corso decadono e le password cambiate dopo il
+ * punto non tornano valide. Pagamenti e diritti si riconciliano poi con il reinvio degli eventi
+ * Stripe, gli ordini con le letture eBay.
  *
  * `verify` controlla in sola lettura il database ripristinato rispetto al file: prima della
  * riapertura tutto lo stato riapplicato, dopo la riconciliazione con `--reconciled` diritti e
  * decorrenze. Il resoconto riporta soltanto conteggi e nomi delle tabelle, mai valori.
  *
- * Uso:
- *   node scripts/recovery.mjs freeze|status|thaw [--mode live]
- *   RECOVERY_KEY=<base64> node scripts/recovery.mjs capture --at <ISO> --out <file> [--mode live]
- *   RECOVERY_KEY=<base64> node scripts/recovery.mjs restore --in <file>
- *   RECOVERY_KEY=<base64> node scripts/recovery.mjs reapply --in <file>
- *   RECOVERY_KEY=<base64> node scripts/recovery.mjs verify --in <file> [--reconciled]
- *   node scripts/recovery.mjs stripe --since <ISO> [--mode live] [--project-name <profilo>]
- *   RECOVERY_KEY=<base64> node scripts/recovery.mjs telegram --in <file>
+ * Uso: node scripts/recovery.mjs freeze|status|thaw [--mode live] RECOVERY_KEY=<base64> node
+ * scripts/recovery.mjs capture --at <ISO> --out <file> [--mode live] RECOVERY_KEY=<base64> node
+ * scripts/recovery.mjs restore --in <file> RECOVERY_KEY=<base64> node scripts/recovery.mjs reapply
+ * --in <file> RECOVERY_KEY=<base64> node scripts/recovery.mjs verify --in <file> [--reconciled]
+ * node scripts/recovery.mjs stripe --since <ISO> [--mode live] [--project-name <profilo>]
+ * RECOVERY_KEY=<base64> node scripts/recovery.mjs telegram --in <file>
  */
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -56,10 +54,10 @@ const pageSize = 10_000;
 const internal = /^(?:sqlite_|_cf_|d1_migrations$)/u;
 
 /**
- * Marker da riportare dopo il ripristino. Senza `since` la tabella si riporta intera: è piccola
- * e il compito periodico riapre da sé le richieste i cui dati ricompaiono. `where` limita le
- * righe lette, `parent` a quelle il cui riferimento esiste ancora. `name` distingue due voci
- * della stessa tabella.
+ * Marker da riportare dopo il ripristino. Senza `since` la tabella si riporta intera: è piccola e
+ * il compito periodico riapre da sé le richieste i cui dati ricompaiono. `where` limita le righe
+ * lette, `parent` a quelle il cui riferimento esiste ancora. `name` distingue due voci della stessa
+ * tabella.
  */
 const markerTables = [
   { table: "account_deletions", conflict: "REPLACE" },
@@ -125,10 +123,10 @@ const markerName = (marker) => marker.name ?? marker.table;
 const grantFlags = [{ table: "user", key: "id", column: "admin" }];
 
 /**
- * Revoche e diritti consumati che aggiornano una riga esistente: la prima colonna è l'istante,
- * le altre lo accompagnano. Si riapplicano soltanto dove il ripristino le ha tolte; con `newer`
- * anche dove il ripristino ha riportato un istante precedente. `name` distingue due voci della
- * stessa tabella.
+ * Revoche e diritti consumati che aggiornano una riga esistente: la prima colonna è l'istante, le
+ * altre lo accompagnano. Si riapplicano soltanto dove il ripristino le ha tolte; con `newer` anche
+ * dove il ripristino ha riportato un istante precedente. `name` distingue due voci della stessa
+ * tabella.
  */
 const stampTables = [
   { table: "admin_agent_tokens", key: ["token_hash"], columns: ["revoked_at"] },
@@ -211,9 +209,9 @@ export function batched(items, head, render, tail = "", limit = statementLimit) 
 }
 
 /**
- * Tabelle dei dati con la chiave primaria, dalle figlie alle madri: un'eliminazione non trova
- * mai un riferimento che la blocca. Una tabella senza chiave o un ciclo di riferimenti fermano
- * il ripristino, perché il confronto non sarebbe affidabile.
+ * Tabelle dei dati con la chiave primaria, dalle figlie alle madri: un'eliminazione non trova mai
+ * un riferimento che la blocca. Una tabella senza chiave o un ciclo di riferimenti fermano il
+ * ripristino, perché il confronto non sarebbe affidabile.
  */
 export async function schemaOf(run) {
   // D1 nega le pragma sulle proprie tabelle `_cf_`.
@@ -279,8 +277,8 @@ const since = (column, at) => `julianday(${ident(column)}) >= julianday(${litera
 /**
  * Diritti e decorrenze, per spazio e senza gli identificativi delle righe che il webhook Stripe
  * crea di nuovo. Dopo la riconciliazione le voci `stripe` coincidono con la cattura; le altre
- * misurano la perdita del punto, perché concessioni della console, cicli e sblocchi successivi
- * non hanno un provider che li ricostruisca.
+ * misurano la perdita del punto, perché concessioni della console, cicli e sblocchi successivi non
+ * hanno un provider che li ricostruisca.
  */
 const rightsQueries = {
   entitlements: {
@@ -423,9 +421,9 @@ function restoreStamps({ table, key, columns, newer }, rows) {
 }
 
 /**
- * Riapplica lo stato catturato al database ripristinato. Ripetibile: una seconda esecuzione
- * non trova più nulla da eliminare né revoche da riportare. Gli invii Telegram restano spenti
- * fino a `telegram`, così gli ordini riletti dopo il ripristino non si notificano di nuovo.
+ * Riapplica lo stato catturato al database ripristinato. Ripetibile: una seconda esecuzione non
+ * trova più nulla da eliminare né revoche da riportare. Gli invii Telegram restano spenti fino a
+ * `telegram`, così gli ordini riletti dopo il ripristino non si notificano di nuovo.
  */
 export async function reapply(run, captured, now = new Date()) {
   const [applied] = await run(["SELECT name FROM d1_migrations ORDER BY id"]);
@@ -517,8 +515,8 @@ export async function verify(run, captured, { reconciled = false } = {}) {
   const tables = await schemaOf(run);
   const checks = {
     schema:
-      JSON.stringify(applied.map(({ name }) => name)) === JSON.stringify(captured.migrations) &&
-      JSON.stringify(tables) === JSON.stringify(captured.tables)
+      JSON.stringify(applied.map(({ name }) => name)) === JSON.stringify(captured.migrations)
+      && JSON.stringify(tables) === JSON.stringify(captured.tables)
         ? 0
         : 1,
   };
@@ -566,9 +564,9 @@ export async function verify(run, captured, { reconciled = false } = {}) {
       if (parents && !parents.has(row[marker.parent.column])) continue;
       const stored = found.get(JSON.stringify(key.map((column) => row[column])));
       const same =
-        reconciled ||
-        marker.conflict === "IGNORE" ||
-        JSON.stringify(stored) === JSON.stringify(row);
+        reconciled
+        || marker.conflict === "IGNORE"
+        || JSON.stringify(stored) === JSON.stringify(row);
       if (!stored || !same) checks.markers += 1;
     }
   }
@@ -587,8 +585,8 @@ export async function verify(run, captured, { reconciled = false } = {}) {
       // Una riga eliminata dopo la cattura non ha più nulla da revocare.
       if (!stored) continue;
       if (
-        stored[first] === null ||
-        (stamp.newer && Date.parse(stored[first]) < Date.parse(row[first]))
+        stored[first] === null
+        || (stamp.newer && Date.parse(stored[first]) < Date.parse(row[first]))
       )
         checks.stamps += 1;
     }
@@ -634,8 +632,8 @@ export async function verify(run, captured, { reconciled = false } = {}) {
 }
 
 /**
- * Ripresa degli invii Telegram dopo la rilettura degli ordini: gli eventi precedenti non
- * arrivano più, poi l'interruttore torna come prima del ripristino.
+ * Ripresa degli invii Telegram dopo la rilettura degli ordini: gli eventi precedenti non arrivano
+ * più, poi l'interruttore torna come prima del ripristino.
  */
 export function telegramResume(captured, now = new Date()) {
   const at = literal(now.toISOString());
@@ -692,8 +690,8 @@ export function restorePoint(at, now = new Date()) {
 }
 
 /**
- * Stato della sospensione dalle tre fonti: segreto del Worker, consegna della coda e risposta
- * della pagina iniziale. «partial» se non concordano.
+ * Stato della sospensione dalle tre fonti: segreto del Worker, consegna della coda e risposta della
+ * pagina iniziale. «partial» se non concordano.
  */
 export function freezeState({ secret, paused, status, marked }) {
   if (secret && paused && status === 503 && marked) return "frozen";
@@ -803,8 +801,8 @@ export async function assertDrained(run) {
 }
 
 /**
- * Dopo Time Travel le attività anteriori alla cattura sono soltanto righe dello snapshot:
- * la cattura era ammessa solo dopo la loro conclusione. Lavori successivi restano bloccanti.
+ * Dopo Time Travel le attività anteriori alla cattura sono soltanto righe dello snapshot: la
+ * cattura era ammessa solo dopo la loro conclusione. Lavori successivi restano bloccanti.
  */
 export async function prepareReapply(run, capturedAt) {
   if (!Number.isFinite(Date.parse(capturedAt))) throw new Error("Istante della cattura assente.");
@@ -815,15 +813,18 @@ export async function prepareReapply(run, capturedAt) {
   await assertDrained(run);
 }
 
-/** Attesa per le richieste HTTP avviate prima del blocco: rispondono in secondi, `waitUntil` aggiunge al più 30 s. */
+/**
+ * Attesa per le richieste HTTP avviate prima del blocco: rispondono in secondi, `waitUntil`
+ * aggiunge al più 30 s.
+ */
 const httpDrainMilliseconds = 2 * 60_000;
 /** Intervallo senza scritture che prova il database fermo. */
 const quietMilliseconds = 60_000;
 
 /**
  * Le richieste HTTP non si registrano: il segreto blocca le nuove, quelle già avviate finiscono
- * entro il drenaggio. Poi il bookmark della D1, che avanza a ogni scrittura, deve restare fermo
- * per un intervallo intero; finché cambia il ripristino non parte.
+ * entro il drenaggio. Poi il bookmark della D1, che avanza a ogni scrittura, deve restare fermo per
+ * un intervallo intero; finché cambia il ripristino non parte.
  */
 export async function awaitQuiet(
   readBookmark,

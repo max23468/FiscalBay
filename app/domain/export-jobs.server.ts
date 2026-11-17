@@ -25,14 +25,13 @@ import { queueRetryDelay, workLockMilliseconds, workLockUntil } from "./work-tim
 import { XlsxRowLimitError } from "./xlsx.server";
 
 /**
- * File degli ordini, creati subito o preparati dalla coda (§12.1). Oltre `exportJobOrders`
- * ordini la richiesta registra un lavoro e risponde subito: il consumer rilegge revisione
- * dello spazio, diritti e conservazione all'avvio, crea il file e la campanella lo annuncia.
- * La revisione resta quella letta alla richiesta, così un lavoro partito prima di una revoca
- * non pubblica il file dopo di essa. Ambito e opzioni restano cifrati nella riga soltanto
- * finché il lavoro non si conclude: la ricerca può contenere dati dell'acquirente. Il compito
- * orario `export_files` riprende i lavori rimasti senza messaggio e chiude come non riusciti
- * quelli che non possono più concludersi.
+ * File degli ordini, creati subito o preparati dalla coda (§12.1). Oltre `exportJobOrders` ordini
+ * la richiesta registra un lavoro e risponde subito: il consumer rilegge revisione dello spazio,
+ * diritti e conservazione all'avvio, crea il file e la campanella lo annuncia. La revisione resta
+ * quella letta alla richiesta, così un lavoro partito prima di una revoca non pubblica il file dopo
+ * di essa. Ambito e opzioni restano cifrati nella riga soltanto finché il lavoro non si conclude:
+ * la ricerca può contenere dati dell'acquirente. Il compito orario `export_files` riprende i lavori
+ * rimasti senza messaggio e chiude come non riusciti quelli che non possono più concludersi.
  */
 
 /** Ordini oltre i quali il file si prepara dalla coda invece che nella richiesta. */
@@ -66,15 +65,14 @@ export interface OrderFileRequest {
 
 /** Il file chiede Premium: XLSX o colonne diverse dallo schema standard. */
 const premiumOnly = (request: OrderFileRequest) =>
-  request.format === "xlsx" ||
-  (request.columns !== null && customColumns(request.columns, request.rows) !== null);
+  request.format === "xlsx"
+  || (request.columns !== null && customColumns(request.columns, request.rows) !== null);
 
 /**
- * Crea e pubblica il file con i dati consultabili all'istante `now`. Il file vale al più 24
- * ore, non oltre la copertura Premium che lo permette né oltre il primo termine di
- * conservazione o di sblocco degli ordini inclusi. null se una revoca è arrivata dopo la
- * lettura di `revision`. `alongside` entra nello stesso commit del file, come in
- * `publishExportFile`.
+ * Crea e pubblica il file con i dati consultabili all'istante `now`. Il file vale al più 24 ore,
+ * non oltre la copertura Premium che lo permette né oltre il primo termine di conservazione o di
+ * sblocco degli ordini inclusi. null se una revoca è arrivata dopo la lettura di `revision`.
+ * `alongside` entra nello stesso commit del file, come in `publishExportFile`.
  */
 export async function publishOrderFile(
   env: Pick<Env, "DB" | "EXPORT_FILES">,
@@ -125,13 +123,7 @@ const sealPurpose = "export-job";
  */
 export async function queueOrderFile(
   env: Pick<Env, "DB" | "WORK_QUEUE" | "BETTER_AUTH_SECRET">,
-  job: {
-    userId: string;
-    revision: number;
-    request: OrderFileRequest;
-    fileName: string;
-    now: Date;
-  },
+  job: { userId: string; revision: number; request: OrderFileRequest; fileName: string; now: Date },
 ): Promise<string | null> {
   const id = crypto.randomUUID();
   const sealed = await seal(env.BETTER_AUTH_SECRET, sealPurpose, id, JSON.stringify(job.request));
@@ -170,13 +162,13 @@ export function isExportJobMessage(body: unknown): body is z.infer<typeof jobMes
 }
 
 /**
- * Esegue un lavoro dalla coda. Una consegna ripetuta di un lavoro concluso non lo ripete; un
- * lavoro in corso altrove si riprova allo scadere del suo blocco, così un consumer interrotto
- * non esaurisce i tentativi del messaggio prima che il lavoro torni libero. Revoca, Premium
- * terminato, ambito ormai vuoto, XLSX oltre il limite di righe o richiesta più vecchia della
- * durata di un file lo chiudono come non riuscito, da creare di nuovo; un errore riprova con
- * backoff fino a `maxAttempts`. Il file e la conclusione del lavoro nascono nello stesso
- * commit: un errore dopo la pubblicazione non lascia un secondo file al tentativo successivo.
+ * Esegue un lavoro dalla coda. Una consegna ripetuta di un lavoro concluso non lo ripete; un lavoro
+ * in corso altrove si riprova allo scadere del suo blocco, così un consumer interrotto non
+ * esaurisce i tentativi del messaggio prima che il lavoro torni libero. Revoca, Premium terminato,
+ * ambito ormai vuoto, XLSX oltre il limite di righe o richiesta più vecchia della durata di un file
+ * lo chiudono come non riuscito, da creare di nuovo; un errore riprova con backoff fino a
+ * `maxAttempts`. Il file e la conclusione del lavoro nascono nello stesso commit: un errore dopo la
+ * pubblicazione non lascia un secondo file al tentativo successivo.
  */
 export async function consumeExportJob(
   message: Message<unknown>,
@@ -281,11 +273,11 @@ export async function consumeExportJob(
 }
 
 /**
- * Ripresa dal compito orario `export_files`. Un lavoro in coda senza un blocco valido da oltre
- * la durata di un blocco ha perso il suo messaggio (consumer interrotto, tentativi esauriti o
- * messaggio scaduto) e si riaccoda; dopo 24 ore dalla richiesta non può più concludersi e
- * risulta non riuscito, annunciato dalla campanella. Un lavoro bloccato da un consumer in corso
- * resta a quel consumer. Restituisce quanti lavori ha riaccodato.
+ * Ripresa dal compito orario `export_files`. Un lavoro in coda senza un blocco valido da oltre la
+ * durata di un blocco ha perso il suo messaggio (consumer interrotto, tentativi esauriti o
+ * messaggio scaduto) e si riaccoda; dopo 24 ore dalla richiesta non può più concludersi e risulta
+ * non riuscito, annunciato dalla campanella. Un lavoro bloccato da un consumer in corso resta a
+ * quel consumer. Restituisce quanti lavori ha riaccodato.
  */
 export async function resumeExportJobs(
   env: Pick<Env, "DB" | "WORK_QUEUE">,
@@ -323,9 +315,9 @@ export interface ExportFileView {
 }
 
 /**
- * File dell'utente ancora utili: quelli pronti e validi all'istante `now`, i lavori in corso
- * e quelli non riusciti nelle ultime 24 ore. Un file scaduto o revocato non compare, anche se
- * i byte non sono ancora stati eliminati.
+ * File dell'utente ancora utili: quelli pronti e validi all'istante `now`, i lavori in corso e
+ * quelli non riusciti nelle ultime 24 ore. Un file scaduto o revocato non compare, anche se i byte
+ * non sono ancora stati eliminati.
  */
 export async function listExportFiles(
   db: D1Database,

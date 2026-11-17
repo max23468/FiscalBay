@@ -1,13 +1,13 @@
 /**
- * Novità dell'app (D203), soltanto nell'area autenticata, ricavate alla build dalle parti
- * `### Novità` e `### What's new` di ogni versione di `CHANGELOG.md`: nuove funzioni, cambi
- * visibili e correzioni notate dagli utenti, una voce `- **Titolo.** Testo` per riga sotto i
- * gruppi `####` di `whatsNewKinds`, nello stesso ordine nelle due lingue. Le altre voci della versione restano nel changelog e nella
- * GitHub Release. In Production compaiono soltanto le versioni con il giorno
- * (`## [2.0.1] - AAAA-MM-GG`), sul test anche quella in preparazione in cima al changelog. La
- * build della pubblicazione riceve il giorno da `VITE_RELEASE_DAY`, senza cambiare il tree
- * qualificato: `develop` lo scrive subito dopo.
- * Senza voci pagina, voce del menu, collegamento di Supporto e campanella non compaiono.
+ * Novità dell'app (D203), soltanto nell'area autenticata, ricavate alla build dalle parti `###
+ * Novità` e `### What's new` di ogni versione di `CHANGELOG.md`: nuove funzioni, cambi visibili e
+ * correzioni notate dagli utenti, una voce `- **Titolo.** Testo` per riga sotto i gruppi `####` di
+ * `whatsNewKinds`, nello stesso ordine nelle due lingue. Le altre voci della versione restano nel
+ * changelog e nella GitHub Release. In Production compaiono soltanto le versioni con il giorno (`##
+ * [2.0.1] - AAAA-MM-GG`), sul test anche quella in preparazione in cima al changelog. La build
+ * della pubblicazione riceve il giorno da `VITE_RELEASE_DAY`, senza cambiare il tree qualificato:
+ * `develop` lo scrive subito dopo. Senza voci pagina, voce del menu, collegamento di Supporto e
+ * campanella non compaiono.
  */
 import { headings, whatsNewKinds } from "./changelog-fragments.mjs";
 
@@ -31,15 +31,15 @@ const userVersion = (version: string) => /^[2-9]\d*\.\d+\.\d+$/u.test(version);
 const validDay = (day: string) => {
   const time = Date.parse(`${day}T00:00:00.000Z`);
   return (
-    /^\d{4}-\d{2}-\d{2}$/u.test(day) &&
-    !Number.isNaN(time) &&
-    new Date(time).toISOString().startsWith(day)
+    /^\d{4}-\d{2}-\d{2}$/u.test(day)
+    && !Number.isNaN(time)
+    && new Date(time).toISOString().startsWith(day)
   );
 };
 
 /**
- * Voci di una parte `### <titolo>`, ciascuna con il gruppo `####` che la precede: elenco
- * puntato, con le righe che continuano una voce. Un gruppo sconosciuto vale `undefined`.
+ * Voci di una parte `### <titolo>`, ciascuna con il gruppo `####` che la precede: elenco puntato,
+ * con le righe che continuano una voce. Un gruppo sconosciuto vale `undefined`.
  */
 function part(
   body: string,
@@ -80,8 +80,8 @@ export function releaseChangelog(text: string, day: string | undefined) {
 
 /**
  * Versioni con Novità, dalla più recente, ed errori di forma: intestazione e giorno validi,
- * versione unica, due parti con le stesse voci negli stessi gruppi, ciascuna con titolo e testo. Una
- * versione senza giorno sotto la prima è già pubblicata e deve averlo.
+ * versione unica, due parti con le stesse voci negli stessi gruppi, ciascuna con titolo e testo.
+ * Una versione senza giorno sotto la prima è già pubblicata e deve averlo.
  */
 export function parseChangelog(text: string): { releases: WhatsNewRelease[]; problems: string[] } {
   const releases: WhatsNewRelease[] = [];
@@ -115,11 +115,7 @@ export function parseChangelog(text: string): { releases: WhatsNewRelease[]; pro
       }));
       if (items.some((item) => !item.it || !item.en))
         return void problems.push(`${version}: voce senza titolo o testo`);
-      releases.push({
-        version,
-        date: date ?? null,
-        items: items as WhatsNewRelease["items"],
-      });
+      releases.push({ version, date: date ?? null, items: items as WhatsNewRelease["items"] });
     });
   return { releases, problems };
 }

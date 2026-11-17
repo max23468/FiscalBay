@@ -1,15 +1,19 @@
 import { dash } from "@better-auth/infra";
 import { passkey } from "@better-auth/passkey";
-import { betterAuth, type Auth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
+import {
+  betterAuth,
+  type Auth,
+  type BetterAuthOptions,
+  type BetterAuthPlugin,
+  type OAuth2Tokens,
+} from "better-auth";
 import {
   APIError,
   createAuthMiddleware,
   getAuthoritativeSessionFromCtx,
   getOAuthState,
 } from "better-auth/api";
-import type { OAuth2Tokens } from "better-auth";
 import { emailOTP, genericOAuth, haveIBeenPwned, lastLoginMethod } from "better-auth/plugins";
-import { waitUntil } from "./service-activity.server";
 import { z } from "zod";
 
 import {
@@ -19,9 +23,6 @@ import {
   sendExistingAccountEmail,
 } from "./account-email.server";
 import { accountDeletionPath, authErrorPath, emailCodeConfirmPath } from "./app-links";
-import { logFailure } from "./errors";
-import { localizedPath, type Language } from "./i18n";
-import { maxPasswordLength, minPasswordLength } from "./limits";
 import {
   advanceEmailChange,
   clearEmailChange,
@@ -29,9 +30,13 @@ import {
 } from "./domain/email-change.server";
 import { sessionPolicy } from "./domain/sessions.server";
 import { recordSignupSource } from "./domain/signup-sources.server";
+import { logFailure } from "./errors";
+import { localizedPath, type Language } from "./i18n";
 import { upstreamJson } from "./integrations/http.server";
+import { maxPasswordLength, minPasswordLength } from "./limits";
 import { hashPassword, verifyPassword } from "./password.server";
 import { queueResponseCookies } from "./response-cookies.server";
+import { waitUntil } from "./service-activity.server";
 import { parseSource } from "./signup-source";
 
 // Chiave del progetto dell'ambiente su dash.better-auth.com: senza, il plugin non viene caricato,
@@ -60,11 +65,7 @@ const durableBackground: BetterAuthPlugin = {
 const ebayIdentitySchema = z.object({
   userId: z.string().min(1),
   username: z.string().min(1),
-  businessAccount: z
-    .object({
-      email: z.email().optional(),
-    })
-    .optional(),
+  businessAccount: z.object({ email: z.email().optional() }).optional(),
 });
 
 /** Dominio delle email di cui Google è autorevole oltre ai domini Workspace. */
@@ -115,9 +116,9 @@ async function unconfirmedProviderAccount(
 type LinkUser = { id: string; email: string; emailVerified?: boolean };
 
 /**
- * Link per impostare la password. La password aggiunta dal link aprirebbe all'indirizzo un
- * account che conserva il metodo di chi l'ha creato: prima serve la conferma, dalla sessione
- * dello stesso utente.
+ * Link per impostare la password. La password aggiunta dal link aprirebbe all'indirizzo un account
+ * che conserva il metodo di chi l'ha creato: prima serve la conferma, dalla sessione dello stesso
+ * utente.
  */
 async function sendPasswordReset(env: Env, user: LinkUser, url: string) {
   if (await unconfirmedProviderAccount(env, user)) return;
@@ -125,8 +126,8 @@ async function sendPasswordReset(env: Env, user: LinkUser, url: string) {
 }
 
 /**
- * Sessione della richiesta, o null. Quando l'uso la rinnova, il nuovo cookie raggiunge il
- * browser con la risposta: senza, il browser lo scarterebbe alla scadenza del primo accesso.
+ * Sessione della richiesta, o null. Quando l'uso la rinnova, il nuovo cookie raggiunge il browser
+ * con la risposta: senza, il browser lo scarterebbe alla scadenza del primo accesso.
  */
 export async function readSession(env: Env, request: Request) {
   const { headers, response } = await createAuth(env).api.getSession({
@@ -138,8 +139,8 @@ export async function readSession(env: Env, request: Request) {
 }
 
 /**
- * Un account nato da eBay o Google si conferma soltanto con la sessione dello stesso utente:
- * chi apre il link senza averla non entra in un account con il metodo di un altro.
+ * Un account nato da eBay o Google si conferma soltanto con la sessione dello stesso utente: chi
+ * apre il link senza averla non entra in un account con il metodo di un altro.
  */
 async function requireConfirmationSession(env: Env, user: LinkUser, request?: Request) {
   if (!(await unconfirmedProviderAccount(env, user))) return;
@@ -170,8 +171,8 @@ export async function activateStoreGrant(env: Env, userId: string, request?: Req
 }
 
 /**
- * Il consenso al negozio vive nella tabella delle autorizzazioni: la riga dell'accesso eBay non
- * ne conserva i token, che servono soltanto al collegamento.
+ * Il consenso al negozio vive nella tabella delle autorizzazioni: la riga dell'accesso eBay non ne
+ * conserva i token, che servono soltanto al collegamento.
  */
 async function settleStoreGrant(env: Env, account: { id: string; userId: string }) {
   if (!(await storeGrantLanguage())) return;
@@ -525,9 +526,7 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
         // controllo a runtime, con l'istanza riusata, bloccherebbe l'isolate anche dopo la migration.
         validateSchema: false,
       },
-      ipAddress: {
-        ipAddressHeaders: ["cf-connecting-ip"],
-      },
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
     },
     // Il limite dei tentativi si applica prima del router, in auth-route.server.ts, anche ai moduli.
     rateLimit: { enabled: false },
@@ -577,8 +576,8 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
         // indirizzi chiediamo la nostra conferma e non colleghiamo per email.
         mapProfileToUser: (profile) => ({
           emailVerified:
-            profile.email_verified &&
-            (profile.email.toLowerCase().endsWith(`@${gmailDomain}`) || Boolean(profile.hd)),
+            profile.email_verified
+            && (profile.email.toLowerCase().endsWith(`@${gmailDomain}`) || Boolean(profile.hd)),
         }),
       },
     },

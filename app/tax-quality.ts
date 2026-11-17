@@ -15,16 +15,16 @@ const isOneOf = (names: readonly string[], type: string) => names.includes(type)
 export function taxIdentifierType(type: string, country: string | null): TaxIdentifierType {
   if (country !== null && country !== "IT") return "OTHER";
   if (isOneOf(taxTypeNames.cf, type)) return "CF";
-  return isOneOf(taxTypeNames.vat, type) ||
-    (country === "IT" && isOneOf(taxTypeNames.italianVat, type))
+  return isOneOf(taxTypeNames.vat, type)
+    || (country === "IT" && isOneOf(taxTypeNames.italianVat, type))
     ? "PIVA"
     : "OTHER";
 }
 
 /**
  * Nome con cui l'identificativo si mostra, si copia e si esporta: come `taxIdentifierType`, con la
- * Partita IVA riconosciuta anche dalla forma del valore. Confronti e storico restano sul tipo
- * della fonte.
+ * Partita IVA riconosciuta anche dalla forma del valore. Confronti e storico restano sul tipo della
+ * fonte.
  */
 export function shownTaxType(tax: {
   type: string;
@@ -60,9 +60,9 @@ export function taxComparisonKey(tax: {
 }
 
 /**
- * Identità del dato fiscale del buyer fra fonti e osservazioni: CF e Partita IVA italiani con
- * Paese assente o IT sono lo stesso dato, perché le fonti adottate forniscono soltanto
- * identificativi del buyer, mai del seller o di eBay.
+ * Identità del dato fiscale del buyer fra fonti e osservazioni: CF e Partita IVA italiani con Paese
+ * assente o IT sono lo stesso dato, perché le fonti adottate forniscono soltanto identificativi del
+ * buyer, mai del seller o di eBay.
  */
 export function buyerTaxKey(tax: { type: string; issuingCountry: string | null; value: string }) {
   return taxComparisonKey(

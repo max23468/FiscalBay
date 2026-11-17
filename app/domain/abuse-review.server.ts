@@ -5,17 +5,16 @@ import { paidCoverageSql } from "./grants.server";
 import { storeNameSql } from "./store-state.server";
 
 /**
- * Revisione antiabuso (§15): più spazi che sembrano la stessa attività, per ottenere più
- * volte prova e beneficio Free. I segnali usano soltanto dati già presenti: ragione sociale del
- * profilo, nome del negozio eBay e cliente Stripe condivisi fra spazi diversi. L'admin registra
- * «nessun abuso» oppure sospende il beneficio Free di uno degli spazi. I segnali mostrano il
- * valore condiviso soltanto all'admin e la chiave della revisione ne conserva l'impronta, non il
- * valore.
+ * Revisione antiabuso (§15): più spazi che sembrano la stessa attività, per ottenere più volte
+ * prova e beneficio Free. I segnali usano soltanto dati già presenti: ragione sociale del profilo,
+ * nome del negozio eBay e cliente Stripe condivisi fra spazi diversi. L'admin registra «nessun
+ * abuso» oppure sospende il beneficio Free di uno degli spazi. I segnali mostrano il valore
+ * condiviso soltanto all'admin e la chiave della revisione ne conserva l'impronta, non il valore.
  *
  * La sospensione vale per lo spazio finché resta l'esito: il riallineamento del piano mette la
- * pausa dell'assistenza su ogni suo negozio reale, anche collegato o scelto come attivo dopo, e
- * la toglie con l'esito «nessun abuso» o mentre una copertura pagata o concessa è in corso. La
- * pausa resta distinta da quella manuale della console, che non la toglie.
+ * pausa dell'assistenza su ogni suo negozio reale, anche collegato o scelto come attivo dopo, e la
+ * toglie con l'esito «nessun abuso» o mentre una copertura pagata o concessa è in corso. La pausa
+ * resta distinta da quella manuale della console, che non la toglie.
  */
 
 export type AbuseSignalKind = "company" | "store_name" | "customer";
@@ -47,9 +46,9 @@ async function signalKey(kind: AbuseSignalKind, value: string, workspaces: strin
 }
 
 /**
- * Segnalazioni correnti, prima quelle da rivedere, poi le sospensioni la cui segnalazione non è
- * più corrente, come dopo l'ingresso di un nuovo spazio nel gruppo: restano finché l'admin non
- * registra «nessun abuso».
+ * Segnalazioni correnti, prima quelle da rivedere, poi le sospensioni la cui segnalazione non è più
+ * corrente, come dopo l'ingresso di un nuovo spazio nel gruppo: restano finché l'admin non registra
+ * «nessun abuso».
  */
 export async function listAbuseSignals(db: D1Database, now = new Date()): Promise<AbuseSignal[]> {
   const at = now.toISOString();
@@ -141,11 +140,13 @@ export async function listAbuseSignals(db: D1Database, now = new Date()): Promis
         kind: group.kind,
         value: group.value,
         current: live,
-        workspaces: [...group.ids].sort().map((id) => ({
-          id,
-          email: byId.get(id)?.email ?? null,
-          premium: byId.get(id)?.premium === 1,
-        })),
+        workspaces: [...group.ids]
+          .sort()
+          .map((id) => ({
+            id,
+            email: byId.get(id)?.email ?? null,
+            premium: byId.get(id)?.premium === 1,
+          })),
         review: review
           ? { outcome: review.outcome, workspaceId: review.workspace_id, at: review.reviewed_at }
           : null,
@@ -153,19 +154,19 @@ export async function listAbuseSignals(db: D1Database, now = new Date()): Promis
     })
     .sort(
       (a, b) =>
-        Number(!a.current) - Number(!b.current) ||
-        Number(a.review !== null) - Number(b.review !== null) ||
-        a.key.localeCompare(b.key),
+        Number(!a.current) - Number(!b.current)
+        || Number(a.review !== null) - Number(b.review !== null)
+        || a.key.localeCompare(b.key),
     );
 }
 
 export type AbuseReviewResult = "done" | "not_found" | "invalid" | "covered";
 
 /**
- * Esito della revisione di una segnalazione elencata. La sospensione riguarda lo spazio
- * indicato, che deve far parte della segnalazione; «nessun abuso» la toglie. Una revisione
- * ripetuta sostituisce la precedente. Gli spazi coinvolti si riallineano subito; il piano li
- * tiene allineati anche dopo, a ogni visita, collegamento e giro del cron.
+ * Esito della revisione di una segnalazione elencata. La sospensione riguarda lo spazio indicato,
+ * che deve far parte della segnalazione; «nessun abuso» la toglie. Una revisione ripetuta
+ * sostituisce la precedente. Gli spazi coinvolti si riallineano subito; il piano li tiene allineati
+ * anche dopo, a ogni visita, collegamento e giro del cron.
  */
 export async function reviewAbuseSignal(
   db: D1Database,

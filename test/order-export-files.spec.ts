@@ -1,8 +1,5 @@
 import { env } from "cloudflare:workers";
-
 import { expect, it, vi } from "vitest";
-
-import { action as exportAction } from "../app/routes/order-export";
 
 import {
   exportPartBytes,
@@ -10,17 +7,10 @@ import {
   publishExportFile,
   purgeExportFiles,
 } from "../app/domain/export-files.server";
-
 import { consumeExportJob } from "../app/domain/export-jobs.server";
-
+import { action as exportAction } from "../app/routes/order-export";
 import { verifiedSession } from "./fixtures/account-fixtures";
-
-import { queueMessage } from "./fixtures/queue-fixture";
-
 import { insertEntitlement, now } from "./fixtures/database-fixtures";
-
-import { routeResponse } from "./fixtures/route-fixtures";
-
 import {
   it_,
   cookie,
@@ -36,6 +26,8 @@ import {
   job,
   setupScenarios,
 } from "./fixtures/order-export-scenarios";
+import { queueMessage } from "./fixtures/queue-fixture";
+import { routeResponse } from "./fixtures/route-fixtures";
 
 setupScenarios();
 
@@ -349,10 +341,7 @@ it("un errore a metà del file risponde con l'avviso senza lasciare un file", as
   try {
     const response = await request("ordini=o-a");
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      ok: false,
-      notice: it_.settings.export.exportFailed,
-    });
+    expect(await response.json()).toEqual({ ok: false, notice: it_.settings.export.exportFailed });
   } finally {
     failing.mockRestore();
     errors.mockRestore();

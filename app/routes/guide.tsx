@@ -14,13 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+
 import { accessPath, featuresPath, guidePaths, guidesPath, type GuidePath } from "../app-links";
 import { guides, type ComparisonCell, type Guide as GuideCopy } from "../copy/guides.server";
 import { sitePages } from "../copy/site-pages.server";
 import { formatDate } from "../format";
 import { canonicalPath, localizedPath } from "../i18n";
-import { publicPage, publicPageHeaders } from "../site.server";
 import { ogImage, siteMeta } from "../site-meta";
+import { publicPage, publicPageHeaders } from "../site.server";
 import type { Route } from "./+types/guide";
 
 function isGuide(path: string): path is GuidePath {
@@ -124,9 +125,9 @@ function cellIcon(
 
 /**
  * Confronto con la prima soluzione in evidenza, in una colonna incorniciata. Ciò che le fonti non
- * dichiarano ha il trattino, perché non è provato che manchi. Con `contrast` le altre colonne
- * hanno le croci; altrimenti la spunta va a ciò che ogni soluzione offre, senza croci. Con più di
- * due soluzioni la tabella compare dai 768 px e, se serve, scorre invece di schiacciare le colonne.
+ * dichiarano ha il trattino, perché non è provato che manchi. Con `contrast` le altre colonne hanno
+ * le croci; altrimenti la spunta va a ciò che ogni soluzione offre, senza croci. Con più di due
+ * soluzioni la tabella compare dai 768 px e, se serve, scorre invece di schiacciare le colonne.
  */
 function ComparisonTable({
   headers: [feature, highlighted, ...others],
@@ -225,8 +226,8 @@ function ComparisonTable({
 }
 
 /**
- * Confronto fra più di due soluzioni sotto i 768 px: una scheda per voce con le soluzioni una
- * sotto l'altra, la prima in evidenza, così nessuna colonna resta fuori dallo schermo.
+ * Confronto fra più di due soluzioni sotto i 768 px: una scheda per voce con le soluzioni una sotto
+ * l'altra, la prima in evidenza, così nessuna colonna resta fuori dallo schermo.
  */
 function ComparisonCards({
   headers: [, ...solutions],

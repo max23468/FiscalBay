@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
  * Riuso delle visite del catalogo nella qualifica del candidato: la matrice completa non si ripete
- * per le aree che le modifiche non toccano, rispetto all'ultima qualifica su un commit antenato
- * che ha visitato tutte le pagine. Quell'artefatto dura sette giorni, quindi almeno una volta alla
+ * per le aree che le modifiche non toccano, rispetto all'ultima qualifica su un commit antenato che
+ * ha visitato tutte le pagine. Quell'artefatto dura sette giorni, quindi almeno una volta alla
  * settimana la matrice gira per intero. Modifiche che non si riconducono a un'area provano tutto.
  * Uso: REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/pages-reuse.mjs
  */
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+
+import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
 
 import {
   areaTags,
@@ -19,8 +19,8 @@ import {
   sharedModules,
   undeclaredModules,
 } from "./classify-changes.mjs";
-import { importGraph } from "./verify-repo.mjs";
 import { ghJson, git, isAncestor, readRunArtifact } from "./lib/provider.mjs";
+import { importGraph } from "./verify-repo.mjs";
 
 /** Espressione delle visite da saltare. */
 export const skippedPages = (areas) =>
@@ -30,11 +30,11 @@ export const skippedPages = (areas) =>
 export function lastFullQualification(artifacts, repositoryId, isAncestor, qualified) {
   return artifacts.find(
     ({ expired, workflow_run: run }) =>
-      !expired &&
-      run?.repository_id === repositoryId &&
-      run.head_repository_id === repositoryId &&
-      isAncestor(run.head_sha) &&
-      qualified(run.id),
+      !expired
+      && run?.repository_id === repositoryId
+      && run.head_repository_id === repositoryId
+      && isAncestor(run.head_sha)
+      && qualified(run.id),
   )?.workflow_run.head_sha;
 }
 
@@ -87,8 +87,8 @@ export function pageCoverage(sources, auxiliary = []) {
       for (const route of routes.filter((entry) => entry.areas.includes(area)))
         for (const file of dependencies(route.path))
           if (
-            !news.some(({ path: newsPath }) => newsPath === file) ||
-            (newsAreas[route.path] ?? route.areas).includes(area)
+            !news.some(({ path: newsPath }) => newsPath === file)
+            || (newsAreas[route.path] ?? route.areas).includes(area)
           )
             files.add(file);
       if (globalNews) for (const { path: file } of news) files.add(file);
@@ -155,9 +155,9 @@ function main() {
       const run = ghJson("api", `repos/${repository}/actions/runs/${id}`);
       verdicts.set(
         id,
-        run.path === ".github/workflows/candidate.yml" &&
-          run.head_branch === "develop" &&
-          run.conclusion === "success",
+        run.path === ".github/workflows/candidate.yml"
+          && run.head_branch === "develop"
+          && run.conclusion === "success",
       );
     }
     return verdicts.get(id);

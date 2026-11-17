@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
+
 import type { Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
+
 import { areas, clickHydrated, enter, noPageOverflow, open } from "./components";
 import { expect, localOnly, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { localPassword, useLocalAccount, writeLocalDatabase } from "./local-account";
@@ -39,8 +41,8 @@ test.describe("area reale", () => {
     const reread = () =>
       page.waitForResponse(
         (response) =>
-          response.request().method() === "GET" &&
-          new URL(response.url()).pathname.endsWith("/app/impostazioni/aspetto.data"),
+          response.request().method() === "GET"
+          && new URL(response.url()).pathname.endsWith("/app/impostazioni/aspetto.data"),
       );
     let save = saved();
     await page.getByRole("radio", { name: "Scuro", exact: true }).check();
@@ -100,8 +102,8 @@ test.describe("area reale", () => {
     const dismiss = dialog.getByRole("button", { name: "Elimina notifica: Collegamento scaduto" });
     const restored = page.waitForResponse(
       (response) =>
-        response.url().endsWith("/api/v1/notifications") &&
-        Boolean(response.request().postData()?.includes("restore")),
+        response.url().endsWith("/api/v1/notifications")
+        && Boolean(response.request().postData()?.includes("restore")),
     );
     await dismiss.click();
     await expect(dialog).toContainText("Notifica eliminata");
@@ -115,8 +117,8 @@ test.describe("area reale", () => {
     await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
     const dismissed = page.waitForResponse(
       (response) =>
-        response.url().endsWith("/api/v1/notifications") &&
-        Boolean(response.request().postData()?.includes("dismiss")),
+        response.url().endsWith("/api/v1/notifications")
+        && Boolean(response.request().postData()?.includes("dismiss")),
     );
     await dialog.getByRole("button", { name: "Elimina tutte" }).click();
     expect((await dismissed).status()).toBe(200);
@@ -246,9 +248,9 @@ test.describe("area reale", () => {
         .getByRole("button", { name: it ? "Conferma" : "Confirm", exact: true })
         .click();
       await expect(
-        page.getByRole("status").filter({
-          hasText: it ? "Ti abbiamo inviato un link" : "We sent a link",
-        }),
+        page
+          .getByRole("status")
+          .filter({ hasText: it ? "Ti abbiamo inviato un link" : "We sent a link" }),
       ).not.toHaveCount(0);
       // Link dell'email: lo stesso formato di Better Auth, con un token noto nella D1 locale.
       const token = `${id.replaceAll("-", "")}link`;
@@ -322,11 +324,13 @@ test.describe("area reale", () => {
       // L'avviso della verifica dice anche «We sent a link»: conta soltanto l'esito della
       // cancellazione, sotto il pulsante.
       await expect(
-        page.getByRole("status").filter({
-          hasText: it
-            ? `Ti abbiamo inviato un link a ${id}@example.invalid. Aprilo entro un’ora`
-            : `We sent a link to ${id}@example.invalid. Open it within one hour`,
-        }),
+        page
+          .getByRole("status")
+          .filter({
+            hasText: it
+              ? `Ti abbiamo inviato un link a ${id}@example.invalid. Aprilo entro un’ora`
+              : `We sent a link to ${id}@example.invalid. Open it within one hour`,
+          }),
       ).toBeVisible();
       expect(errors).toEqual([]);
     });
@@ -588,9 +592,7 @@ for (const width of [390, 768, 1440]) {
         exact: true,
       });
       await expect(message).toBeFocused();
-      await expect(page.locator('[role="alert"][data-slot="alert"]')).toBeInViewport({
-        ratio: 1,
-      });
+      await expect(page.locator('[role="alert"][data-slot="alert"]')).toBeInViewport({ ratio: 1 });
       await expect(message).toHaveAttribute("aria-invalid", "true");
       await expect(message).toHaveAccessibleDescription(
         it ? "Scrivi il messaggio." : "Write your message.",
@@ -611,10 +613,7 @@ for (const width of [390, 768, 1440]) {
 
       await open(page, pagePath(prefix, "/anteprima/impostazioni/account"));
       const profile = page.getByRole("region", { name: "Account", exact: true });
-      const first = profile.getByRole("textbox", {
-        name: it ? "Nome" : "First name",
-        exact: true,
-      });
+      const first = profile.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
       const last = profile.getByRole("textbox", {
         name: it ? "Cognome" : "Last name",
         exact: true,
@@ -634,10 +633,7 @@ for (const width of [390, 768, 1440]) {
         expect(lastBox!.y).toBeGreaterThan(firstBox!.y);
       }
       await expect.poll(() => noPageOverflow(page)).toBe(true);
-      await page.screenshot({
-        path: testInfo.outputPath(`profile-${locale}.png`),
-        fullPage: true,
-      });
+      await page.screenshot({ path: testInfo.outputPath(`profile-${locale}.png`), fullPage: true });
     }
   });
 
@@ -772,8 +768,8 @@ test.describe("assistenza reale", () => {
       await message.fill("Il negozio non si aggiorna.");
       const sent = page.waitForResponse(
         (response) =>
-          response.request().method() === "POST" &&
-          /\/app\/(?:impostazioni\/supporto|settings\/support)/u.test(response.url()),
+          response.request().method() === "POST"
+          && /\/app\/(?:impostazioni\/supporto|settings\/support)/u.test(response.url()),
       );
       await send.click();
       expect((await sent).status()).toBe(200);
@@ -836,9 +832,9 @@ test.describe("negozio attivo del Free", () => {
       await page.goto(pagePath(prefix, "/app/negozi"));
       const paused = it ? "In pausa per il piano Free" : "Paused on the Free plan";
       const row = (name: string) =>
-        page.getByRole("table", { name: it ? "Elenco negozi" : "Store list" }).getByRole("row", {
-          name: new RegExp(name, "u"),
-        });
+        page
+          .getByRole("table", { name: it ? "Elenco negozi" : "Store list" })
+          .getByRole("row", { name: new RegExp(name, "u") });
       await expect(row("Negozio secondario")).toContainText(paused);
       await expect(row("Negozio principale")).not.toContainText(paused);
       await page.goto(`${pagePath(prefix, "/app/negozi")}/${id}-2`);
@@ -995,10 +991,7 @@ test.describe("abbonamento nel piano", () => {
                 ? "Rinnovo disdetto: Pro resta attivo fino al"
                 : "Renewal cancelled: Pro stays active until",
             },
-            pending: {
-              title: "Free",
-              text: it ? "Attivazione Pro in corso" : "Activating Pro",
-            },
+            pending: { title: "Free", text: it ? "Attivazione Pro in corso" : "Activating Pro" },
             lapsed: {
               title: "Free",
               text: it ? "per mantenere il tuo prezzo" : "to keep your price",
@@ -1167,8 +1160,8 @@ test.describe("notifiche Telegram", () => {
       const saved = (name: string) =>
         page.waitForResponse(
           (response) =>
-            response.request().method() === "POST" &&
-            new URLSearchParams(response.request().postData() ?? "").get("name") === name,
+            response.request().method() === "POST"
+            && new URLSearchParams(response.request().postData() ?? "").get("name") === name,
         );
       await expect(
         page.getByRole("radio", {
@@ -1215,15 +1208,15 @@ test.describe("notifiche Telegram", () => {
       // I Negozi mostrano lo stesso stato, con la scorciatoia verso le Notifiche.
       await page.goto(pagePath(prefix, "/app/negozi"));
       const row = (name: string) =>
-        page.getByRole("table", { name: t("Elenco negozi", "Store list") }).getByRole("row", {
-          name: new RegExp(`^${name}`, "u"),
-        });
+        page
+          .getByRole("table", { name: t("Elenco negozi", "Store list") })
+          .getByRole("row", { name: new RegExp(`^${name}`, "u") });
       await expect(row("Secondo negozio notifiche")).toContainText(t("Disattivate", "Off"));
       await page.goto(`${pagePath(prefix, "/app/negozi")}/${id}-2`);
       await expect(
-        page.getByRole("dialog").getByRole("link", {
-          name: t("Apri le notifiche", "Open notifications"),
-        }),
+        page
+          .getByRole("dialog")
+          .getByRole("link", { name: t("Apri le notifiche", "Open notifications") }),
       ).toHaveAttribute("href", pagePath(prefix, "/app/impostazioni/notifiche"));
 
       // Una consegna ferma compare nelle Notifiche, con gli stessi testi dell'anteprima.
@@ -1339,9 +1332,11 @@ test.describe("notifiche Telegram", () => {
         .getByRole("button", { name: it ? "Collega Telegram" : "Connect Telegram" })
         .click();
       await expect(
-        page.getByRole("status").filter({
-          hasText: it ? "Anteprima: l’azione è simulata." : "Preview: this action is simulated.",
-        }),
+        page
+          .getByRole("status")
+          .filter({
+            hasText: it ? "Anteprima: l’azione è simulata." : "Preview: this action is simulated.",
+          }),
       ).toBeVisible();
     });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+
 import { UpstreamError, upstreamJson, upstreamText } from "../app/integrations/http.server";
 
 describe("confine HTTP dei provider", () => {
@@ -94,11 +95,7 @@ describe("confine HTTP dei provider", () => {
       await failure(
         upstreamText(
           vi.fn<typeof fetch>(
-            async () =>
-              new Response(null, {
-                status: 429,
-                headers: { "retry-after": "non-data" },
-              }),
+            async () => new Response(null, { status: 429, headers: { "retry-after": "non-data" } }),
           ),
           url,
         ),

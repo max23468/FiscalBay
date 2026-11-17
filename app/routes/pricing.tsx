@@ -18,8 +18,8 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+
 import { appCopy } from "../app-copy";
-import { sitePages } from "../copy/site-pages.server";
 import {
   accessPath,
   comparisonGuidePath,
@@ -29,17 +29,18 @@ import {
   visitParam,
 } from "../app-links";
 import { annualPaidMonths, lifetimeSlots, premiumOffers, priceGeneration } from "../catalog";
-import { languageFromPath, localizedPath } from "../i18n";
+import { sitePages } from "../copy/site-pages.server";
 import { hasLifetime } from "../domain/lifetime.server";
-import { publicPage, publicPageCache, siteListing } from "../site.server";
+import { languageFromPath, localizedPath } from "../i18n";
 import { siteMeta } from "../site-meta";
+import { publicPage, publicPageCache, siteListing } from "../site.server";
 import type { Route } from "./+types/pricing";
 
 /**
- * Prezzi (§23): Free e le tre modalità Premium nello stesso confronto, dal listino del sito
- * comune alla home. Promozione, posti lifetime e sospensione degli acquisti si leggono a ogni
- * richiesta, entro il minuto della cache breve per chi non ha cookie; senza il database resta
- * il listino di riserva, senza quota, prova o posti.
+ * Prezzi (§23): Free e le tre modalità Premium nello stesso confronto, dal listino del sito comune
+ * alla home. Promozione, posti lifetime e sospensione degli acquisti si leggono a ogni richiesta,
+ * entro il minuto della cache breve per chi non ha cookie; senza il database resta il listino di
+ * riserva, senza quota, prova o posti.
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const [{ language, origin, session }, listing] = await Promise.all([

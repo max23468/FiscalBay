@@ -1,5 +1,24 @@
 import { z } from "zod";
 
+import { logFailure } from "../errors";
+import {
+  ebayConfiguration,
+  ebayEnvironmentAvailable,
+} from "../integrations/ebay/environment.server";
+import {
+  clearCredentialFailures,
+  countCredentialFailure,
+} from "../integrations/ebay/seller-credentials.server";
+import { UpstreamError } from "../integrations/http.server";
+import type { EbayEnvironment } from "../view-models";
+import { servedSql } from "./admission.server";
+import { activeEntitlementSql } from "./grants.server";
+import { historyStartSql, storeWorkspaceSql } from "./history-window.server";
+import {
+  defaultRateLimitSeconds,
+  rateLimitWait,
+  workerShare,
+} from "./order-acquisition-context.server";
 import {
   acquireOrders,
   requestStoreRead,
@@ -7,15 +26,8 @@ import {
   type ActiveStore,
 } from "./order-acquisition.server";
 import { ensureOrderEvents } from "./order-events.server";
-import {
-  defaultRateLimitSeconds,
-  rateLimitWait,
-  workerShare,
-} from "./order-acquisition-context.server";
-import { servedSql } from "./admission.server";
+import { visibleOrderState } from "./orders.server";
 import { switchOnSql } from "./service-settings.server";
-import { activeEntitlementSql } from "./grants.server";
-import { historyStartSql, storeWorkspaceSql } from "./history-window.server";
 import {
   activeStore,
   dormantWorkspaceSql,
@@ -23,26 +35,14 @@ import {
   writableStore,
 } from "./store-state.server";
 import { deliverTelegram } from "./telegram-deliveries.server";
-import { logFailure } from "../errors";
-import { UpstreamError } from "../integrations/http.server";
-import {
-  clearCredentialFailures,
-  countCredentialFailure,
-} from "../integrations/ebay/seller-credentials.server";
-import type { EbayEnvironment } from "../view-models";
-import {
-  ebayConfiguration,
-  ebayEnvironmentAvailable,
-} from "../integrations/ebay/environment.server";
-import { visibleOrderState } from "./orders.server";
 
 /**
  * Lettura periodica dei negozi e richieste manuali. Il cron parte ogni dieci minuti, sceglie i
- * negozi dovuti e ne accoda la lettura a gruppi di dieci; «Sincronizza» e «Reimporta» la
- * accodano subito per il solo negozio. Ogni messaggio porta soltanto i riferimenti ai negozi e il
- * consumer ne legge uno alla volta. La richiesta resta in D1 finché una lettura partita dopo non la serve: richieste
- * ripetute confluiscono nella stessa e il cron riaccoda quelle che la coda non ha consegnato.
- * Gli eventi eBay seguono l'ingresso dei webhook e non dipendono dal piano.
+ * negozi dovuti e ne accoda la lettura a gruppi di dieci; «Sincronizza» e «Reimporta» la accodano
+ * subito per il solo negozio. Ogni messaggio porta soltanto i riferimenti ai negozi e il consumer
+ * ne legge uno alla volta. La richiesta resta in D1 finché una lettura partita dopo non la serve:
+ * richieste ripetute confluiscono nella stessa e il cron riaccoda quelle che la coda non ha
+ * consegnato. Gli eventi eBay seguono l'ingresso dei webhook e non dipendono dal piano.
  */
 
 export type SyncPlan = "free" | "premium";
@@ -67,9 +67,9 @@ const storeBudget = { calls: 12, pages: 3 };
 // cento di un invio a gruppi della coda.
 const dispatchLimit = 300;
 /**
- * Negozi di un messaggio del cron, letti in sequenza dalla stessa invocazione: ogni messaggio
- * costa tre operazioni della coda, e un messaggio per negozio supererebbe le operazioni incluse
- * nel piano. Le richieste manuali e i webhook restano a un negozio per messaggio.
+ * Negozi di un messaggio del cron, letti in sequenza dalla stessa invocazione: ogni messaggio costa
+ * tre operazioni della coda, e un messaggio per negozio supererebbe le operazioni incluse nel
+ * piano. Le richieste manuali e i webhook restano a un negozio per messaggio.
  */
 const syncGroupSize = 10;
 // Un turno accodato senza esito entro questo tempo si considera perso e si ripropone.
@@ -82,12 +82,12 @@ function dueBefore(now: Date, minutes: number): number {
 }
 
 /**
- * Smistamento periodico: sceglie in ordine di priorità i negozi attivi con un token valido e
- * ne accoda la lettura, che il consumer esegue con il budget di un negozio. Il claim in D1
- * precede l'invio: trigger ripetuti o sovrapposti non accodano due volte lo stesso negozio,
- * mentre un turno accodato e mai servito si ripropone dopo `dispatchStaleMilliseconds`. I
- * negozi di un'origine API in attesa per un limite di eBay non si accodano, nessuno con le
- * chiamate eBay spente dalla console.
+ * Smistamento periodico: sceglie in ordine di priorità i negozi attivi con un token valido e ne
+ * accoda la lettura, che il consumer esegue con il budget di un negozio. Il claim in D1 precede
+ * l'invio: trigger ripetuti o sovrapposti non accodano due volte lo stesso negozio, mentre un turno
+ * accodato e mai servito si ripropone dopo `dispatchStaleMilliseconds`. I negozi di un'origine API
+ * in attesa per un limite di eBay non si accodano, nessuno con le chiamate eBay spente dalla
+ * console.
  */
 export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<string[]> {
   const at = now.toISOString();
@@ -198,7 +198,7 @@ export type SyncRequestResult =
   | "merged"
   /** Reimportazione chiesta mentre lo storico si sta ancora importando. */
   | "importing"
-  /** eBay chiede di attendere: la richiesta resta e parte alla scadenza dell'attesa. */
+  /** EBay chiede di attendere: la richiesta resta e parte alla scadenza dell'attesa. */
   | "limited"
   /** Chiamate eBay spente dalla console: la richiesta resta e parte alla riaccensione. */
   | "suspended"
@@ -220,8 +220,8 @@ export function isSyncMessage(body: unknown): body is z.infer<typeof syncMessage
 /**
  * «Sincronizza» o «Reimporta» dalla schermata Negozi, solo su un negozio attivo dello spazio
  * dell'utente, oppure dalla console amministrativa con `userId` null. La reimportazione riparte
- * dalla finestra dello storico del piano soltanto quando l'importazione precedente è conclusa;
- * poi entrambe chiedono una lettura del negozio.
+ * dalla finestra dello storico del piano soltanto quando l'importazione precedente è conclusa; poi
+ * entrambe chiedono una lettura del negozio.
  */
 export async function requestStoreSync(
   env: Env,
@@ -289,12 +289,12 @@ export async function requestStoreSync(
 type Deferral = { delaySeconds: number; scope: "store" | "origin" };
 
 /**
- * Esegue dalla coda una richiesta manuale, un webhook o un gruppo di turni accodato dal cron.
- * Una consegna ripetuta dopo la lettura trova il lavoro già servito e non chiama eBay; un
- * negozio occupato riprova poco dopo, un limite di eBay alla scadenza dell'attesa. Gli altri
- * errori restano fra gli ultimi aggiornamenti e il negozio passa il turno: la lettura riprende
- * con la cadenza del piano. In un gruppo i negozi rinviati tornano al cron, che non li accoda
- * prima della fine di un'attesa di eBay: il messaggio si chiude comunque.
+ * Esegue dalla coda una richiesta manuale, un webhook o un gruppo di turni accodato dal cron. Una
+ * consegna ripetuta dopo la lettura trova il lavoro già servito e non chiama eBay; un negozio
+ * occupato riprova poco dopo, un limite di eBay alla scadenza dell'attesa. Gli altri errori restano
+ * fra gli ultimi aggiornamenti e il negozio passa il turno: la lettura riprende con la cadenza del
+ * piano. In un gruppo i negozi rinviati tornano al cron, che non li accoda prima della fine di
+ * un'attesa di eBay: il messaggio si chiude comunque.
  */
 export async function consumeStoreSync(
   message: Message<unknown>,
@@ -412,10 +412,10 @@ async function serveStore(
 }
 
 /**
- * «Riprova» di un ordine la cui lettura fiscale non è riuscita: soltanto un ordine che l'utente
- * può consultare nell'ambiente, e soltanto se la lettura del negozio si può richiedere. Il
- * dettaglio Fulfillment torna da leggere; un ordine noto solo a Trading si rilegge con la
- * passata Trading del negozio.
+ * «Riprova» di un ordine la cui lettura fiscale non è riuscita: soltanto un ordine che l'utente può
+ * consultare nell'ambiente, e soltanto se la lettura del negozio si può richiedere. Il dettaglio
+ * Fulfillment torna da leggere; un ordine noto solo a Trading si rilegge con la passata Trading del
+ * negozio.
  */
 export async function requestOrderRead(
   env: Env,

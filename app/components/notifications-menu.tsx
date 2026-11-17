@@ -16,10 +16,11 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
+import { useCopy, useLinks } from "~/components/copy-context";
 import { StatusIcon, type StatusIconType } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "~/components/ui/popover";
-import { useCopy, useLinks } from "~/components/copy-context";
+
 import { appHref } from "../app-links";
 import { formatRelative } from "../format";
 import { maxReadNotifications, type NotificationKind, type NotificationView } from "../view-models";
@@ -93,9 +94,9 @@ export function NotificationsMenu({
     const active = document.activeElement;
     if (active && active !== document.body) return;
     const target =
-      dismissAllButton.current ??
-      list.current?.querySelector<HTMLElement>("a, button") ??
-      panelHeader.current?.closest<HTMLElement>('[data-slot="popover-content"]');
+      dismissAllButton.current
+      ?? list.current?.querySelector<HTMLElement>("a, button")
+      ?? panelHeader.current?.closest<HTMLElement>('[data-slot="popover-content"]');
     target?.focus();
   }, [undo, open]);
 

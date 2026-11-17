@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 
 import { useCopy, useLinks } from "~/components/copy-context";
 import { useDate } from "~/components/time-zone";
+
 import { signalPasskeyState } from "../../account/passkey";
+import { appHref } from "../../app-links";
 import type { PendingEmailChange } from "../../domain/email-change.server";
 import type { PasskeySignals } from "../../domain/passkey-user.server";
 import type { ActiveSession } from "../../domain/sessions.server";
 import type { SignInMethods } from "../../domain/sign-in-methods.server";
-import { appHref } from "../../app-links";
 import { ConfirmIdentity } from "./confirm-identity";
+import { Group } from "./controls";
 import { EmailChange } from "./security-email";
 import { AddPasskey, PasskeyRename } from "./security-passkeys";
-import { Group } from "./controls";
 import { MethodAction, MethodRow } from "./security-rows";
 import { SessionList } from "./security-sessions";
 
@@ -64,9 +65,9 @@ export function AccountSecurity({
   const [confirmed, setConfirmed] = useState(false);
   const [waiting, setWaiting] = useState<{ run: () => void; passkeyOnly: boolean } | null>(null);
   const blocked = (intent: string) =>
-    !confirmed &&
-    ((recentIntents.has(intent) && !recent) ||
-      (passkeyIntents.has(intent) && passkeyRestriction !== null));
+    !confirmed
+    && ((recentIntents.has(intent) && !recent)
+      || (passkeyIntents.has(intent) && passkeyRestriction !== null));
   const guard = (intent: string, run: () => void) => {
     if (!blocked(intent)) return run();
     setWaiting({

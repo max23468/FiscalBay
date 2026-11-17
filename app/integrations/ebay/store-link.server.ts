@@ -1,10 +1,11 @@
 import { z } from "zod";
+
 import type { Language } from "../../i18n";
-import { upstreamJson } from "../http.server";
 import { base64Url } from "../../sealed.server";
-import type { SellerTokens } from "./seller-credentials.server";
 import type { EbayEnvironment } from "../../view-models";
+import { upstreamJson } from "../http.server";
 import { ebayConfiguration, requestToken, type EbayAccess } from "./environment.server";
+import type { SellerTokens } from "./seller-credentials.server";
 
 // Il collegamento del negozio non chiede l'email: resta separato dal login eBay. Le notifiche
 // servono soltanto a sottoscrivere `ORDER_CONFIRMATION` del venditore (D235).

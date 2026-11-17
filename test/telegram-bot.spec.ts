@@ -2,15 +2,16 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { setSwitch } from "../app/domain/service-settings.server";
-import { saveTelegramChange, telegramSettings } from "../app/domain/telegram.server";
-import { verifyTelegramUpdate } from "../app/integrations/telegram.server";
-import { receiveWebhook } from "../app/webhooks.server";
 import {
   configureBotCommands,
   configureBotProfile,
   consumeTelegramUpdate,
 } from "../app/domain/telegram-bot.server";
+import { saveTelegramChange, telegramSettings } from "../app/domain/telegram.server";
+import { verifyTelegramUpdate } from "../app/integrations/telegram.server";
+import { receiveWebhook } from "../app/webhooks.server";
 import { insertStore, later, now, resetDatabase } from "./fixtures/database-fixtures";
+import { pagePath } from "./fixtures/route-fixtures";
 import { fakeBot as bot } from "./fixtures/telegram-fixtures";
 import {
   origin,
@@ -34,7 +35,6 @@ import {
   receipt,
   callbackId,
 } from "./fixtures/telegram-scenarios";
-import { pagePath } from "./fixtures/route-fixtures";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -460,8 +460,8 @@ describe("comandi e pulsanti del bot", () => {
   } as const;
 
   /**
-   * Chat collegata nella lingua data, con dodici negozi: da ricollegare, attivo, escluso,
-   * sospeso per il piano, con un nome oltre i quaranta caratteri e altri sette.
+   * Chat collegata nella lingua data, con dodici negozi: da ricollegare, attivo, escluso, sospeso
+   * per il piano, con un nome oltre i quaranta caratteri e altri sette.
    */
   async function storefront(language: "it" | "en") {
     const seller = await linked(`menu-${language}`);
@@ -958,9 +958,7 @@ describe("comandi e pulsanti del bot", () => {
     ).resolves.toBeUndefined();
     await expect(
       consumeTelegramUpdate(environment, update, answering(502), new Date(now)),
-    ).rejects.toMatchObject({
-      failure: "unavailable",
-    });
+    ).rejects.toMatchObject({ failure: "unavailable" });
   });
 
   it("stato, preferenze e negozi senza negozi, con una sola pagina e con dieci negozi", async () => {

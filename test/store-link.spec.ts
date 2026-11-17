@@ -1,25 +1,36 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { acquireOrders } from "../app/domain/order-acquisition.server";
-import { storeProfileRefreshMilliseconds } from "../app/domain/store-profile.server";
-import { listVisibleOrders } from "../app/domain/orders.server";
-import { deleteStoreData, disconnectStore, listStores } from "../app/domain/stores.server";
+
 import { handleAuthRequest } from "../app/auth-route.server";
-import { loader as loadHome } from "../app/routes/orders";
-import { action as signIn } from "../app/routes/sign-in";
-import { action as startStoreLink, loader as loadStoreLink } from "../app/routes/store-link";
-import { loader as loadStores } from "../app/routes/stores";
-import { openToken, refreshStoreToken } from "../app/integrations/ebay/seller-credentials.server";
-import {
-  startStoreLink as beginLink,
-  claimStoreLinkSession,
-} from "../app/integrations/ebay/store-link.server";
+import { createAuth } from "../app/auth.server";
+import { acquireOrders } from "../app/domain/order-acquisition.server";
+import { orderView } from "../app/domain/order-view.server";
+import { listVisibleOrders } from "../app/domain/orders.server";
 import {
   activateSignupGrant,
   completeStoreLink,
   saveSignupGrant,
 } from "../app/domain/store-link.server";
+import { storeProfileRefreshMilliseconds } from "../app/domain/store-profile.server";
+import { deleteStoreData, disconnectStore, listStores } from "../app/domain/stores.server";
 import { ebayConfiguration, sandboxAvailable } from "../app/integrations/ebay/environment.server";
+import { openToken, refreshStoreToken } from "../app/integrations/ebay/seller-credentials.server";
+import {
+  startStoreLink as beginLink,
+  claimStoreLinkSession,
+} from "../app/integrations/ebay/store-link.server";
+import { loader as loadHome } from "../app/routes/orders";
+import { action as signIn } from "../app/routes/sign-in";
+import { action as startStoreLink, loader as loadStoreLink } from "../app/routes/store-link";
+import { loader as loadStores } from "../app/routes/stores";
+import {
+  emailLink,
+  emailSender,
+  mailEnv,
+  sessionCookie,
+  verifiedSession,
+} from "./fixtures/account-fixtures";
+import { accessError, accessForm, homeFor } from "./fixtures/account-route-fixtures";
 import { now, resetDatabase } from "./fixtures/database-fixtures";
 import {
   syntheticEbay,
@@ -31,23 +42,13 @@ import {
   withSandbox,
 } from "./fixtures/ebay-fixtures";
 import {
-  emailLink,
-  emailSender,
-  mailEnv,
-  sessionCookie,
-  verifiedSession,
-} from "./fixtures/account-fixtures";
-import { accessError, accessForm, homeFor } from "./fixtures/account-route-fixtures";
-import { createAuth } from "../app/auth.server";
-import { beginStoreLink, storeCallback, storeLinkSessions } from "./fixtures/store-link-fixtures";
-import { orderView } from "../app/domain/order-view.server";
-import {
   callRoute,
   routeData,
   routeResponse,
   testOrigin,
   pagePath,
 } from "./fixtures/route-fixtures";
+import { beginStoreLink, storeCallback, storeLinkSessions } from "./fixtures/store-link-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -95,10 +96,7 @@ describe("autorizzazione eBay data in registrazione", () => {
     const owner = await grantFor("consenso@example.invalid");
     const row = await env.DB.prepare(
       "SELECT access_token, refresh_token FROM ebay_signup_grants",
-    ).first<{
-      access_token: string;
-      refresh_token: string;
-    }>();
+    ).first<{ access_token: string; refresh_token: string }>();
     expect(JSON.stringify(row)).not.toContain("sintetico");
 
     expect(await activate(owner.userId)).toBe("collegato");
@@ -673,12 +671,7 @@ describe("collegamento negozio eBay", () => {
         shipping: { status: "to_ship" },
         fiscal: { state: "locked", shownAs: "CF" },
         items: [
-          {
-            id: "riga-sintetica",
-            title: "Articolo sintetico",
-            quantity: 2,
-            sku: "SKU-SINTETICO",
-          },
+          { id: "riga-sintetica", title: "Articolo sintetico", quantity: 2, sku: "SKU-SINTETICO" },
         ],
       },
     ]);
@@ -883,9 +876,9 @@ describe("collegamento negozio eBay", () => {
             "x-ebay-api-iaf-token": "token-sintetico",
           },
           body:
-            '<?xml version="1.0" encoding="utf-8"?>' +
-            '<GetStoreRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
-            "<Version>1455</Version><LevelLimit>1</LevelLimit></GetStoreRequest>",
+            '<?xml version="1.0" encoding="utf-8"?>'
+            + '<GetStoreRequest xmlns="urn:ebay:apis:eBLBaseComponents">'
+            + "<Version>1455</Version><LevelLimit>1</LevelLimit></GetStoreRequest>",
         },
         {
           url: "https://api.ebay.com/ws/api.dll",
@@ -898,9 +891,9 @@ describe("collegamento negozio eBay", () => {
             "x-ebay-api-iaf-token": "token-sintetico",
           },
           body:
-            '<?xml version="1.0" encoding="utf-8"?>' +
-            '<GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
-            "<Version>1455</Version></GetUserRequest>",
+            '<?xml version="1.0" encoding="utf-8"?>'
+            + '<GetUserRequest xmlns="urn:ebay:apis:eBLBaseComponents">'
+            + "<Version>1455</Version></GetUserRequest>",
         },
       ]),
     );
@@ -962,13 +955,13 @@ describe("collegamento negozio eBay", () => {
           "x-ebay-api-iaf-token": "token-sintetico",
         },
         body:
-          '<?xml version="1.0" encoding="utf-8"?>' +
-          '<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">' +
-          "<Version>1455</Version><DetailLevel>ReturnAll</DetailLevel>" +
-          "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
-          "<OrderIDArray><OrderID>12-&lt;0&gt;&amp;1</OrderID></OrderIDArray>" +
-          "<Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>1</PageNumber></Pagination>" +
-          "</GetOrdersRequest>",
+          '<?xml version="1.0" encoding="utf-8"?>'
+          + '<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">'
+          + "<Version>1455</Version><DetailLevel>ReturnAll</DetailLevel>"
+          + "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>"
+          + "<OrderIDArray><OrderID>12-&lt;0&gt;&amp;1</OrderID></OrderIDArray>"
+          + "<Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>1</PageNumber></Pagination>"
+          + "</GetOrdersRequest>",
       },
     ]);
     // I recenti partono dall'istante del collegamento, con la sovrapposizione; lo storico copre
@@ -1080,8 +1073,8 @@ describe("collegamento negozio eBay", () => {
         lastModifiedDate: modified,
         trading: () =>
           new Response(
-            '<GetOrdersResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Success</Ack>' +
-              "<OrderArray></OrderArray></GetOrdersResponse>",
+            '<GetOrdersResponse xmlns="urn:ebay:apis:eBLBaseComponents"><Ack>Success</Ack>'
+              + "<OrderArray></OrderArray></GetOrdersResponse>",
           ),
       }),
     );
@@ -1321,9 +1314,7 @@ describe("collegamento negozio eBay", () => {
         results: [{ ebay_order_id: syntheticOrderId }],
       });
       expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM tax_identifiers").first()).toEqual(
-        {
-          total: 0,
-        },
+        { total: 0 },
       );
       expect(
         await env.DB.prepare(
@@ -1369,9 +1360,7 @@ describe("collegamento negozio eBay", () => {
       const callback = await handleAuthRequest(
         storeCallback(`state=${state}&code=scaduto`, cookie),
         env,
-        syntheticEbay({
-          token: () => Response.json({ error: "invalid_grant" }, { status: 400 }),
-        }),
+        syntheticEbay({ token: () => Response.json({ error: "invalid_grant" }, { status: 400 }) }),
       );
       expect(callback.headers.get("location")).toBe(
         "http://localhost:5173/app/ordini?negozio=errore",
