@@ -15,6 +15,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { gzipSync } from "node:zlib";
+import { buildOutput } from "./lib/build-output.mjs";
 
 /**
  * Soglie in KiB gzip: sito, documenti legali ed errori; area riservata, accesso e anteprima.
@@ -112,7 +113,7 @@ export function missingCacheRules(directory) {
 const kib = (bytes) => (bytes / 1024).toFixed(1);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const directory = process.argv[2] ?? ".cloudflare/output/v0/workers/default/assets";
+  const directory = process.argv[2] ?? `${buildOutput()}/workers/default/assets`;
   let result;
   let missing;
   try {

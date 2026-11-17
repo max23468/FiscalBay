@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
+import { buildOutput } from "../lib/build-output.mjs";
 import { cf as cfCli, cfJson, ghJson, retry } from "../lib/provider.mjs";
 import { fragmentEntries, headings, withChanges } from "../../app/changelog-fragments.mjs";
 import { downloadRecord, observedRelease } from "./records.mjs";
@@ -34,9 +35,9 @@ const targets = {
   production: { worker: "fiscalbay", origin: "https://fiscalbay.it", ref: "main", mode: "live" },
 };
 const output = ".cloudflare/output";
-const readOutput = () => ({
-  root: JSON.parse(readFileSync(`${output}/v0/config.json`, "utf8")),
-  worker: JSON.parse(readFileSync(`${output}/v0/workers/default/worker.config.json`, "utf8")),
+const readOutput = (version = buildOutput(output)) => ({
+  root: JSON.parse(readFileSync(`${version}/config.json`, "utf8")),
+  worker: JSON.parse(readFileSync(`${version}/workers/default/worker.config.json`, "utf8")),
 });
 
 /**
@@ -830,7 +831,9 @@ function provider(target) {
   const cf = (...args) => cfCli(args, { ci: true });
   const json = (...args) => cfJson(args, { ci: true });
   // Il rollback d'incidente non ha un artefatto: legge soltanto il Worker.
-  const config = existsSync(`${output}/v0/config.json`) ? readOutput().worker : undefined;
+  const version = buildOutput(output);
+  const config =
+    version && existsSync(`${version}/config.json`) ? readOutput(version).worker : undefined;
   let database = config?.env.DB;
   // Il primo deployment dell'elenco è quello che serve il traffico.
   const activeDeployment = () =>

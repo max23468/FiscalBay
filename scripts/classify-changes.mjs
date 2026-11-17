@@ -135,8 +135,8 @@ const browserSpec = /^e2e\/([^/]+\.spec)\.ts$/u;
 // Prove browser e loro strumenti, compreso il D1 locale dell'account sintetico: provano la build
 // ma non cambiano l'artefatto distribuito.
 const browser =
-  /^(?:e2e\/|playwright\.config\.ts$|scripts\/(?:browser-tests|local-preview|local-d1)\.mjs$)/u;
-const browserRunner = /^scripts\/(?:browser-tests|local-preview|local-d1)\.mjs$/u;
+  /^(?:e2e\/|playwright\.config\.ts$|scripts\/(?:browser-tests|local-preview|local-d1|lib\/build-output)\.mjs$)/u;
+const browserRunner = /^scripts\/(?:browser-tests|local-preview|local-d1|lib\/build-output)\.mjs$/u;
 
 /**
  * Vero se le due versioni della configurazione differiscono soltanto nei valori
@@ -437,7 +437,7 @@ export const areaTags = Object.keys(areaPatterns);
 /** Cambiare il processo richiede la sua qualifica anche senza distribuire il prodotto. */
 export const qualificationChange = (files) =>
   files.some((file) =>
-    /^(?:\.github\/(?:workflows\/|actions\/)|scripts\/(?:release\/|classify-changes|browser-(?:tests|evidence)|pages-reuse|find-(?:build|deployed)|mutation(?:-reuse)?|lib\/(?:provider|worker|critical-modules)))/u.test(
+    /^(?:\.github\/(?:workflows\/|actions\/)|scripts\/(?:release\/|classify-changes|browser-(?:tests|evidence)|pages-reuse|find-(?:build|deployed)|mutation(?:-reuse)?|lib\/(?:provider|worker|critical-modules|build-output)))/u.test(
       file,
     ),
   );
