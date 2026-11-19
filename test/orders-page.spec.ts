@@ -17,6 +17,7 @@ import { visibleOrderFacets } from "../app/domain/orders.server";
 import { completeRegistration, marketingTextVersions } from "../app/domain/registration.server";
 import { setSwitch } from "../app/domain/service-settings.server";
 import { ebayOutage, listStores } from "../app/domain/stores.server";
+import { loader as loadNotifications } from "../app/routes/notifications";
 import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
 import { action as startStoreLink } from "../app/routes/store-link";
 import { action as storesAction, loader as loadStores } from "../app/routes/stores";
@@ -370,6 +371,13 @@ describe("pagina Ordini reale", () => {
         href: "novita",
       },
     ]);
+    // Un account riceve le versioni dal giorno italiano della registrazione, quello compreso.
+    const versions = (memberSince: string) =>
+      whatsNewNotifications("it", at, test, releases, new Date(memberSince)).map(({ id }) => id);
+    expect(versions("2026-11-10T21:00:00.000Z")).toEqual(["whats-new:2.0.3", "whats-new:2.0.1"]);
+    expect(versions("2026-11-10T23:30:00.000Z")).toEqual(["whats-new:2.0.3"]);
+    expect(versions("2026-11-19T22:59:00.000Z")).toEqual(["whats-new:2.0.3"]);
+    expect(versions("2026-11-20T08:00:00.000Z")).toEqual([]);
     // Senza l'istante del deploy la versione in preparazione resta fuori dalla campanella.
     expect(whatsNewNotifications("it", at, { production: false }, [releases[0]])).toEqual([]);
     expect(
@@ -388,6 +396,11 @@ describe("pagina Ordini reale", () => {
       expect(await bell("it")).toEqual([]);
       whatsNewReleases().push(...releases);
       expect((await areaShell(cookie)).whatsNew).toBe(true);
+      // L'account è nato dopo la 2.0.1: campanella e badge dell'app installata non la contano.
+      const shell = (await areaShell(cookie)).notifications ?? [];
+      expect(shell.map(({ id }) => id)).not.toContain("whats-new:2.0.1");
+      const badge = await routeResponse(loadNotifications, "/api/v1/notifications", { cookie });
+      expect(await badge.json()).toEqual({ unread: shell.length });
       expect(
         (await routeData(loadWhatsNew, "/en/app/whats-new", { cookie })).releases.map(
           (release: { version: string; date: string | null }) => [release.version, release.date],
