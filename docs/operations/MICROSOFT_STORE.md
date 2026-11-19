@@ -112,7 +112,7 @@ Badge dell'icona con le notifiche da leggere
 Interfaccia in italiano e in inglese, tema chiaro e scuro
 ```
 
-**Termini di ricerca**: al massimo 7, senza prezzi e senza nomi di prodotti di altri editori (policy 10.1.3), quindi senza «eBay», che compare già in titolo e descrizione: `codice fiscale`, `partita IVA`, `fattura elettronica`, `export ordini`, `ordini online`, `venditori online`, `marketplace`.
+**Termini di ricerca**: al massimo 7, senza prezzi (policy 10.1.3): `codice fiscale`, `partita IVA`, `fattura elettronica`, `export ordini`, `venditori online`, `eBay`, `ProBay`. La policy esclude anche i nomi di prodotti di altri editori: «eBay» e «ProBay» ci sono per scelta dell'owner del 2026-11-20, e si tolgono se la certificazione li contesta.
 
 ### English
 
@@ -168,7 +168,7 @@ App icon badge with your unread notifications
 Interface in Italian and English, light and dark theme
 ```
 
-**Search terms**, con la stessa regola: `tax code`, `codice fiscale`, `VAT number`, `e-invoicing`, `order export`, `online sellers`, `marketplace`.
+**Search terms**, con la stessa scelta: `tax code`, `codice fiscale`, `VAT number`, `e-invoicing`, `order export`, `eBay`, `ProBay`.
 
 <a id="iarc"></a>
 ## Classificazione IARC
