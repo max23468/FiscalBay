@@ -195,14 +195,14 @@ La policy 10.3.1 chiede un account dimostrativo funzionante nelle note, e il ser
 2. **Account dimostrativo con un negozio eBay di prova** dell'owner, collegato in Production, con pochi ordini fatti apposta: la funzione principale si vede con dati che l'owner controlla. Richiede un negozio e ordini creati per la verifica.
 3. **Account dell'owner**: escluso, perché mostrerebbe ordini e dati fiscali di acquirenti reali.
 
-Le credenziali scelte vanno soltanto nel campo di Partner Center e nell'inventario privato, mai nel repository.
+Il 2026-11-19 l'owner ha scelto l'account senza negozio. Lo registra lui in Production, con un indirizzo email suo diverso da quello dell'account admin e una password nuova, e conferma l'email; non collega negozi. Le credenziali vanno soltanto nel campo di Partner Center e nell'inventario privato (voce `microsoftStore`), mai nel repository. Se la certificazione chiede di vedere gli ordini, si passa all'account con il negozio di prova.
 
 Testo proposto, da completare con le credenziali:
 
 ```text
 FiscalBay is a web app for Italian eBay sellers (fiscalbay.it): it reads the seller's eBay orders through eBay's official APIs, read only, and shows the buyer's tax code (Codice Fiscale) when eBay provides it. The package opens the same site published by its owner.
 
-Demo account: select «Accedi» (Sign in) on the home page or open https://fiscalbay.it/en/sign-in with email <email> and password <password>. The account <has no eBay store connected / is connected to a test eBay store with sample orders>. Connecting a store requires an eBay seller account and eBay's own consent page.
+Demo account: select «Accedi» (Sign in) on the home page or open https://fiscalbay.it/en/sign-in with email <email> and password <password>. The account has no eBay store connected, so the Orders page shows its empty state: connecting a store requires a real eBay seller account and eBay's own consent page. Settings, Plan and payments, notifications and the account pages are fully available; https://fiscalbay.it/en/features shows the orders view with sample data.
 
 Purchases: the app is free. The optional Pro plan (monthly, annual or lifetime) is sold in the app through Stripe, a secure third-party payment provider, as declared in Product declarations; Stripe identifies itself on its checkout page and confirms each transaction. Pricing and the 14-day trial without card are stated in the description.
 

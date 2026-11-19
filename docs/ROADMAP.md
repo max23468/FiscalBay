@@ -169,7 +169,7 @@ FiscalBay si installa come web app con manifest nelle due lingue, scorciatoie, p
 <a id="2-0-15"></a>
 #### 2.0-15 · Microsoft Store
 
-**Stato:** Da completare · **Prerequisiti:** [2.0-14](#2-0-14) in Production; account dimostrativo scelto dall'owner · **Contratto:** [§2](product/PRODUCT.md#s02) · [§16](product/EXPERIENCE.md#s16)
+**Stato:** Da completare · **Prerequisiti:** [2.0-14](#2-0-14) in Production; account dimostrativo senza negozio registrato dall'owner · **Contratto:** [§2](product/PRODUCT.md#s02) · [§16](product/EXPERIENCE.md#s16)
 
 Pacchetto della web app con PWABuilder e invio nel Microsoft Store secondo il [runbook](operations/MICROSOFT_STORE.md): scheda in italiano e inglese con schermate, Privacy e Supporto, classificazione IARC, dichiarazione del fornitore di pagamento esterno per gli abbonamenti e account dimostrativo nelle note di certificazione ([D342](decisions/DECISION_REGISTER.md)). Nome prenotato e identità del pacchetto ci sono; testi, immagini, badge e voce del menu su Windows sono pronti e si pubblicano dopo l'approvazione, perché la scheda non esiste prima. Un cambio del manifest richiede un nuovo pacchetto.
 
