@@ -24,7 +24,7 @@ Un pacchetto nuovo, con un nuovo invio, serve soltanto quando cambia il manifest
 
 | Sezione di Partner Center | Valore |
 |---|---|
-| Prezzi e disponibilità | App gratuita, senza componenti aggiuntivi dello Store. I mercati li sceglie l'owner: il servizio riguarda chi vende su eBay.it e la scheda è in italiano e in inglese |
+| Prezzi e disponibilità | App gratuita, senza componenti aggiuntivi dello Store, in tutti i mercati (scelta dell'owner del 2026-11-19): chi vende su eBay.it può trovarsi all'estero e la scheda è anche in inglese |
 | Proprietà | Categoria «Business», sottocategoria a scelta fra quelle proposte. Privacy `https://fiscalbay.it/privacy`, sito `https://fiscalbay.it/`, assistenza `supporto@fiscalbay.it` |
 | Dichiarazioni del prodotto | Spuntare «Il prodotto consente acquisti ma non usa il sistema commerciale di Microsoft Store» (policy 10.8.2 e 10.8.6: gli abbonamenti Pro passano da Stripe). Lasciare spuntati i due predefiniti su unità alternative e backup. Accessibilità, penna e intelligenza artificiale generativa restano vuote |
 | Classificazione | [Questionario IARC](#iarc) |
