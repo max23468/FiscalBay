@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { appCopy } from "../app/app-copy";
 import features from "../app/components/orders/motion-features";
 import { areaSection, shellMenu } from "../app/components/shell-links";
-import { installGuide } from "../app/installed-app";
+import { installSystem } from "../app/installed-app";
 import {
   exportHref,
   exportOrderHref,
@@ -87,7 +87,7 @@ describe("ambito dell'esportazione dagli Ordini", () => {
   });
 });
 
-describe("istruzioni di installazione", () => {
+describe("sistema dell'installazione", () => {
   const target = (userAgent: string, { touch = 0, installed = false } = {}) => ({
     navigator: { userAgent, maxTouchPoints: touch },
     matchMedia: () => ({ matches: installed }) as MediaQueryList,
@@ -95,23 +95,30 @@ describe("istruzioni di installazione", () => {
   const mac = (browser: string) =>
     `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) ${browser}`;
 
-  it("le mostra su iPhone e iPad con ogni browser e su Mac soltanto con Safari 17 o successivo", () => {
+  it("Store su Windows, istruzioni su iPhone, iPad e Safari 17 per Mac, altrove il browser", () => {
     const iphone =
       "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0 Mobile/15E148 Safari/604.1";
-    expect(installGuide(target(iphone))).toBe("ios");
+    const windows = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36";
+    expect(installSystem(target(iphone))).toBe("ios");
     // Un iPad si presenta come Mac, ma con il tocco.
-    expect(installGuide(target(mac("Version/18.0 Safari/605.1.15"), { touch: 5 }))).toBe("ios");
-    expect(installGuide(target(mac("Version/18.0 Safari/605.1.15")))).toBe("mac");
-    expect(installGuide(target(mac("Version/16.6 Safari/605.1.15")))).toBeNull();
-    expect(installGuide(target(mac("Chrome/130.0 Safari/537.36")))).toBeNull();
-    expect(installGuide(target(mac("Version/18.0 Safari/605.1.15 Edg/130.0")))).toBeNull();
+    expect(installSystem(target(mac("Version/18.0 Safari/605.1.15"), { touch: 5 }))).toBe("ios");
+    expect(installSystem(target(mac("Version/18.0 Safari/605.1.15")))).toBe("mac");
+    expect(installSystem(target(mac("Version/16.6 Safari/605.1.15")))).toBeNull();
+    expect(installSystem(target(mac("Chrome/130.0 Safari/537.36")))).toBeNull();
+    expect(installSystem(target(mac("Version/18.0 Safari/605.1.15 Edg/130.0")))).toBeNull();
+    expect(installSystem(target(windows))).toBe("windows");
+    expect(installSystem(target(`${windows} Edg/130.0`))).toBe("windows");
     expect(
-      installGuide(target("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36")),
+      installSystem(target("Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox One) Edge/44")),
     ).toBeNull();
-    // Già installata non serve nulla.
-    expect(installGuide(target(iphone, { installed: true }))).toBeNull();
     expect(
-      installGuide({
+      installSystem(target("Mozilla/5.0 (X11; Linux x86_64) Chrome/130.0 Safari/537.36")),
+    ).toBeNull();
+    // Già installata non serve nulla, nemmeno lo Store.
+    expect(installSystem(target(iphone, { installed: true }))).toBeNull();
+    expect(installSystem(target(windows, { installed: true }))).toBeNull();
+    expect(
+      installSystem({
         ...target(iphone),
         navigator: { ...target(iphone).navigator, standalone: true },
       }),

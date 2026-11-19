@@ -10,6 +10,14 @@ import { bellName, whatsNewUnread } from "./page-cases";
  * badge dell'icona. Le funzioni dell'app installata esistono soltanto nei browser Chromium.
  */
 
+/** Edge su Windows: il sito propone l'installazione dal Microsoft Store. */
+const windowsAgent =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0";
+
+/** Scheda di FiscalBay nel Microsoft Store, nella lingua della pagina. */
+const storeListing = (language: "it" | "en") =>
+  `https://apps.microsoft.com/detail/9NJTL8FD7DMH?hl=${language === "it" ? "it-IT" : "en-GB"}`;
+
 /** Larghezza e altezza di un PNG, dall'intestazione del file. */
 function pngSize(bytes: Buffer) {
   expect(bytes.subarray(1, 4).toString("latin1")).toBe("PNG");
@@ -99,6 +107,42 @@ test.describe("app installabile", () => {
       expect(installabilityErrors).toEqual([]);
     }
     expect(browserErrors).toEqual([]);
+  });
+
+  test("fuori da Windows nessun badge dello Store", async ({ page }) => {
+    await page.goto("/");
+    await networkIdle(page);
+    await expect(page.locator('a[href^="https://apps.microsoft.com/"]')).toHaveCount(0);
+  });
+
+  test.describe("su Windows", () => {
+    test.use({ userAgent: windowsAgent });
+
+    test("il badge dello Store sta con i pulsanti della home e nel footer", async ({ page }) => {
+      for (const [path, language, name] of [
+        ["/", "it", "Scarica da Microsoft Store"],
+        ["/en", "en", "Download from the Microsoft Store"],
+      ] as const) {
+        await page.goto(path);
+        await networkIdle(page);
+        const hero = page.locator("section").first().getByRole("link", { name });
+        await expect(hero).toHaveAttribute("href", storeListing(language));
+        await expect(hero.getByRole("img")).toHaveAttribute(
+          "src",
+          `/store/microsoft-store-${language}-light.svg`,
+        );
+        // Nel footer la variante segue il tema: quella nascosta non si legge e non si scarica.
+        await expect(page.getByRole("contentinfo").getByRole("link", { name })).toHaveAttribute(
+          "href",
+          storeListing(language),
+        );
+      }
+      for (const variant of ["it-dark", "it-light", "en-dark", "en-light"]) {
+        const image = await page.request.get(`/store/microsoft-store-${variant}.svg`);
+        expect(image.status(), variant).toBe(200);
+        expect(image.headers()["content-type"]).toContain("image/svg+xml");
+      }
+    });
   });
 
   test.describe("service worker", () => {
@@ -209,6 +253,35 @@ test.describe("app installabile", () => {
       // L'offerta vale una volta: la voce sparisce finché il browser non la ripropone.
       await openMenu();
       await expect(install).toHaveCount(0);
+    });
+
+    test.describe("su Windows", () => {
+      test.use({ userAgent: windowsAgent });
+
+      test("«Installa l'app» apre la scheda dello Store", async ({ page, localIdentity }) => {
+        expect(localIdentity.token).toBeTruthy();
+        // La scheda si apre in una nuova finestra: qui si registra l'indirizzo, senza uscire in rete.
+        await page.addInitScript(() => {
+          Object.assign(window, {
+            open: (url: string) => void Object.assign(window, { storeOpened: url }),
+          });
+        });
+        await page.goto("/app/ordini");
+        await networkIdle(page);
+        // Anche con l'offerta del browser, su Windows vale lo Store.
+        await page.evaluate(() => {
+          window.dispatchEvent(
+            Object.assign(new Event("beforeinstallprompt", { cancelable: true }), {
+              prompt: async () => undefined,
+            }),
+          );
+        });
+        await page.getByRole("button", { name: "Account" }).click();
+        await page.getByRole("menu").getByRole("menuitem", { name: "Installa l’app" }).click();
+        expect(await page.evaluate(() => (window as { storeOpened?: string }).storeOpened)).toBe(
+          storeListing("it"),
+        );
+      });
     });
 
     test("riporta le notifiche da leggere della campanella e sparisce all'uscita", async ({

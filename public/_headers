@@ -7,9 +7,11 @@
 /site/*
   Cache-Control: public, max-age=31536000, immutable
 
-# Icone e immagini delle condivisioni hanno nomi stabili: restano in cache per trenta giorni, e
+# Icone, immagini delle condivisioni e badge dello Store hanno nomi stabili: restano in cache per trenta giorni, e
 # una versione rigenerata arriva entro quel termine.
 /og/*
   Cache-Control: public, max-age=2592000
 /icon-*
+  Cache-Control: public, max-age=2592000
+/store/*
   Cache-Control: public, max-age=2592000

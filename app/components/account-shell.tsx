@@ -19,8 +19,8 @@ import {
   orderSearchPath,
   withEnvironment,
 } from "../app-links";
-import { localizedPath } from "../i18n";
-import { clearAppBadge, useInstall } from "../installed-app";
+import { localizedPath, type Language } from "../i18n";
+import { clearAppBadge, microsoftStoreUrl, useInstall } from "../installed-app";
 import type { ShellData } from "../preferences";
 
 // Le istruzioni di Safari arrivano al primo clic, fuori dal JavaScript iniziale dell'area.
@@ -29,6 +29,21 @@ const InstallGuideDialog = lazy(() =>
     default: InstallGuideDialog,
   })),
 );
+
+/**
+ * Voce `Installa l'app`: su Windows apre la scheda dello Store, altrove l'installazione di Chrome
+ * ed Edge oppure le istruzioni di Safari.
+ */
+function installAction(
+  install: ReturnType<typeof useInstall>,
+  language: Language,
+  openGuide: () => void,
+) {
+  if (!install) return undefined;
+  if (install.kind === "store")
+    return () => void window.open(microsoftStoreUrl(language), "_blank", "noopener");
+  return install.kind === "prompt" ? install.open : openGuide;
+}
 
 /**
  * Shell dell'area reale: le stesse barra e menu dell'anteprima, con le sole destinazioni che
@@ -92,12 +107,7 @@ export function AccountShell({
           verified: security,
           whatsNew: shell?.whatsNew,
           admin: shell?.admin,
-          // Chrome ed Edge aprono la propria installazione, Safari le istruzioni.
-          install: install
-            ? install.kind === "prompt"
-              ? install.open
-              : () => setGuideOpen(true)
-            : undefined,
+          install: installAction(install, language, () => setGuideOpen(true)),
           language: {
             href: languagePath,
             onSelect: (chosen) =>
