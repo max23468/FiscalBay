@@ -1264,8 +1264,16 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
           } catch (error) {
             uploadError = error;
           }
-        version ??= findVersion();
-        if (!version) throw uploadError ?? new Error("Versione caricata non trovata.");
+        // L'elenco di Cloudflare mostra la versione appena caricata dopo qualche secondo: si
+        // rilegge per mezzo minuto prima di concludere che il caricamento non è avvenuto.
+        version ??= await retry(
+          () => {
+            const found = findVersion();
+            if (!found) throw uploadError ?? new Error("Versione caricata non trovata.");
+            return found;
+          },
+          { attempts: 6, delay: (attempt) => attempt * 2000 },
+        );
         try {
           deployment(
             [
