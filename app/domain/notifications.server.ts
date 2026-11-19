@@ -16,8 +16,9 @@ import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
  * del Free, le esportazioni preparate dalla coda, pronte finché il file resta scaricabile o non
  * riuscite, e le comunicazioni di servizio della console; ogni notifica ha un identificativo
  * stabile per problema, così la lettura vale finché il problema resta lo stesso. Si aggiunge una
- * voce per ogni rilascio con Novità, identificata dalla sua versione, e l'invito ad accettare la
- * versione corrente dei Termini finché manca. Le notifiche eliminate dall'utente non compaiono.
+ * voce per ogni rilascio con Novità uscito dal giorno della registrazione, identificata dalla sua
+ * versione, e l'invito ad accettare la versione corrente dei Termini finché manca. Le notifiche
+ * eliminate dall'utente non compaiono.
  */
 export async function listNotifications(
   db: D1Database,
@@ -26,8 +27,9 @@ export async function listNotifications(
   language: Language,
   timeZone: string,
   now = new Date(),
-  termsUpdate = false,
+  account: { termsUpdate?: boolean; memberSince?: Date } = {},
 ): Promise<NotificationView[]> {
+  const { termsUpdate = false, memberSince } = account;
   const t = appCopy[language].shell.storeNotifications;
   const since = now.getTime() - notificationWindowMilliseconds;
   const reminder = (store: StoreStatus): NotificationView[] => {
@@ -119,7 +121,7 @@ export async function listNotifications(
     // oltre, la sua lettura non è più conservata e resta l'avviso di Ordini e Negozi.
     ...[...reads, ...inactivity].filter((item) => Date.parse(item.at) >= since),
     ...(await activeServiceNotices(db, language, now)),
-    ...whatsNewNotifications(language, now),
+    ...whatsNewNotifications(language, now, undefined, undefined, memberSince),
     ...(termsUpdate
       ? [
           {

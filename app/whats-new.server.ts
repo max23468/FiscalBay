@@ -90,18 +90,21 @@ export function whatsNewView(
 
 /**
  * Una voce della campanella per versione, negli ultimi trenta giorni, verso la pagina. La versione
- * in preparazione la annuncia dal deploy del Worker che la contiene.
+ * in preparazione la annuncia dal deploy del Worker che la contiene. Un account riceve soltanto le
+ * versioni uscite dal giorno italiano della sua registrazione: le precedenti restano nella pagina.
  */
 export function whatsNewNotifications(
   language: Language,
   now = new Date(),
   context = served(),
   releases: WhatsNewRelease[] = whatsNewReleases(),
+  memberSince?: Date,
 ): NotificationView[] {
   const since = now.getTime() - notificationWindowMilliseconds;
+  const firstDay = memberSince ? italianDay(memberSince) : "";
   return whatsNewView(language, now, context, releases).flatMap((release) => {
     const at = release.date === null ? context.deployedAt : `${release.date}T00:00:00.000Z`;
-    if (!at || Date.parse(at) < since) return [];
+    if (!at || Date.parse(at) < since || italianDay(new Date(at)) < firstDay) return [];
     return [
       {
         id: `whats-new:${release.version}`,

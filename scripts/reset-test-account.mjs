@@ -63,6 +63,8 @@ function syntheticAccount(id, expires, now, workspace, store) {
         VALUES ('${id}', '${id}', '${id}', '${now}', '${store}');`;
 }
 
+const testAccountCreatedAt = "2025-01-01T00:00:00.000Z";
+
 export async function resetStatements(password, now = new Date()) {
   const at = (offset) => new Date(now.getTime() + offset).toISOString();
   const iso = at(0);
@@ -117,10 +119,12 @@ export async function resetStatements(password, now = new Date()) {
     `DELETE FROM notification_reads WHERE user_id = ${quote(userId)};`,
     // Lo spazio porta con sé negozi, token, pause, ordini, identificativi, sblocchi e cicli.
     `DELETE FROM workspaces WHERE id = ${quote(workspaceId)};`,
+    // Registrato prima di ogni versione: la campanella gli porta le Novità di tutti i rilasci
+    // recenti, come le prove si aspettano, e lo stesso vale per gli account copiati da lui.
     `INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
-     VALUES ${row([userId, "Collaudo", email, 1, iso, iso])}
+     VALUES ${row([userId, "Collaudo", email, 1, testAccountCreatedAt, iso])}
      ON CONFLICT(id) DO UPDATE SET name = excluded.name, email = excluded.email,
-       "emailVerified" = 1, "updatedAt" = excluded."updatedAt";`,
+       "emailVerified" = 1, "createdAt" = excluded."createdAt", "updatedAt" = excluded."updatedAt";`,
     `INSERT INTO "account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
      VALUES ${row([`${userId}-credenziale`, userId, "credential", userId, await hashPassword(password), iso, iso])}
      ON CONFLICT(id) DO UPDATE SET password = excluded.password, "updatedAt" = excluded."updatedAt";`,
