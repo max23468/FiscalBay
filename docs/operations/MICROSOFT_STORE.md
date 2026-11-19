@@ -25,19 +25,21 @@ Un pacchetto nuovo, con un nuovo invio, serve soltanto quando cambia il manifest
 | Sezione di Partner Center | Valore |
 |---|---|
 | Prezzi e disponibilità | App gratuita, senza componenti aggiuntivi dello Store, in tutti i mercati (scelta dell'owner del 2026-11-19): chi vende su eBay.it può trovarsi all'estero e la scheda è anche in inglese |
-| Proprietà | Categoria «Business», sottocategoria a scelta fra quelle proposte. Privacy `https://fiscalbay.it/privacy`, sito `https://fiscalbay.it/`, assistenza `supporto@fiscalbay.it` |
-| Dichiarazioni del prodotto | Spuntare «Il prodotto consente acquisti ma non usa il sistema commerciale di Microsoft Store» (policy 10.8.2 e 10.8.6: gli abbonamenti Pro passano da Stripe). Lasciare spuntati i due predefiniti su unità alternative e backup. Accessibilità, penna e intelligenza artificiale generativa restano vuote |
+| Proprietà | Categoria «Lavoro», sottocategoria «Contabilità e finanza». Il prodotto usa informazioni personali: privacy `https://fiscalbay.it/privacy`; sito `https://fiscalbay.it/`, supporto `https://fiscalbay.it/supporto` |
+| Dichiarazioni del prodotto | Spuntare «Questo prodotto consente agli utenti di effettuare acquisti, ma non usa il sistema di e-commerce di Microsoft Store» (policy 10.8.2 e 10.8.6: gli abbonamenti Pro passano da Stripe). Lasciare spuntati i due predefiniti su unità alternative e backup; togliere registrazione e trasmissione, riservate ai giochi. Accessibilità, penna e intelligenza artificiale generativa restano vuote |
 | Classificazione | [Questionario IARC](#iarc) |
 | Pacchetti | `.msixbundle` e `.classic.appxbundle` dello stesso ZIP |
-| Schede dello Store | Italiano e inglese, con i [testi](#scheda) e le [immagini](#immagini) |
-| Opzioni dell'invio | [Note per la certificazione](#certificazione) |
+| Schede dello Store | Italiano (Italia) e inglese (Stati Uniti), con i [testi](#scheda) e le [immagini](#immagini). Prima del pacchetto si aggiungono come lingue aggiuntive; il pacchetto porta poi le sue |
+| Opzioni dell'invio | Pubblicazione soltanto con «Pubblica ora», così l'app esce quando il sito è pronto per il badge. [Note per la certificazione](#certificazione) |
+
+La bozza dell'invio 1 è compilata dal 2026-11-20 in tutto tranne il pacchetto, la conferma della classificazione e le credenziali dell'account dimostrativo.
 
 La certificazione dura in genere uno o due giorni lavorativi. Dopo l'approvazione si rilegge la scheda nello Store e si prova l'installazione su Windows con accesso, collegamento dei provider e badge dell'icona ([2.0-15](../ROADMAP.md#2-0-15)).
 
 <a id="immagini"></a>
 ## Immagini
 
-`node scripts/site-screenshots.mjs --store`, sulla preview locale della build come le schermate del sito, scrive in `build/microsoft-store/` cinque schermate PNG per lingua (Ordini, scheda di un ordine, Negozi eBay, notifiche Telegram, esportazione) dai soli dati dell'anteprima, a 2732×1536 px: la misura minima dello Store è 1366×768, il massimo 3840×2160. Lo stesso comando aggiorna l'icona quadrata della scheda, `docs/brand/logo/exports/fiscalbay-app-icon-300.png`, dall'icona per app approvata. Box art e poster riguardano soltanto i giochi; l'immagine 16:9 del primo piano è facoltativa e non c'è.
+`node scripts/site-screenshots.mjs --store`, sulla preview locale della build come le schermate del sito, scrive in `build/microsoft-store/` cinque schermate PNG per lingua (Ordini, scheda di un ordine, Negozi eBay, notifiche Telegram, esportazione) dai soli dati dell'anteprima, a 2732×1536 px: la misura minima dello Store è 1366×768, il massimo 3840×2160. Lo stesso comando aggiorna l'icona quadrata della scheda, `docs/brand/logo/exports/fiscalbay-app-icon-300.png`, dall'icona per app approvata. Locandina 9:16 e immagine della confezione 1:1 sono facoltative per le app, obbligatorie soltanto su Xbox; l'immagine 16:9 del primo piano è facoltativa e non c'è.
 
 Didascalie, fino a 200 caratteri:
 
@@ -171,20 +173,24 @@ Interface in Italian and English, light and dark theme
 <a id="iarc"></a>
 ## Classificazione IARC
 
-Il questionario chiede prima la categoria, poi domande che dipendono da quella; editore ed email di contatto vanno a IARC. Risposte proposte:
+Il questionario (IARC 10.4) chiede prima il tipo di app, poi domande che dipendono dalle risposte; nome dell'editore ed email vanno a IARC. Risposte date nella bozza del 2026-11-20:
 
 | Domanda | Risposta |
 |---|---|
-| Categoria | App, non gioco: produttività o business, secondo le voci proposte |
-| Violenza, sangue, paura, contenuti sessuali o nudità, linguaggio volgare, umorismo volgare | No |
-| Droghe, alcol, tabacco; gioco d'azzardo, anche simulato | No |
+| Tipo di app | Tutti gli altri tipi di app |
+| Contenuti rilevanti (sesso, violenza, linguaggio) nel pacchetto | No |
 | Gli utenti interagiscono o si scambiano contenuti tra loro | No: ogni account vede soltanto i propri ordini; i messaggi Telegram arrivano al solo titolare |
-| L'app condivide la posizione dell'utente | No |
-| L'app condivide dati personali dell'utente con terzi | No: i fornitori trattano i dati per conto di FiscalBay secondo l'Informativa privacy |
-| Acquisti digitali | Sì: abbonamenti e accesso a vita Pro, pagati con Stripe |
-| Accesso libero a internet | No: l'app mostra le proprie pagine; i collegamenti a eBay e alla documentazione si aprono nel browser |
+| Contenuti online non inclusi nel download | Sì: ordini e articoli letti da eBay |
+| Materiale violento, sessuale, linguaggio offensivo, sostanze, anche fra quelli online | No |
+| Promozione o vendita di prodotti riservati agli adulti | No |
+| Condivisione della posizione precisa con altri utenti | No |
+| Acquisto di beni digitali | Sì: abbonamenti e accesso a vita Pro, pagati con Stripe |
+| Articoli casuali (loot box) | No |
+| Premi in denaro, buoni, criptovalute o asset trasferibili | No |
+| Browser o motore di ricerca; prodotto di notizie o educativo | No |
+| Classificazioni di un altro ente o supporti fisici | No |
 
-Il risultato atteso è la classe più bassa (per esempio PEGI 3), con l'indicazione degli acquisti. La classificazione resta valida per i pacchetti successivi finché il contenuto non cambia.
+L'anteprima dà 3+ per IARC, PEGI e Microsoft, «Per tutti» per ESRB e USK, 14 in Brasile, con «Acquisti in-app». Il salvataggio richiede di accettare le Condizioni d'uso di IARC e di dichiararsi maggiorenni: lo fa l'owner. La classificazione resta valida per i pacchetti successivi finché il contenuto non cambia.
 
 <a id="certificazione"></a>
 ## Note per la certificazione
@@ -197,12 +203,12 @@ La policy 10.3.1 chiede un account dimostrativo funzionante nelle note, e il ser
 
 Il 2026-11-19 l'owner ha scelto l'account senza negozio. Lo registra Codex su sua richiesta, in Production, con una casella che controlla, diversa da quelle dell'account admin e delle verifiche live, e una password nuova, e conferma l'email; non collega negozi. La password sta nel Portachiavi macOS come «FiscalBay Microsoft Store demo», l'email nell'inventario privato (voce `microsoftStore.demoAccount`); all'invio vanno soltanto nel campo di Partner Center, mai nel repository. Se la certificazione chiede di vedere gli ordini, si passa all'account con il negozio di prova.
 
-Testo proposto, da completare con le credenziali:
+Le note hanno una descrizione e una sezione Credenziali separata, dove l'owner inserisce email e password; la descrizione non contiene credenziali. Descrizione salvata nella bozza:
 
 ```text
 FiscalBay is a web app for Italian eBay sellers (fiscalbay.it): it reads the seller's eBay orders through eBay's official APIs, read only, and shows the buyer's tax code (Codice Fiscale) when eBay provides it. The package opens the same site published by its owner.
 
-Demo account: select «Accedi» (Sign in) on the home page or open https://fiscalbay.it/en/sign-in with email <email> and password <password>. The account has no eBay store connected, so the Orders page shows its empty state: connecting a store requires a real eBay seller account and eBay's own consent page. Settings, Plan and payments, notifications and the account pages are fully available; https://fiscalbay.it/en/features shows the orders view with sample data.
+Demo account: the email and password are in the Credentials section of these notes. Select «Accedi» (Sign in) on the home page or open https://fiscalbay.it/en/sign-in and sign in with email and password. The account has no eBay store connected, so the Orders page shows its empty state: connecting a store requires a real eBay seller account and eBay's own consent page. Settings, Plan and payments, notifications and the account pages are fully available; https://fiscalbay.it/en/features shows the orders view with sample data.
 
 Purchases: the app is free. The optional Pro plan (monthly, annual or lifetime) is sold in the app through Stripe, a secure third-party payment provider, as declared in Product declarations; Stripe identifies itself on its checkout page and confirms each transaction. Pricing and the 14-day trial without card are stated in the description.
 
