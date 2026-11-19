@@ -56,6 +56,7 @@ Sorgenti in [`logo/`](logo), esportazioni PNG e `favicon.ico` in [`logo/exports/
 | `fiscalbay-logo.svg` / `fiscalbay-logo-dark.svg` | Logo orizzontale su fondo chiaro / scuro |
 | `fiscalbay-icon-mono.svg`, `fiscalbay-logo-mono.svg` | Monocromo in `currentColor` |
 | `fiscalbay-app-icon.svg` | Icona per app, iOS, Android e Telegram: carta bianca su quadrato blu scuro pieno; maschera e cerchio li applica la piattaforma, la carta resta nella zona sicura dell'80% |
+| `fiscalbay-app-icon-maskable.svg` | Icona `maskable` della web app installabile (`public/icon-maskable-*.png`): la stessa con la carta ridotta, i cui angoli restano ben dentro il cerchio della zona sicura anche con il ritaglio più stretto ([D342](../decisions/DECISION_REGISTER.md)) |
 
 Il contorno blu esiste solo nel logo e nell'icona su fondo chiaro; su fondo scuro la carta è tutta bianca e nelle icone per app il blu scuro diventa lo sfondo. Colori, tre blu in tutto: blu medio `#1A4FA6` per contorno, riga blu e `Bay` su chiaro; blu scuro `#0E3372` per `Fiscal` su chiaro e per lo sfondo delle icone per app; azzurro `#4F87E3` per `Bay` su scuro. Poi card e `Fiscal` su scuro `#FFFFFF`, chip `#F6C12B`, righe verde `#1F9F9A` e rossa `#DA353E`. Le righe raggiungono 3:1 sulla card; il solo chip giallo resta sotto per scelta approvata dall'owner nel set del 2026-09-26 ([PR #181](https://github.com/max23468/FiscalBay/pull/181), [PR #183](https://github.com/max23468/FiscalBay/pull/183)).
 

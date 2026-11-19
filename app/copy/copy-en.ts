@@ -95,6 +95,7 @@ export const en: AppCopy = {
     account: "Account",
     planBilling: "Plan and billing",
     visitSite: "Visit fiscalbay.it",
+    install: "Install the app",
     console: "Console",
     whatsNew: "What’s new",
     whatsNewTitle: (version: string) => `What’s new in FiscalBay ${version}`,

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { barColors } from "../app/theme-colors";
+
 import css from "../app/app.css?raw";
 
 function tokens(selector: string): Record<string, string> {
@@ -68,4 +70,8 @@ describe("design tokens", () => {
       expect(contrast(values[foreground]!, values[background]!)).toBeGreaterThanOrEqual(minimum);
     });
   }
+
+  it("colora la barra del titolo dell'app installata come la barra in alto", () => {
+    expect(barColors).toEqual({ light: themes.light.background, dark: themes.dark.background });
+  });
 });

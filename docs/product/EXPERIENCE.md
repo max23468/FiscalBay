@@ -23,6 +23,8 @@ Gli slug sono default tecnico; ID opachi e controlli server indipendenti dalla r
 
 Un utente autenticato che visita la root viene indirizzato all'app. Dal menu avatar `Visita fiscalbay.it` deve permettere navigazione pubblica senza logout e senza loop: distinguere intenzione di visita pubblica tramite stato/cookie strettamente funzionale o parametro consumato, con canonical pulito e nessuna pagina duplicata indicizzabile.
 
+**App installata** ([D342](../decisions/DECISION_REGISTER.md)). Sito e app si installano come un'unica web app dal browser, in una finestra propria che si apre sulla home e riusa la finestra già aperta per un collegamento; il manifest segue la lingua della pagina e ha le scorciatoie Ordini, Negozi e Impostazioni. La voce `Installa l'app` del menu avatar compare soltanto quando il browser offre l'installazione, senza banner. La barra del titolo ha il colore della barra in alto nel tema scelto. Senza rete una navigazione mostra «Sei offline» con `Riprova`, senza pagine o dati conservati ([§2](PRODUCT.md#s02)). Il badge dell'icona riporta le notifiche da leggere della campanella, anche ad app chiusa quando il browser concede l'aggiornamento periodico, e sparisce senza sessione. Il Microsoft Store distribuirà la stessa web app.
+
 <a id="s19"></a>
 ## 19. Impostazioni, Profilo e campanella
 

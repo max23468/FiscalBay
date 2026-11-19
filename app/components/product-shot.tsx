@@ -2,19 +2,9 @@ import { cn } from "cn";
 import { Fragment } from "react";
 
 import type { Language } from "../i18n";
-import shots from "../site-shots.json";
+import { shots, shotSource as source, type AnyShot } from "../site-shots";
 
-type AnyShot = keyof typeof shots;
 export type ShotName = Exclude<AnyShot, `${string}-mobile`>;
-
-const source = (
-  name: AnyShot,
-  language: Language,
-  scheme: "light" | "dark",
-  format: "webp" | "avif" = "webp",
-  width?: number,
-) =>
-  `/site/${name}-${language}-${scheme}${width ? `-${width}` : ""}.${format}?v=${shots[name][language].version}`;
 
 /** Larghezze ridotte della schermata del primo schermo, oltre all'originale. */
 const priorityWidths = [640, 960] as const;

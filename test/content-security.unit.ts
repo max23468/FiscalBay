@@ -37,6 +37,9 @@ describe("CSP dei documenti", () => {
     // Il solo frame ammesso è il widget Turnstile.
     expect(directives.get("frame-src")).toEqual(["https://challenges.cloudflare.com"]);
     expect(directives.get("default-src")).toEqual(["'self'"]);
+    // Service worker e manifest dell'app installabile soltanto dall'origine.
+    expect(directives.get("worker-src")).toEqual(["'self'"]);
+    expect(directives.get("manifest-src")).toEqual(["'self'"]);
     expect(directives.get("connect-src")).toEqual(["'self'", "https://cloudflareinsights.com"]);
     for (const name of ["object-src", "base-uri", "frame-ancestors"])
       expect(directives.get(name), name).toEqual(["'none'"]);

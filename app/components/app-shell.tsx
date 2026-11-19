@@ -358,18 +358,20 @@ function AccountMenu({
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         {menu.map((group) => (
-          <DropdownMenuGroup key={group.map((item) => item.href).join(" ")}>
+          <DropdownMenuGroup key={group.map((item) => item.href ?? item.label).join(" ")}>
             <DropdownMenuSeparator />
             {group.map(({ href, label, Icon, lang, reloadDocument, onSelect }) => (
               <DropdownMenuItem
-                key={href}
+                key={href ?? label}
                 lang={lang}
                 onClick={() =>
                   onSelect
                     ? onSelect()
-                    : reloadDocument
-                      ? window.location.assign(href)
-                      : void navigate(href)
+                    : href === undefined
+                      ? undefined
+                      : reloadDocument
+                        ? window.location.assign(href)
+                        : void navigate(href)
                 }
               >
                 <Icon aria-hidden="true" />

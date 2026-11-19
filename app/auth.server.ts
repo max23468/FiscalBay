@@ -129,10 +129,16 @@ async function sendPasswordReset(env: Env, user: LinkUser, url: string) {
  * Sessione della richiesta, o null. Quando l'uso la rinnova, il nuovo cookie raggiunge il browser
  * con la risposta: senza, il browser lo scarterebbe alla scadenza del primo accesso.
  */
-export async function readSession(env: Env, request: Request) {
+export async function readSession(
+  env: Env,
+  request: Request,
+  { refresh = true }: { refresh?: boolean } = {},
+) {
   const { headers, response } = await createAuth(env).api.getSession({
     headers: request.headers,
     returnHeaders: true,
+    // Una lettura che nessuno ha chiesto, come il badge dell'app chiusa, non allunga la sessione.
+    ...(refresh ? {} : { query: { disableRefresh: true } }),
   });
   queueResponseCookies(headers);
   return response;

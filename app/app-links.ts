@@ -156,8 +156,14 @@ export const supportSettingsPath = `${settingsPath}/supporto`;
 /** Scelta della lingua dell'account; non ha prefisso perché la lingua arriva nel modulo. */
 export const languagePath = `${appBase}/lingua`;
 
-/** Letture della campanella. */
+/**
+ * Notifiche della campanella: l'invio registra letture ed eliminazioni, la lettura dà il numero da
+ * leggere al badge dell'app installata.
+ */
 export const notificationsPath = "/api/v1/notifications";
+
+/** Manifest dell'app installabile nella lingua della pagina. */
+export const manifestPath = (language: Language) => localizedPath(language, "/site.webmanifest");
 
 /** Controllo delle password trapelate, chiesto dal browser prima dell'invio dei moduli. */
 export const passwordCheckPath = "/api/v1/password-check";

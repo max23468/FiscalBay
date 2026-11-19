@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   ClipboardList,
   LayoutDashboard,
   CreditCard,
@@ -19,7 +20,8 @@ import { canonicalPath, languageNames, localizedPath, type Language } from "../i
  * per una voce che invia una scelta invece di aprire una pagina.
  */
 export interface AccountMenuItem {
-  href: string;
+  /** Assente in una voce che non apre una pagina. */
+  href?: string;
   label: string;
   Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   lang?: Language;
@@ -68,8 +70,9 @@ export function areaSection(pathname: string) {
 
 /**
  * Menu dell'avatar dell'area reale e dell'anteprima: le voci dell'account dopo la conferma
- * dell'email, prima la sola scelta della lingua; in fondo il sito, che con una sessione porterebbe
- * agli Ordini senza il parametro della visita.
+ * dell'email, prima la sola scelta della lingua; in fondo l'installazione dell'app, quando il
+ * browser la offre, e il sito, che con una sessione porterebbe agli Ordini senza il parametro della
+ * visita.
  */
 export function shellMenu(
   links: AppLinks,
@@ -79,6 +82,7 @@ export function shellMenu(
     whatsNew = false,
     admin = false,
     language,
+    install,
   }: {
     verified: boolean;
     whatsNew?: boolean;
@@ -86,6 +90,8 @@ export function shellMenu(
     admin?: boolean;
     /** Scelta della lingua prima della conferma: percorso che la riceve e invio. */
     language: { href: string; onSelect: (language: Language) => void };
+    /** Installazione offerta dal browser in questo momento. */
+    install?: () => void;
   },
 ): AccountMenuItem[][] {
   const other: Language = links.language === "it" ? "en" : "it";
@@ -115,6 +121,7 @@ export function shellMenu(
               onSelect: () => language.onSelect(other),
             },
           ]),
+      ...(install ? [{ label: t.shell.install, Icon: AppWindow, onSelect: install }] : []),
       {
         href: `${localizedPath(links.language)}?${visitParam}=1`,
         label: t.shell.visitSite,

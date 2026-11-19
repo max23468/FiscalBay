@@ -106,6 +106,7 @@ export const it = {
     account: "Account",
     planBilling: "Piano e pagamenti",
     visitSite: "Visita fiscalbay.it",
+    install: "Installa l’app",
     console: "Console",
     whatsNew: "Novità",
     whatsNewTitle: (version: string) => `Novità di FiscalBay ${version}`,

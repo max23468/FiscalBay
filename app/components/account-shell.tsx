@@ -19,6 +19,7 @@ import {
   withEnvironment,
 } from "../app-links";
 import { localizedPath } from "../i18n";
+import { clearAppBadge, useInstallPrompt } from "../installed-app";
 import type { ShellData } from "../preferences";
 
 /**
@@ -46,6 +47,7 @@ export function AccountShell({
   const submit = useSubmit();
   const { pathname, search } = useLocation();
   useDeviceTimeZone();
+  const install = useInstallPrompt();
   // La ricerca resta nell'ambiente eBay mostrato, che sul test può essere la Sandbox.
   const environment = environmentOf(new URLSearchParams(search).get(environmentParam));
   const links = { language, base: appBase };
@@ -80,6 +82,7 @@ export function AccountShell({
         verified: security,
         whatsNew: shell?.whatsNew,
         admin: shell?.admin,
+        install: install ?? undefined,
         language: {
           href: languagePath,
           onSelect: (chosen) =>
@@ -89,12 +92,15 @@ export function AccountShell({
             ),
         },
       })}
-      onSignOut={() =>
+      onSignOut={() => {
+        // L'uscita dal menu è una richiesta della pagina, non un nuovo documento: il badge si
+        // toglie qui. Le uscite con un modulo lo perdono con la memoria del sito.
+        clearAppBadge();
         void submit(
           { intent: "esci" },
           { method: "post", action: localizedPath(language, accessPath) },
-        )
-      }
+        );
+      }}
     >
       {loadingOrders ? <OrdersLoading /> : children}
     </AppShell>

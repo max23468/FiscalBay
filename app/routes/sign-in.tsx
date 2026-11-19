@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { LogOut } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useRouteLoaderData } from "react-router";
 
 import { AccessNotice, VerifyEmail } from "~/components/access-notice";
@@ -45,6 +45,7 @@ import {
   termsPath,
 } from "../app-links";
 import { languageFromPath, localizedPath } from "../i18n";
+import { clearAppBadge } from "../installed-app";
 import { pageHeaders } from "../request-limits.server";
 import { sourceParam } from "../signup-source";
 import { turnstileActions } from "../turnstile";
@@ -619,6 +620,11 @@ export default function SignIn({ loaderData, actionData }: Route.ComponentProps)
   const { language } = loaderData;
   const { notice, remembered, confirming, codeError } = formOutcome(loaderData, actionData);
   const t = appCopy[language].access;
+  // L'uscita e la sessione scaduta arrivano qui: l'icona dell'app installata non conta più nulla.
+  const signedOut = !loaderData.authenticated;
+  useEffect(() => {
+    if (signedOut) clearAppBadge();
+  }, [signedOut]);
   return (
     <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <BrandPanel />
