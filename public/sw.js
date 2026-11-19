@@ -24,16 +24,18 @@ const offlineCopy = {
 
 worker.addEventListener("install", (event) => {
   // Soltanto le navigazioni passano dal worker: il resto va in rete senza avviarlo. Un browser senza
-  // regole di instradamento consegna comunque ogni richiesta, che il worker lascia proseguire.
+  // regole di instradamento, o che non conosce la condizione `not` e la rifiuta anche subito,
+  // consegna comunque ogni richiesta, che il worker lascia proseguire: l'installazione riesce.
   const install = /** @type {InstallEvent & { addRoutes?: (rules: unknown) => Promise<void> }} */ (
     event
   );
-  if (install.addRoutes)
-    event.waitUntil(
-      install
-        .addRoutes({ condition: { not: { requestMode: "navigate" } }, source: "network" })
-        .catch(() => undefined),
-    );
+  event.waitUntil(
+    Promise.resolve()
+      .then(() =>
+        install.addRoutes?.({ condition: { not: { requestMode: "navigate" } }, source: "network" }),
+      )
+      .catch(() => undefined),
+  );
   void worker.skipWaiting();
 });
 

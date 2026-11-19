@@ -10,7 +10,8 @@
         "vitest.benchmark.config.ts",
         "vitest.capacity.config.ts",
         "benchmarks/**/*.bench.ts",
-        "e2e/inventory.ts"
+        "e2e/inventory.ts",
+        "public/sw.js"
       ],
       "ignoreBinaries": ["stripe", "magick"]
     }
