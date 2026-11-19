@@ -18,7 +18,7 @@ import {
 
 import type { Route } from "./+types/root";
 import { appCopy, copyModules, loadCopy, pageTitle } from "./app-copy";
-import { appBase, previewBase } from "./app-links";
+import { appBase, manifestPath, previewBase } from "./app-links";
 import { arrivalSource } from "./arrival-source.server";
 import { LinksProvider } from "./components/copy-context";
 import { UnavailablePage } from "./components/not-found";
@@ -32,6 +32,7 @@ import { revalidateUnlessSnapshot } from "./orders/order-list";
 import { sharedResponse } from "./page-cache.server";
 import { defaultDisplay, matchedShell } from "./preferences";
 import { formatSource } from "./signup-source";
+import { barColors } from "./theme-colors";
 
 import "./app.css";
 
@@ -41,7 +42,6 @@ export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
   { rel: "icon", href: "/favicon.ico", sizes: "any" },
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
-  { rel: "manifest", href: "/site.webmanifest" },
 ];
 
 // Facoltativo: dichiararlo con `bindings.secret()` lo renderebbe obbligatorio in ogni ambiente.
@@ -103,7 +103,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
           name="color-scheme"
           content={display.theme === "system" ? "light dark" : display.theme}
         />
-        <meta name="theme-color" content="#0e3372" />
+        {/* Barra del titolo dell'app installata e del browser mobile: prosegue la barra in alto. */}
+        {display.theme === "system" ? (
+          <>
+            <meta
+              name="theme-color"
+              content={barColors.light}
+              media="(prefers-color-scheme: light)"
+            />
+            <meta
+              name="theme-color"
+              content={barColors.dark}
+              media="(prefers-color-scheme: dark)"
+            />
+          </>
+        ) : (
+          <meta name="theme-color" content={barColors[display.theme]} />
+        )}
+        <link rel="manifest" href={manifestPath(language)} />
         <Meta />
         <Links />
         {data?.copyModules.map((href) => (

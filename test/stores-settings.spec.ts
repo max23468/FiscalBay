@@ -17,7 +17,10 @@ import { revokeSession } from "../app/domain/sessions.server";
 import { supportRequestLimit } from "../app/domain/support-requests.server";
 import { requestLimitRules } from "../app/request-limits";
 import { action as languageAction } from "../app/routes/language";
-import { action as notificationsAction } from "../app/routes/notifications";
+import {
+  action as notificationsAction,
+  loader as notificationsLoader,
+} from "../app/routes/notifications";
 import { action as orderExportAction } from "../app/routes/order-export";
 import { action as ordersAction } from "../app/routes/orders";
 import { action as settingsAction } from "../app/routes/settings";
@@ -616,7 +619,15 @@ it("mostra nella campanella i collegamenti da ricollegare e ricorda le letture",
       origin: from,
       fields: intent ? { ids, intent } : { ids },
     });
+  // Il badge dell'app installata legge lo stesso numero della campanella; senza sessione, 401.
+  const badge = async (cookie?: string) => {
+    const response = await routeResponse(notificationsLoader, "/api/v1/notifications", { cookie });
+    return { status: response.status, ...((await response.json()) as { unread: number }) };
+  };
+  expect(await badge(seller.cookie)).toEqual({ status: 200, unread: 1 });
+  expect(await badge()).toEqual({ status: 401, unread: 0 });
   expect((await read(notification!.id)).status).toBe(200);
+  expect(await badge(seller.cookie)).toEqual({ status: 200, unread: 0 });
   expect((await read(notification!.id)).status).toBe(200);
   expect(await bell()).toEqual([{ ...notification, read: true }]);
   for (const ids of ["", "nessun-prefisso", Array(51).fill("store-x:1").join(",")]) {

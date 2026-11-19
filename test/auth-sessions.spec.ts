@@ -326,11 +326,21 @@ describe("Sessioni, revoche e area admin", () => {
     const due = new Date(Date.now() + 7 * 86_400_000 - 2 * 3_600_000).toISOString();
     const setDue = () =>
       env.DB.prepare('UPDATE "session" SET "expiresAt" = ? WHERE id = ?').bind(due, id).run();
-    const page = (response: Response) =>
+    const page = (response: Response, options?: { refresh: boolean }) =>
       withResponseCookies(async () => {
-        await readSession(env, new Request(`${origin}/app`, { headers: { cookie } }));
+        await readSession(env, new Request(`${origin}/app`, { headers: { cookie } }), options);
         return response;
       });
+    const expiresAt = async () =>
+      (await env.DB.prepare('SELECT "expiresAt" FROM "session" WHERE id = ?')
+        .bind(id)
+        .first<{ expiresAt: string }>())!.expiresAt;
+
+    // La lettura del badge dell'app chiusa non allunga la sessione e non riscrive il cookie.
+    await setDue();
+    const unchanged = await page(new Response(null), { refresh: false });
+    expect(unchanged.headers.getSetCookie()).toEqual([]);
+    expect(new Date(await expiresAt()).getTime()).toBe(new Date(due).getTime());
 
     await setDue();
     const renewed = (await page(new Response(null))).headers.getSetCookie();

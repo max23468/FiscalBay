@@ -30,8 +30,10 @@ const reporting = [`report-uri ${cspReportPath}`, `report-to ${reportGroup}`];
  * essi caricano (`'strict-dynamic'`): moduli di React Router, widget Turnstile e beacon di Web
  * Analytics, che porta il nonce. `https:` vale soltanto nei browser senza `'strict-dynamic'`, che
  * ignorano il nonce. Gli stili inline restano ammessi per gli attributi `style` di React e delle
- * animazioni; l'unico frame esterno è il widget. `form-action` manca di proposito: i form di
- * accesso, collegamento eBay, Stripe e Telegram finiscono con redirect verso pagine dei provider
+ * animazioni; l'unico frame esterno è il widget. Service worker e manifest dell'app installabile
+ * vengono soltanto dall'origine: per i worker la direttiva va scritta, perché altrimenti varrebbe
+ * `script-src`, che con `'strict-dynamic'` non li ammette. `form-action` manca di proposito: i form
+ * di accesso, collegamento eBay, Stripe e Telegram finiscono con redirect verso pagine dei provider
  * che a loro volta rimandano altrove, e il browser applicherebbe la direttiva a ogni passaggio.
  */
 export function contentSecurityPolicy(nonce: string): string {
@@ -43,6 +45,8 @@ export function contentSecurityPolicy(nonce: string): string {
     "font-src 'self'",
     `connect-src 'self' ${webAnalyticsCollector}`,
     `frame-src ${turnstile}`,
+    "worker-src 'self'",
+    "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",

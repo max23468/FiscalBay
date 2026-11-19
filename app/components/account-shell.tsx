@@ -1,3 +1,4 @@
+import { lazy, Suspense, useState } from "react";
 import { useLocation, useNavigation, useSubmit } from "react-router";
 
 import { AppShell } from "~/components/app-shell";
@@ -19,7 +20,15 @@ import {
   withEnvironment,
 } from "../app-links";
 import { localizedPath } from "../i18n";
+import { clearAppBadge, useInstall } from "../installed-app";
 import type { ShellData } from "../preferences";
+
+// Le istruzioni di Safari arrivano al primo clic, fuori dal JavaScript iniziale dell'area.
+const InstallGuideDialog = lazy(() =>
+  import("~/components/install-guide").then(({ InstallGuideDialog }) => ({
+    default: InstallGuideDialog,
+  })),
+);
 
 /**
  * Shell dell'area reale: le stesse barra e menu dell'anteprima, con le sole destinazioni che
@@ -46,6 +55,8 @@ export function AccountShell({
   const submit = useSubmit();
   const { pathname, search } = useLocation();
   useDeviceTimeZone();
+  const install = useInstall();
+  const [guideOpen, setGuideOpen] = useState(false);
   // La ricerca resta nell'ambiente eBay mostrato, che sul test può essere la Sandbox.
   const environment = environmentOf(new URLSearchParams(search).get(environmentParam));
   const links = { language, base: appBase };
@@ -58,45 +69,65 @@ export function AccountShell({
     && navigation.location.pathname === ordersList
     && !pathname.startsWith(ordersList);
   return (
-    <AppShell
-      account={account}
-      notifications={security ? (shell?.notifications ?? undefined) : undefined}
-      notificationsAction={notificationsPath}
-      now={shell?.now}
-      navigation={security ? shellDestinations(links, t) : []}
-      home={ordersList}
-      search={
-        security
-          ? {
-              action:
-                environment === "sandbox"
-                  ? withEnvironment(orderSearchPath, environment)
-                  : orderSearchPath,
-              query: searchQuery,
-            }
-          : undefined
-      }
-      menu={shellMenu(links, t, {
-        verified: security,
-        whatsNew: shell?.whatsNew,
-        admin: shell?.admin,
-        language: {
-          href: languagePath,
-          onSelect: (chosen) =>
-            void submit(
-              { language: chosen, returnTo: `${pathname}${search}` },
-              { method: "post", action: languagePath },
-            ),
-        },
-      })}
-      onSignOut={() =>
-        void submit(
-          { intent: "esci" },
-          { method: "post", action: localizedPath(language, accessPath) },
-        )
-      }
-    >
-      {loadingOrders ? <OrdersLoading /> : children}
-    </AppShell>
+    <>
+      <AppShell
+        account={account}
+        notifications={security ? (shell?.notifications ?? undefined) : undefined}
+        notificationsAction={notificationsPath}
+        now={shell?.now}
+        navigation={security ? shellDestinations(links, t) : []}
+        home={ordersList}
+        search={
+          security
+            ? {
+                action:
+                  environment === "sandbox"
+                    ? withEnvironment(orderSearchPath, environment)
+                    : orderSearchPath,
+                query: searchQuery,
+              }
+            : undefined
+        }
+        menu={shellMenu(links, t, {
+          verified: security,
+          whatsNew: shell?.whatsNew,
+          admin: shell?.admin,
+          // Chrome ed Edge aprono la propria installazione, Safari le istruzioni.
+          install: install
+            ? install.kind === "prompt"
+              ? install.open
+              : () => setGuideOpen(true)
+            : undefined,
+          language: {
+            href: languagePath,
+            onSelect: (chosen) =>
+              void submit(
+                { language: chosen, returnTo: `${pathname}${search}` },
+                { method: "post", action: languagePath },
+              ),
+          },
+        })}
+        onSignOut={() => {
+          // Dopo l'uscita l'icona dell'app installata non conta più notifiche.
+          clearAppBadge();
+          void submit(
+            { intent: "esci" },
+            { method: "post", action: localizedPath(language, accessPath) },
+          );
+        }}
+      >
+        {loadingOrders ? <OrdersLoading /> : children}
+      </AppShell>
+      {install?.kind === "guide" && guideOpen ? (
+        <Suspense fallback={null}>
+          <InstallGuideDialog
+            label={t.shell.install}
+            text={t.shell.installGuide[install.guide]}
+            close={t.shell.close}
+            onClose={() => setGuideOpen(false)}
+          />
+        </Suspense>
+      ) : null}
+    </>
   );
 }

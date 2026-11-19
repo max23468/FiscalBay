@@ -163,6 +163,25 @@ for (const scenario of scenarios) {
             checked("HTTP e llms.txt");
             return;
           }
+          if (scenario.path.endsWith("/site.webmanifest")) {
+            // Manifest dell'app installabile nella lingua dell'indirizzo, con la stessa identità.
+            expect(response.headers()["content-type"]).toMatch(/^application\/manifest\+json/u);
+            const english = scenario.path.startsWith("/en/");
+            expect(await response.json()).toMatchObject({
+              id: "/",
+              lang: english ? "en" : "it",
+              start_url: english ? "/en" : "/",
+              display: "standalone",
+            });
+            checked("HTTP e manifest");
+            return;
+          }
+          if (response.status() === 401) {
+            // Senza sessione il badge dell'app installata non ha notifiche da contare.
+            expect(await response.json()).toEqual({ unread: 0 });
+            checked("HTTP e contratto JSON anonimo");
+            return;
+          }
           if (response.status() === 405) {
             expect(response.headers().allow).toBe("POST");
             checked("HTTP e metodo ammesso");

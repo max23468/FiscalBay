@@ -106,6 +106,11 @@ export const it = {
     account: "Account",
     planBilling: "Piano e pagamenti",
     visitSite: "Visita fiscalbay.it",
+    install: "Installa l’app",
+    installGuide: {
+      ios: "Apri Condividi nel browser e scegli «Aggiungi alla schermata Home».",
+      mac: "Nel menu Archivio di Safari scegli «Aggiungi al Dock».",
+    },
     console: "Console",
     whatsNew: "Novità",
     whatsNewTitle: (version: string) => `Novità di FiscalBay ${version}`,

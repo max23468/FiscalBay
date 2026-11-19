@@ -42,13 +42,13 @@ export type AccountArea = {
  * Sessione corrente, misurata nella fase Auth. Senza il cookie di sessione non c'è nulla da
  * leggere, come nelle pagine pubbliche: Auth non si inizializza.
  */
-export async function currentSession(request: Request) {
+export async function currentSession(request: Request, options?: { refresh?: boolean }) {
   return measure("auth", "session", async () => {
     if (!getSessionCookie(request)) return null;
     const auth = createAuth(env);
     await auth.$context;
     tracePhase(request, "auth-context");
-    const session = await readSession(env, request);
+    const session = await readSession(env, request, options);
     tracePhase(request, "session");
     return session;
   });
@@ -194,6 +194,33 @@ export async function shellData(area: AccountArea, now = new Date()): Promise<Sh
     admin: (session.user as { admin?: boolean }).admin === true,
     now: now.toISOString(),
   };
+}
+
+/**
+ * Notifiche da leggere della campanella per il badge dell'app installata, letto dal service worker
+ * anche ad app chiusa: `null` senza un account che vede la campanella. Non è una visita, quindi non
+ * rinnova la sessione, non conta come attività del Free e non riallinea il piano.
+ */
+export async function unreadNotifications(request: Request, now = new Date()) {
+  const session = await currentSession(request, { refresh: false });
+  if (!session?.user.emailVerified) return null;
+  const userId = session.user.id;
+  const [status, preferences, stores] = await Promise.all([
+    registrationStatus(env.DB, userId),
+    readPreferences(env.DB, userId),
+    listStores(env.DB, userId, now),
+  ]);
+  if (!status || !registrationComplete(status)) return null;
+  const notifications = await listNotifications(
+    env.DB,
+    userId,
+    stores,
+    preferences.language ?? "it",
+    effectiveTimeZone(preferences.timeZone, null),
+    now,
+    !status.termsCurrent,
+  );
+  return notifications.filter((item) => !item.read).length;
 }
 
 export const isSameOrigin = (request: Request) =>

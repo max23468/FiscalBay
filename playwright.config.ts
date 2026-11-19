@@ -30,6 +30,9 @@ export default defineConfig({
     viewport: { width: 1280, height: 900 },
     // Il fuso del dispositivo arriva al server: lo stesso in locale e sui runner in UTC.
     timezoneId: "Europe/Rome",
+    // Le navigazioni passate dal service worker sfuggono alle rotte simulate delle pagine: lo
+    // registrano soltanto le prove dell'app installabile, che lo chiedono.
+    serviceWorkers: "block",
     trace: process.env.E2E_BASE_URL ? "off" : "retain-on-failure",
   },
   projects: [

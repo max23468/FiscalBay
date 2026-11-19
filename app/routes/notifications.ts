@@ -1,16 +1,27 @@
 import { env } from "cloudflare:workers";
 
-import { assertSameOrigin, requireAccountArea } from "../account-area.server";
+import { assertSameOrigin, requireAccountArea, unreadNotifications } from "../account-area.server";
 import {
   dismissNotifications,
   markNotificationsRead,
   parseNotificationIds,
   restoreNotifications,
 } from "../domain/notification-reads.server";
-import { errorResponse, postOnly } from "../error-response";
+import { errorResponse } from "../error-response";
 import type { Route } from "./+types/notifications";
 
-export const loader = postOnly;
+/**
+ * Numero delle notifiche da leggere, per il badge dell'app installata aggiornato dal service
+ * worker. Senza sessione valida risponde 401 invece di portare all'accesso: il worker toglie il
+ * badge.
+ */
+export async function loader({ request }: Route.LoaderArgs) {
+  const unread = await unreadNotifications(request);
+  const headers = { "cache-control": "no-store" };
+  return unread === null
+    ? Response.json({ unread: 0 }, { status: 401, headers })
+    : Response.json({ unread }, { headers });
+}
 
 const changes = {
   read: markNotificationsRead,

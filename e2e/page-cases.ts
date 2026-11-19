@@ -309,6 +309,8 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
         redirect: role === "member" ? pagePath(prefix, "/app/impostazioni/esportazione") : access,
       }),
     ),
+    // Manifest dell'app installabile nella lingua della pagina.
+    make("/site.webmanifest", "public", { endpoint: true, remote: true }),
     make("/pagina-inesistente", "public", { status: 404, pattern: "*", remote: !prefix }),
     ...(prefix
       ? []
@@ -330,9 +332,10 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
           make("/api/v1/orders/search", "orders", { endpoint: true, status: 405 }),
           // Crea soltanto file con la conferma della sezione Esportazione.
           make("/api/v1/orders/export", "settings", { endpoint: true, status: 405 }),
-          // Ricevono soltanto la scelta della lingua e le letture della campanella.
+          // Riceve soltanto la scelta della lingua.
           make("/app/lingua", "settings", { endpoint: true, status: 405 }),
-          make("/api/v1/notifications", "settings", { endpoint: true, status: 405 }),
+          // Senza sessione il numero per il badge dell'app installata non c'è.
+          make("/api/v1/notifications", "settings", { endpoint: true, status: 401 }),
         ]),
   ];
 });

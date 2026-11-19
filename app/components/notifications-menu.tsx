@@ -23,6 +23,7 @@ import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "~/compone
 
 import { appHref } from "../app-links";
 import { formatRelative } from "../format";
+import { useAppBadge } from "../installed-app";
 import { maxReadNotifications, type NotificationKind, type NotificationView } from "../view-models";
 
 /** Un'icona per origine; il colore resta quello del tono. */
@@ -72,6 +73,9 @@ export function NotificationsMenu({
   const isRead = (item: NotificationView) => item.read || readIds.has(item.id);
   const visible = notifications.filter((item) => !dismissedIds.has(item.id));
   const unread = visible.filter((item) => !isRead(item)).length;
+
+  // Soltanto l'area reale registra le letture sul server; l'anteprima ha dati di esempio.
+  useAppBadge(readAction ? unread : null);
 
   // «Annulla» riceve il focus, così anche da tastiera si recupera, e resta per qualche secondo
   // dopo che il focus ha lasciato il piede.

@@ -11,6 +11,8 @@ export default [
   route("robots.txt", "routes/robots.ts"),
   route("sitemap.xml", "routes/sitemap.ts"),
   route("llms.txt", "routes/llms.ts"),
+  route("site.webmanifest", "routes/web-manifest.ts"),
+  route(en("site.webmanifest"), "routes/web-manifest.ts", { id: "web-manifest-en" }),
   route("api/v1/password-check", "routes/password-check.ts"),
   route("auth/error", "routes/auth-error.tsx"),
   route(en("auth/error"), "routes/auth-error.tsx", { id: "auth-error-en" }),

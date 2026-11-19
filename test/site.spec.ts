@@ -283,6 +283,10 @@ describe("radice pubblica e area riservata", () => {
       "/ebay-logo.svg",
       "/og/fiscalbay-it.png",
       "/site/ordini-it-light.webp",
+      "/site.webmanifest",
+      "/en/site.webmanifest",
+      "/icon-maskable-512.png",
+      "/sw.js",
       "/prezzi",
       "/en/security",
     ])

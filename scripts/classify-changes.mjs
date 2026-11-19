@@ -364,7 +364,7 @@ export const moduleAreas = [
     ["auth"],
   ],
   [
-    /^app\/(?:copy\/(?:site-pages|legal-documents|guides)\.server\.ts|components\/(?:site-layout|site-footer|faq-list|product-shot|standalone-page)\.tsx|components\/site-column\.ts|site\.server\.ts|page-cache\.server\.ts|site-meta\.ts|speculation-rules\.ts|contact\.ts)$/u,
+    /^app\/(?:copy\/(?:site-pages|legal-documents|guides)\.server\.ts|components\/(?:site-layout|site-footer|faq-list|product-shot|standalone-page)\.tsx|components\/site-column\.ts|site\.server\.ts|page-cache\.server\.ts|site-meta\.ts|site-shots\.ts|web-manifest\.server\.ts|speculation-rules\.ts|contact\.ts)$/u,
     ["public"],
   ],
   [/^app\/components\/language-switch\.tsx$/u, ["auth", "public"]],
@@ -380,7 +380,7 @@ export const moduleAreas = [
 
 /** Moduli che ogni pagina attraversa, oppure senza un'area che li contenga: provano tutto. */
 export const sharedModules =
-  /^(?:workers\/app\.ts|app\/(?:components\/|copy\/|app\.css$|routes\.ts$|root\.tsx$|entry\.(?:client|server)\.tsx$|(?:access-notice|app-copy|app-links|area-sections|changelog|client-action|error-response|errors|format|i18n|limits|markup|money|preferences|request-limits|support|tax-quality|time|trusted-types|view-models|web-analytics)\.ts$|(?:account-area|account-page|area-actions|auth|content-security|request-limits|response-cookies|sealed|whats-new)\.server\.ts$|domain\/(?:history-window|service-notices|service-settings)\.server\.ts$|preview\/(?:(?:scenarios|scenario-orders|state)\.server|scenario-text)\.ts$))/u;
+  /^(?:workers\/app\.ts|app\/(?:components\/|copy\/|app\.css$|routes\.ts$|root\.tsx$|entry\.(?:client|server)\.tsx$|(?:access-notice|app-copy|app-links|area-sections|changelog|client-action|error-response|errors|format|i18n|installed-app|limits|markup|money|preferences|request-limits|support|tax-quality|theme-colors|time|trusted-types|view-models|web-analytics)\.ts$|(?:account-area|account-page|area-actions|auth|content-security|request-limits|response-cookies|sealed|whats-new)\.server\.ts$|domain\/(?:history-window|service-notices|service-settings)\.server\.ts$|preview\/(?:(?:scenarios|scenario-orders|state)\.server|scenario-text)\.ts$))/u;
 
 /** Moduli applicativi senza area dichiarata e fuori da `sharedModules`. */
 export const undeclaredModules = (files) =>
@@ -401,7 +401,7 @@ function routeAreas(route) {
   if (/settings|whats-new/u.test(route)) areas.push("settings");
   if (/profile/u.test(route)) areas.push("profile");
   if (/security|admin|auth|sign-in/u.test(route)) areas.push("auth");
-  if (/legal|site|robots|support|faq|features|pricing|sitemap|guide/u.test(route))
+  if (/legal|site|robots|support|faq|features|pricing|sitemap|guide|manifest/u.test(route))
     areas.push("public");
   return areas.length ? areas : undefined;
 }

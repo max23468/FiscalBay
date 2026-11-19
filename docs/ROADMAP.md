@@ -8,7 +8,7 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 | Filone | Stato | Contenuto |
 |---|---|---|
 | [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia, verifica del brand Google e richieste a eBay sulle lacune delle API, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.0.x Correzioni](#correzioni-2-0) | Completato | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) e il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), più i motivi di uscita ([D314](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D319](decisions/DECISION_REGISTER.md)) e la coda della pubblicazione ([D321](decisions/DECISION_REGISTER.md)), un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
+| [2.0.x Correzioni](#correzioni-2-0) | In corso | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) e il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), più i motivi di uscita ([D314](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D319](decisions/DECISION_REGISTER.md)) e la coda della pubblicazione ([D321](decisions/DECISION_REGISTER.md)), un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). Restano l'app installabile e la sua pubblicazione nel Microsoft Store ([D342](decisions/DECISION_REGISTER.md)). |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili, pagina pubblica di stato e pagine pubbliche più leggere. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 | [2.6 Ordini con le API moderne](#versione-2-6) | Da completare | Sostituzione di Trading `GetOrders` con Fulfillment, senza scope nuovi ([D334](decisions/DECISION_REGISTER.md)), e dati economici dell'ordine dalla stessa API, in Production prima dello spegnimento del 2027-06-30 ([D333](decisions/DECISION_REGISTER.md)). |
@@ -159,6 +159,22 @@ Conferma dell'email con codice di 6 cifre o link, pulsante per aprire la casella
 
 **Criterio di completamento:** codice, tentativi, nuovo invio e consenso unico provati con test; il consenso eBay reale con i permessi estesi riletto sul test.
 
+<a id="2-0-14"></a>
+#### 2.0-14 · App installabile
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§2](product/PRODUCT.md#s02) · [§16](product/EXPERIENCE.md#s16)
+
+FiscalBay si installa come web app con manifest nelle due lingue, scorciatoie, pagina offline senza cache e badge dell'icona con le notifiche da leggere, aggiornato anche ad app chiusa dove il browser lo concede ([D342](decisions/DECISION_REGISTER.md)). Il badge ad app chiusa e l'installazione reale si provano soltanto con un browser che installa l'app.
+
+<a id="2-0-15"></a>
+#### 2.0-15 · Microsoft Store
+
+**Stato:** Da completare · **Prerequisiti:** [2.0-14](#2-0-14) in Production; account Partner Center e prenotazione del nome dell'owner · **Contratto:** [§2](product/PRODUCT.md#s02) · [§16](product/EXPERIENCE.md#s16)
+
+Pacchetto della web app con PWABuilder e invio nel Microsoft Store: scheda in italiano e inglese con schermate, Privacy e Supporto, classificazione IARC, casella del fornitore di pagamento esterno per gli abbonamenti e account dimostrativo nelle note di certificazione ([D342](decisions/DECISION_REGISTER.md)). Dopo l'approvazione, il badge dello Store in home, nel footer e nel menu dell'avatar su Windows, come proposto all'owner il 2026-11-19. Un cambio del manifest richiede un nuovo pacchetto.
+
+**Criterio di completamento:** app approvata e scheda riletta nello Store; installazione dallo Store provata su Windows con accesso, collegamenti dei provider e badge.
+
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni
 
@@ -258,7 +274,7 @@ Elenco delle funzioni previste per la 2.x, approvato dall'owner il 2026-10-31 e 
 
 L'accessibilità entra nelle correzioni `2.2.x`, dopo i cambi della pagina Ordini: prove manuali con VoiceOver e NVDA sui percorsi principali e correzioni conseguenti, senza dichiarazione di accessibilità pubblicata. Restano fuori dalla 2.x le altre integrazioni con altri servizi e l'accesso con codice via email o con conferma Telegram. Le altre dismissioni delle API Trading annunciate da eBay si coprono con le sostitute moderne in una versione di correzione appena eBay fissa la data; `GetOrders` ha la [2.6](#versione-2-6). Se una funzione visibile si riduce o sparisce decide l'owner prima della pubblicazione.
 
-PayPal **come pagamento** segue la regola dei [metodi di pagamento](product/PLANS_AND_BILLING.md#s06); non è garanzia di roadmap o collegamento login. Niente Microsoft login, nessuna app desktop promessa.
+PayPal **come pagamento** segue la regola dei [metodi di pagamento](product/PLANS_AND_BILLING.md#s06); non è garanzia di roadmap o collegamento login. Niente Microsoft login; su desktop FiscalBay è la web app installabile, anche dal Microsoft Store, senza app native ([D342](decisions/DECISION_REGISTER.md)).
 
 Nella 2.0 FiscalBay non invia né legge messaggi eBay (Message API, `NEW_MESSAGE`), non mostra le linee guida normative di `REGULATORY_GUIDELINE` e non sottoscrive topic con scope propri per spedizioni, annullamenti, resi o preventivi, già coperti dalla lettura periodica (D215, D216). La candidatura all'eBay Partner Program presenta FiscalBay per gestione degli ordini, analisi e conformità fiscale, senza aggiungere gestione di inserzioni o spedizioni ([D255](decisions/DECISION_REGISTER.md), [RE-02](#re-02)). Restano fuori anche le novità eBay estranee agli ordini: Inventory Mapping, garanzia di durabilità UE, taglie moda, condizione delle monete, resi facilitati in Germania, Media API e video, API Buy, annunci video del Marketing, VeRO ed eDIS.
 
