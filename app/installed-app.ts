@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 /**
  * Funzioni dell'app installata: registrazione del service worker (`public/sw.js`), installazione
@@ -96,11 +96,18 @@ function marked() {
   }
 }
 
+/** L'icona dell'app installata riporta le notifiche da leggere della campanella; null, niente. */
+export function useAppBadge(unread: number | null) {
+  useEffect(() => {
+    if (unread !== null) showAppBadge(unread);
+  }, [unread]);
+}
+
 /**
  * Badge dell'icona dell'app installata con le notifiche da leggere, e il suo aggiornamento
  * periodico ad app chiusa quando il browser lo consente.
  */
-export function showAppBadge(unread: number) {
+function showAppBadge(unread: number) {
   const badge = navigator as BadgeNavigator;
   const done = unread > 0 ? badge.setAppBadge?.(unread) : badge.clearAppBadge?.();
   void done?.catch(() => undefined);
