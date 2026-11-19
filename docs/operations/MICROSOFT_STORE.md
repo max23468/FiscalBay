@@ -195,7 +195,7 @@ La policy 10.3.1 chiede un account dimostrativo funzionante nelle note, e il ser
 2. **Account dimostrativo con un negozio eBay di prova** dell'owner, collegato in Production, con pochi ordini fatti apposta: la funzione principale si vede con dati che l'owner controlla. Richiede un negozio e ordini creati per la verifica.
 3. **Account dell'owner**: escluso, perché mostrerebbe ordini e dati fiscali di acquirenti reali.
 
-Il 2026-11-19 l'owner ha scelto l'account senza negozio. Lo registra lui in Production, con un indirizzo email suo diverso da quello dell'account admin e una password nuova, e conferma l'email; non collega negozi. Le credenziali vanno soltanto nel campo di Partner Center e nell'inventario privato (voce `microsoftStore`), mai nel repository. Se la certificazione chiede di vedere gli ordini, si passa all'account con il negozio di prova.
+Il 2026-11-19 l'owner ha scelto l'account senza negozio. Lo registra Codex su sua richiesta, in Production, con una casella che controlla, diversa da quelle dell'account admin e delle verifiche live, e una password nuova, e conferma l'email; non collega negozi. La password sta nel Portachiavi macOS come «FiscalBay Microsoft Store demo», l'email nell'inventario privato (voce `microsoftStore.demoAccount`); all'invio vanno soltanto nel campo di Partner Center, mai nel repository. Se la certificazione chiede di vedere gli ordini, si passa all'account con il negozio di prova.
 
 Testo proposto, da completare con le credenziali:
 
