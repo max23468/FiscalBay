@@ -12,6 +12,7 @@ Requisiti di dominio, osservabilità e continuità, con lo stato dei servizi est
 - [Avvio e collaudo commerciale](LAUNCH.md): verifica commerciale, checklist operativa e sorveglianza.
 - [Ripristino dei dati](RECOVERY.md): ripristino con le protezioni native e drill conclusivo.
 - [Assistenza sui pagamenti](BILLING_SUPPORT.md): rimborsi, dispute, cancellazioni finanziarie, concessioni e riconciliazione con Stripe.
+- [Microsoft Store](MICROSOFT_STORE.md): account, pacchetto PWABuilder, scheda, classificazione e certificazione.
 
 <a id="s24"></a>
 ## 24. Dominio, DNS, TLS e posta

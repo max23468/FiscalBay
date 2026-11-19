@@ -15,6 +15,10 @@
  * `e2e/local-account.ts`: `E2E_PORT`, la porta fissa in CI o quella del worktree. Ogni schermata
  * porta nell'indirizzo una versione ricavata dai suoi file, così il browser la conserva a lungo:
  * dopo una modifica a mano dei file, `node scripts/site-screenshots.mjs --versions`.
+ *
+ * Con `--store [origine]` scrive invece le schermate PNG della scheda del Microsoft Store in
+ * `build/microsoft-store/`, fuori dal repository, e l'icona da 300 px della scheda in
+ * `docs/brand/logo/exports/` ([procedura](../docs/operations/MICROSOFT_STORE.md)).
  */
 
 import { execFileSync } from "node:child_process";
@@ -26,7 +30,7 @@ import { chromium } from "@playwright/test";
 
 import { localOrigin } from "../e2e/local-account.ts";
 
-const base = process.argv[2] ?? localOrigin;
+const base = process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? localOrigin;
 const output = "public/site";
 const languages = ["it", "en"];
 const schemes = ["light", "dark"];
@@ -350,6 +354,10 @@ async function capture(browser, shot, language, scheme) {
         animations: "disabled",
         ...(shot.region ? { clip: await region(page, shot.region) } : {}),
       });
+  if (shot.png) {
+    await context.close();
+    return png;
+  }
   const encoded = await webp(page, png);
   await context.close();
   return encoded;
@@ -393,6 +401,47 @@ const versionedShots = (sizes) =>
 if (process.argv[2] === "--versions") {
   const saved = JSON.parse(readFileSync("app/site-shots.json", "utf8"));
   writeFileSync("app/site-shots.json", `${JSON.stringify(versionedShots(saved), null, 2)}\n`);
+  process.exit(0);
+}
+
+/**
+ * Schermate della scheda del Microsoft Store: la finestra dell'app installata a tutto schermo, alla
+ * misura minima dello Store (1366×768) e a densità 2, in PNG, nel tema chiaro e nelle due lingue.
+ */
+const storeShots = [
+  { name: "1-ordini", path: "/anteprima/ordini" },
+  { name: "2-ordine", path: "/anteprima/ordini/ord-02" },
+  { name: "3-negozi", path: "/anteprima/negozi" },
+  { name: "4-notifiche", path: "/anteprima/impostazioni/notifiche" },
+  { name: "5-esportazione", path: "/anteprima/impostazioni/esportazione" },
+].map((shot) => ({
+  ...shot,
+  scenario: "premium",
+  viewport: { width: 1366, height: 768 },
+  scale: 2,
+  png: true,
+}));
+
+if (process.argv.includes("--store")) {
+  const browser = await chromium.launch();
+  const storeOutput = "build/microsoft-store";
+  mkdirSync(storeOutput, { recursive: true });
+  for (const language of languages)
+    for (const shot of storeShots) {
+      const file = path.join(storeOutput, `${language}-${shot.name}.png`);
+      writeFileSync(file, await capture(browser, shot, language, "light"));
+      console.log(file);
+    }
+  // Icona quadrata della scheda, dall'icona per app approvata.
+  const icon = await browser.newPage({ viewport: { width: 300, height: 300 } });
+  const svg = readFileSync("docs/brand/logo/fiscalbay-app-icon.svg").toString("base64");
+  await icon.setContent(
+    `<body style="margin:0"><img src="data:image/svg+xml;base64,${svg}" width="300" height="300"></body>`,
+  );
+  const iconFile = "docs/brand/logo/exports/fiscalbay-app-icon-300.png";
+  writeFileSync(iconFile, await icon.screenshot({ omitBackground: true }));
+  console.log(iconFile);
+  await browser.close();
   process.exit(0);
 }
 
