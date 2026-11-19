@@ -26,11 +26,15 @@ async function openAccountFromMenu(page: Page, base: string) {
   await page.getByRole("button", { name: "Account" }).click();
   const menu = page.getByRole("menu");
   // L'anteprima non ha la pagina Novità; l'area reale la mostra quando il changelog ha voci.
+  // L'area reale offre anche l'installazione: in WebKit, che si presenta come Safari per Mac,
+  // con le istruzioni; in Chromium soltanto quando il browser la propone.
+  const safari = page.context().browser()?.browserType().name() === "webkit";
   await expect(menu.getByRole("menuitem")).toHaveText([
     "Account",
     "Piano e pagamenti",
     "Impostazioni",
     ...(base === "/app" && whatsNew ? ["Novità"] : []),
+    ...(base === "/app" && safari ? ["Installa l’app"] : []),
     "Visita fiscalbay.it",
     "Esci",
   ]);

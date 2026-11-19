@@ -27,6 +27,7 @@ import { Textarea } from "~/components/ui/textarea";
 
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import { exitReasons, maxExitComment } from "../exit-reasons";
+import { clearAppBadge } from "../installed-app";
 import { ConfirmIdentity } from "./settings/confirm-identity";
 import { settingsRow, settingsRowText } from "./settings/security-rows";
 
@@ -74,8 +75,16 @@ export function DeleteAccount({
   const matches = typed.trim().toLowerCase() === email.toLowerCase();
   // Il pulsante resta attivo: un indirizzo diverso ferma l'invio con il messaggio accanto.
   const v = useFieldErrors(t.access.validation);
-  const send = () =>
-    action.run("account-delete", { confirmation: typed.trim(), reason, comment: comment.trim() });
+  const send = () => {
+    // L'account che se ne va non lascia notifiche sull'icona dell'app installata; se la
+    // cancellazione non riesce, la pagina successiva dell'area le rimette.
+    clearAppBadge();
+    void action.run("account-delete", {
+      confirmation: typed.trim(),
+      reason,
+      comment: comment.trim(),
+    });
+  };
   const reasons = [
     { value: "", label: t.settings.privacy.deleteAccountNoReason },
     ...exitReasons.map((value) => ({

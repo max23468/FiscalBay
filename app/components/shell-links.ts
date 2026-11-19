@@ -1,8 +1,8 @@
 import {
-  AppWindow,
   ClipboardList,
   LayoutDashboard,
   CreditCard,
+  Download,
   Globe,
   Languages,
   Megaphone,
@@ -121,7 +121,8 @@ export function shellMenu(
               onSelect: () => language.onSelect(other),
             },
           ]),
-      ...(install ? [{ label: t.shell.install, Icon: AppWindow, onSelect: install }] : []),
+      // L'icona è quella della campanella per i file pronti: già caricata con la shell.
+      ...(install ? [{ label: t.shell.install, Icon: Download, onSelect: install }] : []),
       {
         href: `${localizedPath(links.language)}?${visitParam}=1`,
         label: t.shell.visitSite,

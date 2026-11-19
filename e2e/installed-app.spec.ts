@@ -146,10 +146,41 @@ test.describe("app installabile", () => {
   test.describe("area reale", () => {
     localOnly();
 
-    test("«Installa l'app» compare con l'offerta del browser e la apre una volta", async ({
+    test("«Installa l'app» apre le istruzioni in Safari", async ({
       page,
+      browserName,
       localIdentity,
     }) => {
+      test.skip(
+        browserName !== "webkit",
+        "Non applicabile: le istruzioni servono soltanto dove Safari non propone l'installazione.",
+      );
+      expect(localIdentity.token).toBeTruthy();
+      await page.goto("/app/ordini");
+      await networkIdle(page);
+      // WebKit si presenta come Safari per Mac: la voce c'è senza alcuna offerta del browser.
+      await page.getByRole("button", { name: "Account" }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Installa l’app" }).click();
+      const guide = page.getByRole("dialog", { name: "Installa l’app" });
+      await expect(guide).toContainText("Nel menu Archivio di Safari scegli «Aggiungi al Dock».");
+      // Il dialog nativo è modale: il focus resta dentro e Esc lo chiude come il pulsante.
+      await page.keyboard.press("Escape");
+      await expect(guide).toBeHidden();
+      await page.getByRole("button", { name: "Account" }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Installa l’app" }).click();
+      await guide.getByRole("button", { name: "Chiudi" }).click();
+      await expect(guide).toBeHidden();
+    });
+
+    test("«Installa l'app» compare con l'offerta del browser e la apre una volta", async ({
+      page,
+      browserName,
+      localIdentity,
+    }) => {
+      test.skip(
+        browserName !== "chromium",
+        "Non applicabile: soltanto Chromium offre l'installazione alla pagina.",
+      );
       expect(localIdentity.token).toBeTruthy();
       await page.goto("/app/ordini");
       await networkIdle(page);

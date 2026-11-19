@@ -28,7 +28,6 @@ import { TimeZoneContext } from "./components/time-zone";
 import { buttonLink } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
 import { canonicalPath, languageFromPath, localizedPath } from "./i18n";
-import { clearBadgeAfterSignOut } from "./installed-app";
 import { revalidateUnlessSnapshot } from "./orders/order-list";
 import { sharedResponse } from "./page-cache.server";
 import { defaultDisplay, matchedShell } from "./preferences";
@@ -142,8 +141,6 @@ export default function App({ loaderData }: Route.ComponentProps) {
   const page = canonicalPath(pathname);
   const preview = new RegExp(`^${previewBase}(/|$)`, "u").test(page);
   const revalidator = useRevalidator();
-  // Le pagine dell'area segnano il badge prima di questo effetto, che riguarda il resto.
-  useEffect(() => clearBadgeAfterSignOut(), [page]);
   useEffect(() => {
     if (!/^\/(app(?:\/|$)|accesso$)/u.test(page)) return;
     let refreshing = false;

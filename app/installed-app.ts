@@ -57,43 +57,57 @@ const subscribeInstall = (listener: () => void) => {
   return () => installListeners.delete(listener);
 };
 
-/** Apre l'installazione del browser, se disponibile; l'offerta vale una sola volta. */
-export function useInstallPrompt(): (() => void) | null {
+/** Sistema delle istruzioni di installazione, dove il browser non la propone da sé. */
+export type InstallGuide = "ios" | "mac";
+
+type InstallTarget = Pick<Window, "matchMedia"> & {
+  navigator: Pick<Navigator, "userAgent" | "maxTouchPoints"> & { standalone?: boolean };
+};
+
+/**
+ * Safari non offre l'installazione alla pagina: su iPhone e iPad, con qualunque browser, si
+ * aggiunge dalla condivisione alla schermata Home; su Mac Safari 17 o successivo la aggiunge al
+ * Dock. Un iPad si presenta come un Mac, ma con il tocco. Già installata, nessuna istruzione.
+ */
+export function installGuide({ navigator, matchMedia }: InstallTarget): InstallGuide | null {
+  if (navigator.standalone || matchMedia("(display-mode: standalone)").matches) return null;
+  const agent = navigator.userAgent;
+  if (/iPhone|iPad|iPod/u.test(agent) || (/Macintosh/u.test(agent) && navigator.maxTouchPoints > 1))
+    return "ios";
+  const safari = /Macintosh.*Version\/(\d+)[\d.]* Safari\//u.exec(agent);
+  if (safari && Number(safari[1]) >= 17 && !/Chrome|Chromium|Edg|OPR|Firefox/u.test(agent))
+    return "mac";
+  return null;
+}
+
+/** Il sistema non cambia durante la visita: le istruzioni si calcolano una volta. */
+let guide: InstallGuide | null | undefined;
+const currentGuide = () => (guide ??= installGuide(window));
+
+/**
+ * Installazione dalla voce del menu: l'offerta del browser, valida una sola volta, oppure le
+ * istruzioni di Safari. Sul server e prima dell'idratazione nessuna delle due.
+ */
+export function useInstall():
+  | { kind: "prompt"; open: () => void }
+  | { kind: "guide"; guide: InstallGuide }
+  | null {
   const prompt = useSyncExternalStore(
     subscribeInstall,
     () => installPrompt,
     () => null,
   );
-  if (!prompt) return null;
-  return () => {
-    installPrompt = null;
-    notifyInstall();
-    void prompt.prompt().catch(() => undefined);
-  };
-}
-
-/**
- * Segno del badge nella memoria del sito: ogni uscita la svuota (`Clear-Site-Data`), quindi la
- * pagina successiva, senza il segno, toglie il badge rimasto.
- */
-const badgeMark = "fiscalbay-badge";
-
-/** Con la memoria del sito bloccata il badge si toglie soltanto alla pagina dell'accesso. */
-function mark(shown: boolean) {
-  try {
-    if (shown) localStorage.setItem(badgeMark, "1");
-    else localStorage.removeItem(badgeMark);
-  } catch {
-    // Memoria bloccata o piena: nessun segno.
-  }
-}
-
-function marked() {
-  try {
-    return localStorage.getItem(badgeMark) !== null;
-  } catch {
-    return true;
-  }
+  const shownGuide = useSyncExternalStore(subscribeInstall, currentGuide, () => null);
+  if (prompt)
+    return {
+      kind: "prompt",
+      open: () => {
+        installPrompt = null;
+        notifyInstall();
+        void prompt.prompt().catch(() => undefined);
+      },
+    };
+  return shownGuide ? { kind: "guide", guide: shownGuide } : null;
 }
 
 /** L'icona dell'app installata riporta le notifiche da leggere della campanella; null, niente. */
@@ -111,7 +125,6 @@ function showAppBadge(unread: number) {
   const badge = navigator as BadgeNavigator;
   const done = unread > 0 ? badge.setAppBadge?.(unread) : badge.clearAppBadge?.();
   void done?.catch(() => undefined);
-  mark(true);
   void periodicSync(async (sync) => {
     // Il browser concede l'aggiornamento periodico soltanto all'app installata.
     const permission = await navigator.permissions.query({
@@ -122,16 +135,14 @@ function showAppBadge(unread: number) {
   });
 }
 
-/** Senza sessione il badge sparisce e il worker smette di aggiornarlo. */
+/**
+ * Senza sessione il badge sparisce e il worker smette di aggiornarlo: all'uscita dal menu, alla
+ * cancellazione dell'account e sulla pagina dell'accesso, dove porta una sessione scaduta o chiusa
+ * altrove. Il worker lo toglie anche da solo quando la lettura risponde 401.
+ */
 export function clearAppBadge() {
-  mark(false);
   void (navigator as BadgeNavigator).clearAppBadge?.().catch(() => undefined);
   void periodicSync((sync) => sync.unregister(badgeSync));
-}
-
-/** Dopo un'uscita, che ha svuotato la memoria del sito, il badge rimasto si toglie. */
-export function clearBadgeAfterSignOut() {
-  if (!marked()) clearAppBadge();
 }
 
 async function periodicSync(change: (sync: PeriodicSync) => Promise<void>) {

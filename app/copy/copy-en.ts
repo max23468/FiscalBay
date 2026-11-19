@@ -96,6 +96,10 @@ export const en: AppCopy = {
     planBilling: "Plan and billing",
     visitSite: "Visit fiscalbay.it",
     install: "Install the app",
+    installGuide: {
+      ios: "Open Share in your browser and choose «Add to Home Screen».",
+      mac: "In Safari’s File menu, choose «Add to Dock».",
+    },
     console: "Console",
     whatsNew: "What’s new",
     whatsNewTitle: (version: string) => `What’s new in FiscalBay ${version}`,
