@@ -114,6 +114,8 @@ describe("ciclo reale con provider simulati", () => {
         history: [],
         calls: [],
         loss: "upload",
+        // L'elenco delle versioni mostra quella appena caricata soltanto alla terza lettura.
+        hiddenLists: 2,
         versions: {
           [old]: {
             id: old,
@@ -132,7 +134,10 @@ state.calls.push(key); let lost=false;
 if(key==='workers deployments list') out({deployments:[state.current,...state.history]});
 else if(key==='workers versions get') out(state.versions[args[3]]);
 else if(key==='workers secrets list') out(${JSON.stringify(serviceSecrets.map((name) => ({ name })))});
-else if(key==='workers versions list') out(Object.values(state.versions).reverse());
+else if(key==='workers versions list') {
+ const hidden=state.hiddenLists>0; if(hidden) state.hiddenLists-=1;
+ out(Object.values(state.versions).filter(v=>!hidden||v.id!=='${next}').reverse());
+}
 else if(key==='workers versions create') {
  state.versions['${next}']={id:'${next}',annotations:{'workers/message':value('--message')},bindings:[{name:'DB',id:'database'}]};
  if(state.loss==='upload'){delete state.loss;lost=true;}
