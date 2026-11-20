@@ -432,15 +432,43 @@ if (process.argv.includes("--store")) {
       writeFileSync(file, await capture(browser, shot, language, "light"));
       console.log(file);
     }
-  // Icona quadrata della scheda, dall'icona per app approvata.
-  const icon = await browser.newPage({ viewport: { width: 300, height: 300 } });
-  const svg = readFileSync("docs/brand/logo/fiscalbay-app-icon.svg").toString("base64");
-  await icon.setContent(
-    `<body style="margin:0"><img src="data:image/svg+xml;base64,${svg}" width="300" height="300"></body>`,
-  );
-  const iconFile = "docs/brand/logo/exports/fiscalbay-app-icon-300.png";
-  writeFileSync(iconFile, await icon.screenshot({ omitBackground: true }));
-  console.log(iconFile);
+  // Immagini del logo della scheda dagli asset approvati, sul blu del marchio: l'icona quadrata
+  // da 300 px, l'immagine della confezione 1:1 con il simbolo e la locandina 9:16 con il logo.
+  const svg = (name) =>
+    `data:image/svg+xml;base64,${readFileSync(`docs/brand/logo/${name}.svg`).toString("base64")}`;
+  const logos = [
+    {
+      file: "fiscalbay-app-icon-300",
+      width: 300,
+      height: 300,
+      image: "fiscalbay-app-icon",
+      size: 1,
+    },
+    {
+      file: "fiscalbay-store-box-2160",
+      width: 2160,
+      height: 2160,
+      image: "fiscalbay-icon-dark",
+      size: 0.5,
+    },
+    {
+      file: "fiscalbay-store-poster-1440x2160",
+      width: 1440,
+      height: 2160,
+      image: "fiscalbay-logo-dark",
+      size: 0.78,
+    },
+  ];
+  for (const logo of logos) {
+    const page = await browser.newPage({ viewport: { width: logo.width, height: logo.height } });
+    await page.setContent(
+      `<body style="margin:0;height:100vh;display:grid;place-items:center;background:#0E3372"><img src="${svg(logo.image)}" style="width:${logo.size * 100}%"></body>`,
+    );
+    const file = `docs/brand/logo/exports/${logo.file}.png`;
+    writeFileSync(file, await page.screenshot());
+    console.log(file);
+    await page.close();
+  }
   await browser.close();
   process.exit(0);
 }

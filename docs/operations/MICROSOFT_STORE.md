@@ -39,110 +39,122 @@ La certificazione dura in genere uno o due giorni lavorativi. Dopo l'approvazion
 <a id="immagini"></a>
 ## Immagini
 
-`node scripts/site-screenshots.mjs --store`, sulla preview locale della build come le schermate del sito, scrive in `build/microsoft-store/` cinque schermate PNG per lingua (Ordini, scheda di un ordine, Negozi eBay, notifiche Telegram, esportazione) dai soli dati dell'anteprima, a 2732×1536 px: la misura minima dello Store è 1366×768, il massimo 3840×2160. Lo stesso comando aggiorna l'icona quadrata della scheda, `docs/brand/logo/exports/fiscalbay-app-icon-300.png`, dall'icona per app approvata. Locandina 9:16 e immagine della confezione 1:1 sono facoltative per le app, obbligatorie soltanto su Xbox; l'immagine 16:9 del primo piano è facoltativa e non c'è.
+`node scripts/site-screenshots.mjs --store`, sulla preview locale della build come le schermate del sito, scrive in `build/microsoft-store/` cinque schermate PNG per lingua (Ordini, scheda di un ordine, Negozi eBay, notifiche Telegram, esportazione) dai soli dati dell'anteprima, a 2732×1536 px: la misura minima dello Store è 1366×768, il massimo 3840×2160. Lo stesso comando aggiorna in `docs/brand/logo/exports/`, dagli asset approvati sul blu del marchio, l'icona quadrata della scheda (`fiscalbay-app-icon-300.png`), la locandina 9:16 con il logo (`fiscalbay-store-poster-1440x2160.png`), che su Windows fa da logo principale della scheda, e l'immagine della confezione 1:1 con il simbolo (`fiscalbay-store-box-2160.png`). L'immagine 16:9 del primo piano e i trailer sono facoltativi e non ci sono.
 
 Didascalie, fino a 200 caratteri:
 
 | Schermata | Italiano | English |
 |---|---|---|
-| 1 | Gli ordini dei tuoi negozi eBay, con il Codice Fiscale pronto da copiare | Orders from your eBay stores, with the tax code ready to copy |
-| 2 | Ogni ordine con acquirente, indirizzo di fatturazione e articoli | Every order with buyer, billing address and items |
-| 3 | I negozi collegati, con l'ultima lettura e gli ordini importati | Your connected stores, with the latest read and the imported orders |
-| 4 | Notifiche Telegram dei nuovi ordini, per negozio | Telegram notifications for new orders, by store |
-| 5 | Esportazione in CSV o XLSX per il gestionale | Export to CSV or XLSX for your management software |
+| 1 | Il Codice Fiscale di ogni ordine, pronto da copiare | The tax code of every order, ready to copy |
+| 2 | Tutti i dati dell'acquirente in un'unica scheda | All the buyer's details on one card |
+| 3 | Tutti i tuoi negozi eBay in un posto solo | All your eBay stores in one place |
+| 4 | Nuovi ordini su Telegram, negozio per negozio | New orders on Telegram, store by store |
+| 5 | Esporti gli ordini per il gestionale in CSV o XLSX | Export your orders to CSV or XLSX for your software |
 
 <a id="scheda"></a>
 ## Testi della scheda
 
-Testo semplice, senza HTML né indirizzi nella descrizione. Prezzi e prova seguono il listino ([§4](../product/PLANS_AND_BILLING.md#s04), `app/catalog.ts`), come chiede la policy 10.8.4: se il listino cambia, cambia anche la scheda. La sezione Novità resta vuota al primo invio.
+Testo semplice, senza HTML né indirizzi nella descrizione. Il tono è commerciale per scelta dell'owner del 2026-11-20: la scheda deve far venire voglia di provare l'app e farsi trovare nelle ricerche, con frasi naturali, senza avvertenze sulla sicurezza né elenchi di ciò che l'app non fa; restano soltanto i limiti che rendono vere le affermazioni («quando l'acquirente l'ha indicato»). Prezzi e prova seguono il listino ([§4](../product/PLANS_AND_BILLING.md#s04), `app/catalog.ts`), come chiede la policy 10.8.4: se il listino cambia, cambia anche la scheda. La sezione Novità resta vuota al primo invio.
 
 ### Italiano
 
 Limiti dello Store: descrizione fino a 10.000 caratteri, breve sotto i 270 perché tutte le viste la mostrino intera, fino a 20 caratteristiche da 200.
 
-**Descrizione breve** (245 caratteri)
+**Descrizione breve** (229 caratteri)
 
 ```text
-FiscalBay legge gli ordini dei tuoi negozi eBay e ti mostra il Codice Fiscale dell'acquirente, quando disponibile su eBay, pronto da copiare ed esportare. Anche la Partita IVA, se c'è. Piano Free gratuito, Pro con prova di 14 giorni senza carta.
+Il Codice Fiscale e la Partita IVA che i tuoi acquirenti lasciano su eBay, pronti da copiare o esportare per la fattura. FiscalBay legge gli ordini da solo, anche da più negozi. Parti gratis e prova Pro per 14 giorni senza carta.
 ```
 
 **Descrizione**
 
 ```text
-FiscalBay ti aiuta a trovare e gestire il Codice Fiscale dei tuoi ordini eBay.
+Vendi su eBay e devi fare fattura? Con FiscalBay il Codice Fiscale dei tuoi acquirenti è già lì, dentro l'ordine, pronto da copiare. Un clic e passi alla fattura.
 
-Colleghi il tuo negozio eBay e FiscalBay importa gli ordini recenti, poi legge da solo i nuovi ordini e gli aggiornamenti, anche quando non sei collegato. Per ogni ordine vedi acquirente, indirizzo di fatturazione e Codice Fiscale, quando disponibile su eBay, pronto da copiare con un clic, senza spazi e in maiuscolo. Se l'acquirente ha indicato una Partita IVA, la trovi accanto al Codice Fiscale o al suo posto.
+Colleghi il tuo negozio eBay e FiscalBay importa subito gli ordini recenti. Poi continua da solo: legge i nuovi ordini anche quando l'app è chiusa. Per ogni ordine trovi acquirente, indirizzo di fatturazione e Codice Fiscale, quando l'acquirente l'ha indicato, già senza spazi e in maiuscolo. Se c'è una Partita IVA, la vedi subito.
 
-Con FiscalBay puoi:
-- vedere gli ordini di tutti i tuoi negozi in un solo elenco, con la ricerca per ordine, acquirente, articolo, SKU o Codice Fiscale e i filtri per negozio, periodo, pagamento, spedizione e stato del Codice Fiscale;
-- esportare gli ordini in CSV, una riga per ordine o per articolo, da importare nel gestionale o nel software di fatturazione;
-- chiedere il Codice Fiscale all'acquirente con un modello di messaggio, quando manca;
-- con Pro, ricevere su Telegram ogni nuovo ordine con il Codice Fiscale, oppure un riepilogo giornaliero, ed esportare in XLSX con le colonne che scegli.
+Cosa puoi fare
+- Vedere gli ordini di tutti i tuoi negozi eBay in un unico elenco e trovare quello che ti serve per numero d'ordine, acquirente, articolo, SKU o Codice Fiscale.
+- Filtrare per negozio, periodo, pagamento, spedizione e Codice Fiscale presente o mancante.
+- Esportare gli ordini in CSV, una riga per ordine o per articolo, e caricarli nel gestionale o nel programma di fatturazione.
+- Chiedere il Codice Fiscale a chi non l'ha lasciato con un messaggio già pronto, in italiano o in inglese.
 
-FiscalBay non emette fatture e non modifica nulla sul tuo negozio: legge gli ordini con le API ufficiali di eBay, in sola lettura. Il Codice Fiscale compare soltanto quando l'acquirente l'ha indicato ed eBay lo rende disponibile. Accedi con passkey, Google, eBay oppure email e password; i dati degli ordini restano su server nell'Unione Europea.
+Con Pro hai anche
+- Ogni nuovo ordine su Telegram con il Codice Fiscale da copiare, oppure un riepilogo al giorno.
+- L'export in XLSX con le colonne che vuoi, nell'ordine che vuoi.
+- Più negozi eBay e un anno di storico.
+- I dati fiscali suggeriti dagli ordini precedenti dello stesso acquirente.
+
+Accedi con passkey, Google, eBay oppure email e password. L'app è in italiano e in inglese, con tema chiaro e scuro, e la sua icona ti mostra quante notifiche hai da leggere.
 
 Piani e prezzi
-- Free, gratuito: un negozio eBay attivo, gli ordini degli ultimi 30 giorni, 5 ordini con il Codice Fiscale da sbloccare ogni 7 giorni (di più durante le promozioni), esportazione in CSV.
-- Pro: più negozi, un anno di storico, ordini da sbloccare senza limite, esportazione in XLSX e notifiche Telegram. Costa 4,90 € al mese, 49 € all'anno oppure 149 € una sola volta per l'accesso a vita, finché ci sono posti. I prezzi sono IVA esclusa: con l'IVA italiana al 22% diventano 5,98 €, 59,78 € e 181,78 €; prima del pagamento vedi il totale con le imposte del tuo paese.
-- Prova Pro di 14 giorni, senza carta e senza rinnovo automatico: la attivi quando vuoi dopo la prima lettura riuscita di un negozio e alla fine torni al Free.
+- Free, gratuito: un negozio eBay, gli ordini degli ultimi 30 giorni, 5 ordini con Codice Fiscale o Partita IVA da sbloccare ogni 7 giorni (di più durante le promozioni) ed export in CSV.
+- Pro: 4,90 € al mese, 49 € all'anno (12 mesi al prezzo di 10) oppure 149 € una volta sola per averlo a vita, finché ci sono posti. Prezzi IVA esclusa: con l'IVA italiana al 22% diventano 5,98 €, 59,78 € e 181,78 €; prima di pagare vedi il totale per il tuo paese.
+- Prova Pro gratis per 14 giorni, senza carta e senza rinnovo automatico: la attivi quando vuoi, appena FiscalBay ha letto il tuo negozio.
 
-Pro si acquista dall'app, con pagamenti gestiti da Stripe e non dal Microsoft Store. Gli abbonamenti si disdicono da Impostazioni, Piano e pagamenti.
+Pro si acquista dall'app, con pagamento tramite Stripe, e l'abbonamento si disdice quando vuoi da Impostazioni.
 
-FiscalBay è un servizio indipendente, non affiliato a eBay.
+FiscalBay è un servizio indipendente da eBay.
 ```
 
 **Caratteristiche**
 
 ```text
-Codice Fiscale dell'acquirente, quando disponibile su eBay, da copiare con un clic
-Partita IVA dell'acquirente, se indicata nell'ordine
-Lettura automatica dei nuovi ordini e degli aggiornamenti, anche ad app chiusa
-Ordini di tutti i negozi in un solo elenco, con ricerca e filtri
+Il Codice Fiscale degli acquirenti eBay, pronto da copiare
+La Partita IVA in evidenza quando l'acquirente la indica
+Nuovi ordini letti in automatico, anche ad app chiusa
+Tutti i tuoi negozi eBay in un unico elenco
 Ricerca per ordine, acquirente, articolo, SKU o Codice Fiscale
-Esportazione in CSV, una riga per ordine o per articolo
-Con Pro, esportazione in XLSX con le colonne che scegli e configurazioni salvate
-Con Pro, notifiche Telegram dei nuovi ordini o un riepilogo giornaliero
-Con Pro, più negozi eBay e un anno di storico
-Modello di messaggio per chiedere il Codice Fiscale quando manca
-Suggerimenti dagli ordini precedenti dello stesso acquirente
-Accesso a eBay in sola lettura con le API ufficiali
-Accesso con passkey, Google, eBay oppure email e password
-Dati degli ordini conservati nell'Unione Europea
-Badge dell'icona con le notifiche da leggere
-Interfaccia in italiano e in inglese, tema chiaro e scuro
+Filtri per negozio, periodo, pagamento e spedizione
+Export CSV per il gestionale e la fatturazione
+Messaggio già pronto per chiedere il Codice Fiscale mancante
+Pro: ogni nuovo ordine su Telegram con il Codice Fiscale
+Pro: export XLSX con le colonne che vuoi
+Pro: più negozi eBay e un anno di storico
+Pro: dati fiscali suggeriti dagli ordini precedenti
+Accesso con passkey, Google, eBay o email
+Icona con il numero di notifiche da leggere
+In italiano e in inglese, con tema chiaro e scuro
+Gratis per iniziare, Pro in prova per 14 giorni senza carta
 ```
 
-**Termini di ricerca**: al massimo 7, senza prezzi (policy 10.1.3): `codice fiscale`, `partita IVA`, `fattura elettronica`, `export ordini`, `venditori online`, `eBay`, `ProBay`. La policy esclude anche i nomi di prodotti di altri editori: «eBay» e «ProBay» ci sono per scelta dell'owner del 2026-11-20, e si tolgono se la certificazione li contesta.
+**Termini di ricerca**: al massimo 7 voci da 40 caratteri e 21 parole in tutto, senza prezzi (policy 10.1.3). Come per le [guide](../product/EXPERIENCE.md#s23) sono le frasi che i venditori cercano: `codice fiscale ebay`, `codice fiscale acquirente`, `partita iva ebay`, `fattura elettronica ebay`, `ordini ebay excel`, `alternativa probay`, `venditori ebay`. La policy esclude anche i nomi di prodotti di altri editori: eBay e ProBay ci sono per scelta dell'owner del 2026-11-20, e si tolgono se la certificazione li contesta.
 
 ### English
 
-**Short description** (253 caratteri)
+**Short description** (227 caratteri)
 
 ```text
-FiscalBay reads the orders of your eBay stores and shows the buyer's tax code (Codice Fiscale), when eBay provides it, ready to copy and export. The VAT number (Partita IVA) too, when there is one. Free plan at no cost, Pro with a 14-day trial, no card.
+The tax code (Codice Fiscale) and VAT number your eBay buyers leave, ready to copy or export for your invoices. FiscalBay reads your orders on its own, across all your stores. Start free and try Pro for 14 days, no card needed.
 ```
 
 **Description**
 
 ```text
-FiscalBay helps you find and manage the tax code (Codice Fiscale) of your eBay orders.
+Selling on eBay in Italy and need to invoice? With FiscalBay your buyers' tax code (Codice Fiscale) is already there, inside the order, ready to copy. One click and you are on to the invoice.
 
-Connect your eBay store and FiscalBay imports your recent orders, then reads new orders and updates on its own, even when you are not signed in. For every order you see the buyer, the billing address and the tax code, when eBay provides it, ready to copy in one click, without spaces and in capitals. If the buyer gave a VAT number (Partita IVA), you find it next to the tax code or in its place.
+Connect your eBay store and FiscalBay imports your recent orders right away. Then it keeps going on its own, reading new orders even when the app is closed. For every order you get the buyer, the billing address and the tax code, whenever the buyer provided it, already without spaces and in capitals. If there is a VAT number (Partita IVA), you see it straight away.
 
-With FiscalBay you can:
-- see the orders of all your stores in one list, with search by order, buyer, item, SKU or tax code and filters by store, period, payment, shipping and tax code status;
-- export your orders to CSV, one row per order or per item, ready for your management or invoicing software;
-- ask the buyer for the tax code with a message template, when it is missing;
-- with Pro, get every new order with its tax code on Telegram, or a daily summary, and export to XLSX with the columns you choose.
+What you can do
+- See the orders of all your eBay stores in one list and find what you need by order number, buyer, item, SKU or tax code.
+- Filter by store, period, payment, shipping and tax code present or missing.
+- Export your orders to CSV, one row per order or per item, and load them into your management or invoicing software.
+- Ask buyers who left no tax code with a ready-made message, in Italian or English.
 
-FiscalBay does not issue invoices and changes nothing in your store: it reads your orders through eBay's official APIs, read only. The tax code appears only when the buyer provided it and eBay makes it available. Sign in with a passkey, Google, eBay or email and password; order data stays on servers in the European Union.
+With Pro you also get
+- Every new order on Telegram with the tax code to copy, or one summary a day.
+- XLSX export with the columns you want, in the order you want.
+- More eBay stores and one year of history.
+- Tax details suggested from the same buyer's previous orders.
+
+Sign in with a passkey, Google, eBay or email and password. The app is in Italian and English, with light and dark theme, and its icon shows how many notifications you have to read.
 
 Plans and pricing
-- Free, at no cost: one active eBay store, orders from the last 30 days, 5 orders with the tax code to unlock every 7 days (more during promotions), CSV export.
-- Pro: more stores, one year of history, unlimited orders to unlock, XLSX export and Telegram notifications. It costs €4.90 a month, €49 a year or €149 once for lifetime access, while places last. Prices exclude VAT: with Italian VAT at 22% they are €5.98, €59.78 and €181.78; before paying you see the total with your country's taxes.
-- 14-day Pro trial, no card and no automatic renewal: start it whenever you like after the first successful read of a store, and at the end you go back to Free.
+- Free, at no cost: one eBay store, orders from the last 30 days, 5 orders with tax code or VAT number to unlock every 7 days (more during promotions) and CSV export.
+- Pro: €4.90 a month, €49 a year (12 months for the price of 10) or €149 once for lifetime access, while places last. Prices exclude VAT: with Italian VAT at 22% they are €5.98, €59.78 and €181.78; before paying you see the total for your country.
+- Free 14-day Pro trial, no card and no automatic renewal: start it whenever you like once FiscalBay has read your store.
 
-Pro is bought in the app, with payments handled by Stripe, not by the Microsoft Store. Subscriptions are cancelled from Settings, Plan and payments.
+Pro is bought in the app, paid through Stripe, and you can cancel any time from Settings.
 
 FiscalBay is an independent service, not affiliated with eBay.
 ```
@@ -150,25 +162,25 @@ FiscalBay is an independent service, not affiliated with eBay.
 **Product features**
 
 ```text
-The buyer's tax code (Codice Fiscale), when eBay provides it, copied in one click
-The buyer's VAT number (Partita IVA), when given in the order
-Automatic reading of new orders and updates, even with the app closed
-Orders from all your stores in one list, with search and filters
+Your eBay buyers' tax code (Codice Fiscale), ready to copy
+VAT number (Partita IVA) shown when the buyer gives one
+New orders read automatically, even with the app closed
+All your eBay stores in one list
 Search by order, buyer, item, SKU or tax code
-CSV export, one row per order or per item
-With Pro, XLSX export with the columns you choose and saved configurations
-With Pro, Telegram notifications for new orders or a daily summary
-With Pro, more eBay stores and one year of history
-Message template to ask for the tax code when it is missing
-Suggestions from the same buyer's previous orders
-Read-only access to eBay through the official APIs
-Sign in with a passkey, Google, eBay or email and password
-Order data stored in the European Union
-App icon badge with your unread notifications
-Interface in Italian and English, light and dark theme
+Filters by store, period, payment and shipping
+CSV export for your management and invoicing software
+Ready-made message to ask for a missing tax code
+Pro: every new order on Telegram with its tax code
+Pro: XLSX export with the columns you want
+Pro: more eBay stores and one year of history
+Pro: tax details suggested from previous orders
+Sign in with a passkey, Google, eBay or email
+App icon with your unread notification count
+In Italian and English, light and dark theme
+Free to start, 14-day Pro trial with no card
 ```
 
-**Search terms**, con la stessa scelta: `tax code`, `codice fiscale`, `VAT number`, `e-invoicing`, `order export`, `eBay`, `ProBay`.
+**Search terms**, con la stessa scelta: `ebay tax code`, `codice fiscale ebay`, `ebay vat number`, `ebay invoice italy`, `ebay orders excel`, `probay alternative`, `ebay sellers italy`.
 
 <a id="iarc"></a>
 ## Classificazione IARC
