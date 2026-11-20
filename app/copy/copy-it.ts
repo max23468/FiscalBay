@@ -1094,6 +1094,7 @@ export const it = {
       guides: "Guide",
     },
     independent: "Servizio indipendente, non affiliato a eBay.",
+    microsoftStore: "Scarica da Microsoft Store",
     support: "Supporto",
   },
   /** Pagina pubblica dell'assistenza: domande d'uso e contatti. */

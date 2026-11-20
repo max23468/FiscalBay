@@ -1,5 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 
+import type { Language } from "./i18n";
+
 /**
  * Funzioni dell'app installata: registrazione del service worker (`public/sw.js`), installazione
  * proposta dal browser e badge dell'icona con il numero delle notifiche da leggere. Dove il browser
@@ -57,6 +59,13 @@ const subscribeInstall = (listener: () => void) => {
   return () => installListeners.delete(listener);
 };
 
+/** Prodotto FiscalBay nel Microsoft Store: la stessa web app impacchettata (D342). */
+const microsoftStoreId = "9NJTL8FD7DMH";
+
+/** Scheda dello Store nella lingua della pagina. */
+export const microsoftStoreUrl = (language: Language) =>
+  `https://apps.microsoft.com/detail/${microsoftStoreId}?hl=${language === "it" ? "it-IT" : "en-GB"}`;
+
 /** Sistema delle istruzioni di installazione, dove il browser non la propone da sé. */
 export type InstallGuide = "ios" | "mac";
 
@@ -65,13 +74,19 @@ type InstallTarget = Pick<Window, "matchMedia"> & {
 };
 
 /**
- * Safari non offre l'installazione alla pagina: su iPhone e iPad, con qualunque browser, si
- * aggiunge dalla condivisione alla schermata Home; su Mac Safari 17 o successivo la aggiunge al
- * Dock. Un iPad si presenta come un Mac, ma con il tocco. Già installata, nessuna istruzione.
+ * Da dove si installa l'app. Su Windows dal Microsoft Store, anche dove il browser la offrirebbe;
+ * Xbox, che si presenta come Windows, non riceve il pacchetto per PC. Safari non offre
+ * l'installazione alla pagina: su iPhone e iPad, con qualunque browser, si aggiunge dalla
+ * condivisione alla schermata Home; su Mac Safari 17 o successivo la aggiunge al Dock. Un iPad si
+ * presenta come un Mac, ma con il tocco. Già installata, niente.
  */
-export function installGuide({ navigator, matchMedia }: InstallTarget): InstallGuide | null {
+export function installSystem({
+  navigator,
+  matchMedia,
+}: InstallTarget): InstallGuide | "windows" | null {
   if (navigator.standalone || matchMedia("(display-mode: standalone)").matches) return null;
   const agent = navigator.userAgent;
+  if (/Windows NT/u.test(agent) && !/Xbox/u.test(agent)) return "windows";
   if (/iPhone|iPad|iPod/u.test(agent) || (/Macintosh/u.test(agent) && navigator.maxTouchPoints > 1))
     return "ios";
   const safari = /Macintosh.*Version\/(\d+)[\d.]* Safari\//u.exec(agent);
@@ -80,15 +95,16 @@ export function installGuide({ navigator, matchMedia }: InstallTarget): InstallG
   return null;
 }
 
-/** Il sistema non cambia durante la visita: le istruzioni si calcolano una volta. */
-let guide: InstallGuide | null | undefined;
-const currentGuide = () => (guide ??= installGuide(window));
+/** Il sistema non cambia durante la visita: si calcola una volta. */
+let system: InstallGuide | "windows" | null | undefined;
+const currentSystem = () => (system ??= installSystem(window));
 
 /**
- * Installazione dalla voce del menu: l'offerta del browser, valida una sola volta, oppure le
- * istruzioni di Safari. Sul server e prima dell'idratazione nessuna delle due.
+ * Installazione dalla voce del menu: lo Store su Windows, altrimenti l'offerta del browser, valida
+ * una sola volta, oppure le istruzioni di Safari. Sul server e prima dell'idratazione nessuna.
  */
 export function useInstall():
+  | { kind: "store" }
   | { kind: "prompt"; open: () => void }
   | { kind: "guide"; guide: InstallGuide }
   | null {
@@ -97,7 +113,8 @@ export function useInstall():
     () => installPrompt,
     () => null,
   );
-  const shownGuide = useSyncExternalStore(subscribeInstall, currentGuide, () => null);
+  const target = useSyncExternalStore(subscribeInstall, currentSystem, () => null);
+  if (target === "windows") return { kind: "store" };
   if (prompt)
     return {
       kind: "prompt",
@@ -107,8 +124,16 @@ export function useInstall():
         void prompt.prompt().catch(() => undefined);
       },
     };
-  return shownGuide ? { kind: "guide", guide: shownGuide } : null;
+  return target ? { kind: "guide", guide: target } : null;
 }
+
+/** Il badge dello Store compare soltanto su Windows, fuori dall'app installata, a pagina idratata. */
+export const useMicrosoftStore = () =>
+  useSyncExternalStore(
+    subscribeInstall,
+    () => currentSystem() === "windows",
+    () => false,
+  );
 
 /** L'icona dell'app installata riporta le notifiche da leggere della campanella; null, niente. */
 export function useAppBadge(unread: number | null) {

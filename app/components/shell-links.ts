@@ -90,7 +90,7 @@ export function shellMenu(
     admin?: boolean;
     /** Scelta della lingua prima della conferma: percorso che la riceve e invio. */
     language: { href: string; onSelect: (language: Language) => void };
-    /** Installazione offerta dal browser in questo momento. */
+    /** Installazione disponibile in questo momento: Store, browser o istruzioni di Safari. */
     install?: () => void;
   },
 ): AccountMenuItem[][] {

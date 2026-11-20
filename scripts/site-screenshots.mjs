@@ -15,6 +15,10 @@
  * `e2e/local-account.ts`: `E2E_PORT`, la porta fissa in CI o quella del worktree. Ogni schermata
  * porta nell'indirizzo una versione ricavata dai suoi file, così il browser la conserva a lungo:
  * dopo una modifica a mano dei file, `node scripts/site-screenshots.mjs --versions`.
+ *
+ * Con `--store [origine]` scrive invece le schermate PNG della scheda del Microsoft Store in
+ * `build/microsoft-store/`, fuori dal repository, e l'icona da 300 px della scheda in
+ * `docs/brand/logo/exports/` ([procedura](../docs/operations/MICROSOFT_STORE.md)).
  */
 
 import { execFileSync } from "node:child_process";
@@ -26,7 +30,7 @@ import { chromium } from "@playwright/test";
 
 import { localOrigin } from "../e2e/local-account.ts";
 
-const base = process.argv[2] ?? localOrigin;
+const base = process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? localOrigin;
 const output = "public/site";
 const languages = ["it", "en"];
 const schemes = ["light", "dark"];
@@ -350,6 +354,10 @@ async function capture(browser, shot, language, scheme) {
         animations: "disabled",
         ...(shot.region ? { clip: await region(page, shot.region) } : {}),
       });
+  if (shot.png) {
+    await context.close();
+    return png;
+  }
   const encoded = await webp(page, png);
   await context.close();
   return encoded;
@@ -393,6 +401,75 @@ const versionedShots = (sizes) =>
 if (process.argv[2] === "--versions") {
   const saved = JSON.parse(readFileSync("app/site-shots.json", "utf8"));
   writeFileSync("app/site-shots.json", `${JSON.stringify(versionedShots(saved), null, 2)}\n`);
+  process.exit(0);
+}
+
+/**
+ * Schermate della scheda del Microsoft Store: la finestra dell'app installata a tutto schermo, alla
+ * misura minima dello Store (1366×768) e a densità 2, in PNG, nel tema chiaro e nelle due lingue.
+ */
+const storeShots = [
+  { name: "1-ordini", path: "/anteprima/ordini" },
+  { name: "2-ordine", path: "/anteprima/ordini/ord-02" },
+  { name: "3-negozi", path: "/anteprima/negozi" },
+  { name: "4-notifiche", path: "/anteprima/impostazioni/notifiche" },
+  { name: "5-esportazione", path: "/anteprima/impostazioni/esportazione" },
+].map((shot) => ({
+  ...shot,
+  scenario: "premium",
+  viewport: { width: 1366, height: 768 },
+  scale: 2,
+  png: true,
+}));
+
+if (process.argv.includes("--store")) {
+  const browser = await chromium.launch();
+  const storeOutput = "build/microsoft-store";
+  mkdirSync(storeOutput, { recursive: true });
+  for (const language of languages)
+    for (const shot of storeShots) {
+      const file = path.join(storeOutput, `${language}-${shot.name}.png`);
+      writeFileSync(file, await capture(browser, shot, language, "light"));
+      console.log(file);
+    }
+  // Immagini del logo della scheda dagli asset approvati, sul blu del marchio: l'icona quadrata
+  // da 300 px, l'immagine della confezione 1:1 con il simbolo e la locandina 9:16 con il logo.
+  const svg = (name) =>
+    `data:image/svg+xml;base64,${readFileSync(`docs/brand/logo/${name}.svg`).toString("base64")}`;
+  const logos = [
+    {
+      file: "fiscalbay-app-icon-300",
+      width: 300,
+      height: 300,
+      image: "fiscalbay-app-icon",
+      size: 1,
+    },
+    {
+      file: "fiscalbay-store-box-2160",
+      width: 2160,
+      height: 2160,
+      image: "fiscalbay-icon-dark",
+      size: 0.5,
+    },
+    {
+      file: "fiscalbay-store-poster-1440x2160",
+      width: 1440,
+      height: 2160,
+      image: "fiscalbay-logo-dark",
+      size: 0.78,
+    },
+  ];
+  for (const logo of logos) {
+    const page = await browser.newPage({ viewport: { width: logo.width, height: logo.height } });
+    await page.setContent(
+      `<body style="margin:0;height:100vh;display:grid;place-items:center;background:#0E3372"><img src="${svg(logo.image)}" style="width:${logo.size * 100}%"></body>`,
+    );
+    const file = `docs/brand/logo/exports/${logo.file}.png`;
+    writeFileSync(file, await page.screenshot());
+    console.log(file);
+    await page.close();
+  }
+  await browser.close();
   process.exit(0);
 }
 

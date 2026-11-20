@@ -3,6 +3,7 @@ import { cn } from "cn";
 import { useCopy } from "~/components/copy-context";
 import { LanguageSwitch } from "~/components/language-switch";
 import { siteColumn } from "~/components/site-column";
+import { StoreBadge } from "~/components/store-badge";
 
 import { appCopy, supportEmail } from "../app-copy";
 import { privacyPath, supportPath, termsPath } from "../app-links";
@@ -36,6 +37,9 @@ export function SiteFooter({ className, path }: { className?: string; path?: str
             </a>
           </p>
         </div>
+        {/* Soltanto su Windows: fra testo e collegamenti quando c'è spazio, sotto l'email su
+            smartphone. */}
+        <StoreBadge />
         <nav aria-label={t.legal.navigation} className="flex flex-wrap gap-4">
           <a href={localizedPath(language, termsPath)} className="link-underline">
             {t.legal.termsLink}

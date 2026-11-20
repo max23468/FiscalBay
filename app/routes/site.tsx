@@ -9,6 +9,7 @@ import { IconTile } from "~/components/icon-tile";
 import { ProductShot, ShotRow, type ShotName } from "~/components/product-shot";
 import { siteColumn } from "~/components/site-column";
 import { SiteLayout } from "~/components/site-layout";
+import { StoreBadge } from "~/components/store-badge";
 import { Badge } from "~/components/ui/badge";
 import { buttonLink } from "~/components/ui/button-variants";
 
@@ -195,15 +196,24 @@ export default function Site({ loaderData }: Route.ComponentProps) {
             </h1>
             <p className="text-lg leading-relaxed text-pretty text-white/80">{t.body}</p>
             <div className="flex flex-wrap gap-3">
-              <a href={primary.href} {...buttonLink({ size: "lg", className: onBrand })}>
+              {/* Alti quanto il badge dello Store (44 px), che su Windows sta nella stessa riga. */}
+              <a
+                href={primary.href}
+                {...buttonLink({ size: "lg", className: cn(onBrand, "h-11") })}
+              >
                 {primary.label}
               </a>
               <a
                 href={`#${stepsId}`}
-                {...buttonLink({ variant: "outline", size: "lg", className: outlineOnBrand })}
+                {...buttonLink({
+                  variant: "outline",
+                  size: "lg",
+                  className: cn(outlineOnBrand, "h-11"),
+                })}
               >
                 {t.howItWorks}
               </a>
+              <StoreBadge onBrand />
             </div>
             <ul className="grid gap-2 text-sm text-white/80 sm:flex sm:flex-wrap sm:gap-x-6">
               {t.trust.map((item) => (

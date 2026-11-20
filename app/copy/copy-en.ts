@@ -1063,6 +1063,7 @@ export const en: AppCopy = {
       guides: "Guides",
     },
     independent: "Independent service, not affiliated with eBay.",
+    microsoftStore: "Download from the Microsoft Store",
     support: "Support",
   },
   supportPage: {

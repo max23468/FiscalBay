@@ -44,6 +44,8 @@ const fixtureHosts = new Set([
   "schemas.openxmlformats.org",
   // Indirizzo del negozio negli esempi delle schermate del sito.
   "www.ebay.it",
+  // Scheda di FiscalBay nel Microsoft Store, aperta dal badge e dal menu su Windows.
+  "apps.microsoft.com",
 ]);
 
 // Domini email ammessi oltre a `.invalid`, per gli esempi credibili delle schermate del sito:
