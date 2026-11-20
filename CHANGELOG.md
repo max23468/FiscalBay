@@ -2,7 +2,36 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio, con il giorno scritto dalla promozione. Le parti «Novità» e «What's new» di una versione sono la pagina Novità dell'app.
 
-## [2.0.11]
+## [2.0.11] - 2026-11-20
+
+### Novità
+
+#### Funzionalità
+
+- **FiscalBay come app.** Da Chrome o Edge puoi installare FiscalBay dal menu del tuo profilo con «Installa l’app»: si apre in una finestra sua, con le scorciatoie per Ordini, Negozi e Impostazioni sull’icona. Su iPhone, iPad e Safari per Mac la stessa voce spiega come aggiungerla alla schermata Home o al Dock.
+- **Notifiche sull’icona.** Nell’app installata l’icona mostra quante notifiche hai da leggere, lo stesso numero della campanella; il numero sparisce quando esci dall’account.
+- **FiscalBay nel Microsoft Store.** Su Windows installi FiscalBay dal Microsoft Store: il badge è in home e nel footer, e la voce «Installa l’app» del menu del tuo profilo apre la scheda dello Store.
+
+#### Correzioni
+
+- **Campanella di un account nuovo.** Chi crea l’account non trova più da leggere le Novità dei rilasci usciti prima della registrazione: restano nella pagina Novità, e la campanella e il numero sull’icona dell’app contano soltanto quelle arrivate dopo.
+
+### What's new
+
+#### Features
+
+- **FiscalBay as an app.** In Chrome or Edge you can install FiscalBay from your profile menu with «Install the app»: it opens in its own window, with shortcuts to Orders, Stores and Settings on the icon. On iPhone, iPad and Safari for Mac the same item explains how to add it to the Home Screen or the Dock.
+- **Notifications on the icon.** In the installed app the icon shows how many notifications you have to read, the same number as the bell; the number goes away when you sign out.
+- **FiscalBay in the Microsoft Store.** On Windows you install FiscalBay from the Microsoft Store: the badge is on the home page and in the footer, and «Install the app» in your profile menu opens the Store listing.
+
+#### Fixes
+
+- **Bell for a new account.** A newly created account no longer finds the What’s new of releases published before sign-up waiting to be read: they stay on the What’s new page, and the bell and the number on the app icon count only those that arrive afterwards.
+
+### Altre modifiche
+
+- **App installabile.** Manifest nelle due lingue con icone maskable e schermate, barra del titolo del colore della barra in alto nei due temi, service worker che non conserva pagine né dati e mostra una pagina «Sei offline» quando manca la rete, CSP con service worker e manifest soltanto dall’origine.
+- **Pubblicazione nello Store.** Runbook con account, pacchetto PWABuilder, testi della scheda nelle due lingue, classificazione IARC e note per la certificazione; schermate PNG della scheda e icona da 300 px generate dallo script delle schermate del sito con i dati dell’anteprima.
 
 ## [2.0.10] - 2026-11-16
 
