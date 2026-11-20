@@ -49,6 +49,7 @@ import {
   rollbackRelease,
   reconcileReceipt,
   serviceSecrets,
+  uploadedVersion,
 } from "./release.mjs";
 
 describe("ciclo reale con provider simulati", () => {
@@ -140,7 +141,7 @@ else if(key==='workers versions list') {
 }
 else if(key==='workers versions create') {
  state.versions['${next}']={id:'${next}',annotations:{'workers/message':value('--message')},bindings:[{name:'DB',id:'database'}]};
- if(state.loss==='upload'){delete state.loss;lost=true;}
+ if(state.loss==='upload'){delete state.loss;lost=true;} else process.stderr.write('Worker Version ID: ${next}\\n');
 } else if(key==='workers deployments create') {
  const body=JSON.parse(value('--body'));state.history.unshift(state.current);state.current={versions:body.versions};
  if(state.loss==='activation' && body.versions.length===1 && body.versions[0].version_id==='${next}'){delete state.loss;lost=true;}
@@ -232,6 +233,18 @@ globalThis.fetch=async(input,options={})=>{
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+});
+
+describe("versione caricata", () => {
+  it("legge l'identificativo dall'uscita del caricamento, anche fra le righe di avanzamento", () => {
+    const id = "69464984-1b41-4e05-ba90-ff4e98af277f";
+    assert.equal(
+      uploadedVersion(`│  Uploaded fiscalbay-test (10.32 sec)\n│  Worker Version ID: ${id}\n│\n`),
+      id,
+    );
+    assert.equal(uploadedVersion("│  Uploaded fiscalbay-test (10.32 sec)\n"), undefined);
+    assert.equal(uploadedVersion("Worker Version ID: non-valido"), undefined);
   });
 });
 

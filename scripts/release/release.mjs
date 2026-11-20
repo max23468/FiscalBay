@@ -20,7 +20,7 @@ import { parseArgs } from "node:util";
 
 import { fragmentEntries, headings, withChanges } from "../../app/changelog-fragments.mjs";
 import { buildOutput } from "../lib/build-output.mjs";
-import { cf as cfCli, cfJson, ghJson, retry } from "../lib/provider.mjs";
+import { cf as cfCli, cfJson, cfOutput, ghJson, retry } from "../lib/provider.mjs";
 import { downloadRecord, observedRelease } from "./records.mjs";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -833,6 +833,10 @@ function restoreReceipt(manifest, prefix) {
   }
 }
 
+/** Identificativo della versione che `cf workers versions create` riporta nella sua uscita. */
+export const uploadedVersion = (output) =>
+  output.match(/Worker Version ID:\s*([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})/u)?.[1];
+
 /** Accesso al Worker e al D1 dell'ambiente con `cf` e l'API REST Cloudflare. */
 function provider(target) {
   const cf = (...args) => cfCli(args, { ci: true });
@@ -1249,23 +1253,29 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
         let uploadError;
         if (!version)
           try {
-            cf(
-              "workers",
-              "versions",
-              "create",
-              "--prebuilt",
-              "--mode",
-              target.mode,
-              "--tag",
-              tag(),
-              "--message",
-              identity,
+            version = uploadedVersion(
+              cfOutput(
+                [
+                  "workers",
+                  "versions",
+                  "create",
+                  "--prebuilt",
+                  "--mode",
+                  target.mode,
+                  "--tag",
+                  tag(),
+                  "--message",
+                  identity,
+                ],
+                { ci: true },
+              ),
             );
           } catch (error) {
             uploadError = error;
           }
-        // L'elenco di Cloudflare mostra la versione appena caricata dopo qualche secondo: si
-        // rilegge per mezzo minuto prima di concludere che il caricamento non è avvenuto.
+        // L'elenco di Cloudflare può mostrare la versione appena caricata anche minuti dopo: vale
+        // l'identificativo stampato dal caricamento. Senza, per esempio con la risposta persa, si
+        // rilegge l'elenco per mezzo minuto prima di concludere che il caricamento non è avvenuto.
         version ??= await retry(
           () => {
             const found = findVersion();
