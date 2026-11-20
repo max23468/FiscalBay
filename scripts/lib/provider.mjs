@@ -3,7 +3,7 @@
  * macOS. Le opzioni di ogni chiamata restano al chiamante: ambiente, `--mode`, `--zone` e flussi
  * d'uscita.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -50,6 +50,24 @@ export function jsonOutput(output) {
   }
   if (failure) throw new Error(`Uscita JSON della CLI non leggibile: ${failure.message}`);
   return null;
+}
+
+/**
+ * CLI `cf` con il testo di stderr, dove la CLI riporta l'esito dei caricamenti: resta nel log come
+ * con `cf` e torna al chiamante insieme a stdout.
+ */
+export function cfOutput(args, { ci = false } = {}) {
+  const result = spawnSync("pnpm", ["exec", "cf", ...args], {
+    encoding: "utf8",
+    maxBuffer,
+    env: ci ? { ...process.env, CI: "true" } : process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  process.stderr.write(result.stderr ?? "");
+  if (result.error) throw result.error;
+  if (result.status !== 0)
+    throw new Error(`cf ${args.slice(0, 3).join(" ")} terminato con codice ${result.status}.`);
+  return `${result.stdout}\n${result.stderr}`;
 }
 
 export const cfJson = (args, options) => jsonOutput(cf(args, options));

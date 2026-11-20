@@ -184,7 +184,7 @@ export async function shellData(area: AccountArea, now = new Date()): Promise<Sh
       language,
       display.timeZone,
       now,
-      area.termsUpdate,
+      { termsUpdate: area.termsUpdate, memberSince: new Date(session.user.createdAt) },
     ),
   );
   return {
@@ -218,7 +218,8 @@ export async function unreadNotifications(request: Request, now = new Date()) {
     preferences.language ?? "it",
     effectiveTimeZone(preferences.timeZone, null),
     now,
-    !status.termsCurrent,
+    // Con la cache del cookie la data di registrazione può arrivare come testo.
+    { termsUpdate: !status.termsCurrent, memberSince: new Date(session.user.createdAt) },
   );
   return notifications.filter((item) => !item.read).length;
 }
