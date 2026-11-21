@@ -9,7 +9,6 @@ import {
 } from "react-router";
 
 import { AccountDeletionPage } from "~/components/account-deletion";
-import { AnalyticsBeacon } from "~/components/analytics-beacon";
 import { AppShell } from "~/components/app-shell";
 import { useCopy, useLinks } from "~/components/copy-context";
 import { DemoBar, useDemoSource } from "~/components/demo-bar";
@@ -211,7 +210,6 @@ function Demo({ loaderData }: Pick<Route.ComponentProps, "loaderData">) {
       before={<DemoBar signUp={sourced(`${localizedPath(language, accessPath)}?registrati`)} />}
     >
       <Outlet />
-      <AnalyticsBeacon />
     </AppShell>
   );
 }

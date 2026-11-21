@@ -20,6 +20,7 @@ import type { Route } from "./+types/root";
 import { appCopy, copyModules, loadCopy, pageTitle } from "./app-copy";
 import { appBase, demoBase, isDemoPath, manifestPath, previewBase } from "./app-links";
 import { arrivalSource } from "./arrival-source.server";
+import { AnalyticsBeacon } from "./components/analytics-beacon";
 import { LinksProvider } from "./components/copy-context";
 import { UnavailablePage } from "./components/not-found";
 import { useScriptNonce } from "./components/script-nonce";
@@ -129,6 +130,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <TimeZoneContext value={display.timeZone}>{children}</TimeZoneContext>
+        {/* La demo naviga senza nuovi documenti: qui il beacon resta montato fra le sue pagine,
+            mentre nella shell React lo ricreerebbe nel browser a ogni sezione. */}
+        {isDemoPath(location.pathname) ? <AnalyticsBeacon /> : null}
         <ScrollRestoration />
         <Scripts />
       </body>
