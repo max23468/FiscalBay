@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { relative } from "node:path";
 
 import { defineConfig } from "vitest/config";
@@ -56,6 +57,9 @@ export default defineConfig({
   test: {
     projects: ["./vitest.cloudflare.config.ts", "./vitest.unit.config.ts"],
     sequence: { shuffle: { files: true, tests: false }, sequencer: MeasuredShards },
+    // Ogni worker del progetto Cloudflare porta anche un processo `workerd`: un worker ogni due
+    // core, invece di uno per core, evita che le trasformazioni dei moduli si contendano la CPU.
+    maxWorkers: Math.max(1, Math.floor(availableParallelism() / 2)),
     coverage: {
       provider: "istanbul",
       include: ["app/**/*.{ts,tsx}", "workers/**/*.ts"],

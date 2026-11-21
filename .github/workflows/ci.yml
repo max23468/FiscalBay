@@ -324,8 +324,9 @@ jobs:
           SCRIPT: ${{ matrix.script }}
         run: pnpm "${SCRIPT}"
 
+      # Anche dalla PR: la run seguente della stessa PR riparte dai suoi file incrementali.
       - name: Save TypeScript build info
-        if: matrix.script == 'typecheck' && github.ref == 'refs/heads/develop'
+        if: matrix.script == 'typecheck'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: "*.tsbuildinfo"
