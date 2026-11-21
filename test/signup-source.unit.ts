@@ -147,6 +147,21 @@ describe("etichetta del canale nell'indirizzo", () => {
       channel: "reddit",
       firstPage: "/prezzi",
     });
+    // Un annuncio ha lo stesso Referer di un risultato o di un post: decide l'etichetta, anche
+    // dal browser interno di un'app che non manda il Referer.
+    expect(page("/?via=google_ads", { referer: from("www.google.com") })).toEqual({
+      channel: "google_ads",
+      firstPage: "/",
+    });
+    expect(page("/en?via=meta_ads", { referer: from("l.facebook.com") })).toEqual({
+      channel: "meta_ads",
+      firstPage: "/en",
+    });
+    expect(page("/prezzi?via=meta_ads")).toEqual({ channel: "meta_ads", firstPage: "/prezzi" });
+    expect(page("/", { referer: from("l.instagram.com") })).toEqual({
+      channel: "other_site",
+      firstPage: "/",
+    });
     // Un valore non ammesso è ignorato: decide il Referer.
     expect(page("/prezzi?via=newsletter", { referer: from("www.bing.com") })).toEqual({
       channel: "bing",

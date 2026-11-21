@@ -20,13 +20,19 @@ export const signupChannels = [
   "reddit",
   "telegram",
   "email",
+  "google_ads",
+  "meta_ads",
   "other_site",
   "direct",
   "unknown",
 ] as const;
 export type SignupChannel = (typeof signupChannels)[number];
 
-/** Etichette ammesse nei link che pubblichiamo: valgono più del Referer. */
+/**
+ * Etichette ammesse nei link che pubblichiamo: valgono più del Referer. Gli annunci a pagamento
+ * esistono soltanto come etichetta, perché Google e Meta mandano lo stesso Referer per un annuncio
+ * e per un risultato o un post.
+ */
 export const labelledChannels = [
   "ebay_community",
   "github",
@@ -34,6 +40,8 @@ export const labelledChannels = [
   "reddit",
   "telegram",
   "email",
+  "google_ads",
+  "meta_ads",
 ] as const satisfies readonly SignupChannel[];
 
 /** Parametro dell'indirizzo, per le etichette e per la propagazione fra le pagine. */
