@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { BrowserContext, Response } from "@playwright/test";
 
+import { sourceParam } from "../app/signup-source";
 import { expect, networkIdle, test, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { abortedDataRequest, pageCases, knownPagePath, expectedPageError } from "./page-cases";
@@ -465,13 +466,18 @@ for (const scenario of scenarios) {
         const prefix = scenario.path.startsWith("/en") ? "/en" : "";
         const home =
           scenario.role === "anonymous" ? prefix || "/" : pagePath(prefix, "/app/ordini");
-        const homeLink = page.locator(`a[href="${home}"]`).first();
+        // Dopo l'idratazione i link del sito portano la provenienza (`?via=`): il logo si riconosce
+        // con e senza, altrimenti il clic attenderebbe un link che ha appena cambiato indirizzo.
+        const homeLink = page
+          .locator(`a[href="${home}"], a[href^="${home}?${sourceParam}="]`)
+          .first();
         // I pannelli dichiarati dal catalogo coprono i collegamenti sotto: l'assenza prima
         // dell'idratazione non rende navigabile il logo.
-        // Gli Ordini aggiungono all'indirizzo soltanto l'istantanea dell'elenco.
+        // Gli Ordini aggiungono all'indirizzo soltanto l'istantanea dell'elenco; la home arriva con
+        // la provenienza, che toglie dalla barra dopo l'idratazione.
         const atHome = (url: URL) =>
           url.pathname === new URL(home, baseURL!).pathname
-          && [...url.searchParams.keys()].every((key) => key === "vista");
+          && [...url.searchParams.keys()].every((key) => key === "vista" || key === sourceParam);
         if (!modal && (await homeLink.isVisible()) && new URL(before).pathname !== home) {
           // Un clic arrivato dopo la ricarica ma prima dell'idratazione si perde: si ripete.
           await expect(async () => {

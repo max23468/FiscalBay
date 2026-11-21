@@ -12,6 +12,7 @@
     "app/changelog-fragments.mjs",
     "app/i18n.ts",
     "app/money.ts",
+    "app/signup-source.ts",
     "app/web-analytics.ts",
     "scripts/local-d1.mjs",
     "scripts/third-party-notices.mjs"

@@ -74,12 +74,10 @@ test.describe("area reale", () => {
     await settled;
     await page.reload();
     await expect(template).toHaveValue("Ciao, per l'ordine {ordine} ci serve il Codice Fiscale.");
-    // Il valore arriva già dal server: un clic sulla campanella prima dell'idratazione andrebbe perso.
-    await networkIdle(page);
-
-    // La campanella segnala il negozio da ricollegare e ricorda la lettura.
+    // La campanella segnala il negozio da ricollegare e ricorda la lettura. Dopo ogni ricarica il
+    // valore arriva già dal server: un clic prima dell'idratazione andrebbe perso.
     const bell = page.getByRole("button", { name: bellName("it", 1) });
-    await bell.click();
+    await clickHydrated(bell);
     const dialog = page.getByRole("dialog", { name: "Notifiche" });
     await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
     // Una lettura che il server non registra torna da leggere.
@@ -98,7 +96,7 @@ test.describe("area reale", () => {
 
     // Eliminata, la notifica esce dalla campanella; «Annulla», anche subito, la riporta sul
     // server, e un'eliminazione resta dopo una nuova lettura della pagina.
-    await page.getByRole("button", { name: "Notifiche", exact: true }).click();
+    await clickHydrated(page.getByRole("button", { name: "Notifiche", exact: true }));
     const dismiss = dialog.getByRole("button", { name: "Elimina notifica: Collegamento scaduto" });
     const restored = page.waitForResponse(
       (response) =>
@@ -113,7 +111,7 @@ test.describe("area reale", () => {
     expect((await restored).status()).toBe(200);
     await page.keyboard.press("Escape");
     await page.reload();
-    await page.getByRole("button", { name: "Notifiche", exact: true }).click();
+    await clickHydrated(page.getByRole("button", { name: "Notifiche", exact: true }));
     await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
     const dismissed = page.waitForResponse(
       (response) =>
@@ -125,7 +123,7 @@ test.describe("area reale", () => {
     await expect(dialog).toContainText("Nessuna notifica negli ultimi 30 giorni.");
     await page.keyboard.press("Escape");
     await page.reload();
-    await page.getByRole("button", { name: "Notifiche", exact: true }).click();
+    await clickHydrated(page.getByRole("button", { name: "Notifiche", exact: true }));
     await expect(dialog).toContainText("Nessuna notifica negli ultimi 30 giorni.");
     await page.keyboard.press("Escape");
 
