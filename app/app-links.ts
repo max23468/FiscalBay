@@ -76,6 +76,19 @@ export const previewStoresPath = `${previewBase}/negozi`;
 /** Impostazioni dell'anteprima, con le stesse sezioni dell'area reale. */
 export const previewSettingsPath = `${previewBase}/impostazioni`;
 
+/**
+ * Radice della demo pubblica, anche in Production: le pagine dell'anteprima con uno scenario fisso
+ * di dati di esempio, in sola consultazione.
+ */
+export const demoBase = "/demo";
+
+export const demoOrdersPath = `${demoBase}/ordini`;
+
+/** Il percorso, italiano o inglese, è una pagina della demo. */
+export function isDemoPath(pathname: string) {
+  return new RegExp(`^${demoBase}(/|$)`, "u").test(canonicalPath(pathname));
+}
+
 /** Accesso, registrazione e recupero, fuori dall'area riservata. */
 export const accessPath = "/accesso";
 

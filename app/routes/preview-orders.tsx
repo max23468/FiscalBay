@@ -13,7 +13,7 @@ import { OrdersLoading } from "~/components/orders/loading";
 import { OrdersPage } from "~/components/orders/page";
 
 import { appCopy, pageTitle } from "../app-copy";
-import { appHref, previewOrdersPath } from "../app-links";
+import { appHref, isDemoPath } from "../app-links";
 import { historyWindowDays } from "../domain/history-window.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { rememberedStoreHref, revalidateUnlessSnapshot } from "../orders/order-list";
@@ -32,29 +32,38 @@ import { scenarioVerified } from "../preview/scenarios.server";
 import {
   assertPreviewAction,
   currentScenario,
+  demoAction,
   pageScenario,
+  previewRoot,
   simulateAction,
   writePreviewState,
 } from "../preview/state.server";
+import { sourceParam } from "../signup-source";
 import type { Route } from "./+types/preview-orders";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  return [{ title: pageTitle(t.orders.title) }, { name: "robots", content: "noindex, nofollow" }];
+  const title = isDemoPath(location.pathname)
+    ? `${t.orders.title} | ${t.demo.name}`
+    : t.orders.title;
+  return [{ title: pageTitle(title) }, { name: "robots", content: "noindex, nofollow" }];
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { language, scenario, state } = await pageScenario(request);
+  const { language, scenario, state, demo } = await pageScenario(request);
   // Come la navigazione verso gli Ordini dell'area reale, prima che arrivino i dati.
   if (scenario.view === "loading") return { loading: true as const };
+  const ordersPath = localizedPath(language, `${previewRoot(request)}/ordini`);
   const search = new URL(request.url).searchParams;
+  // La provenienza resta al layout della demo: i link dell'elenco non la ripetono.
+  search.delete(sourceParam);
   const stores = scenario.stores
     .filter((store) => store.pauseReason !== "plan")
     .map((store) => ({ id: store.id, name: store.name }));
   // Come nell'area reale, un nuovo accesso riapre il negozio scelto l'ultima volta.
   const remembered = rememberedStoreHref(
     request,
-    localizedPath(language, previewOrdersPath),
+    ordersPath,
     params.ordine,
     stores.map((store) => store.id),
   );
@@ -67,7 +76,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     query,
     scenario.now,
     scenario.account.plan,
-    (next) => `${localizedPath(language, previewOrdersPath)}?${next.toString()}`,
+    (next) => `${ordersPath}?${next.toString()}`,
   );
   const detail = params.ordine
     ? ([...scenario.orders, ...scenario.incoming].find((order) => order.id === params.ordine)
@@ -99,10 +108,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     messageTemplates: { it: defaultTemplate("it"), en: defaultTemplate("en") },
     now: scenario.now,
     confirmUnlock: state.confirmUnlock !== false,
-    settings: true,
+    // La demo non ha Impostazioni né esportazione, e gli ordini di esempio non esistono su eBay.
+    settings: !demo,
     // Come nell'area reale, prima della conferma dell'email non si collega né si esporta.
-    exportable: verified,
-    openOnEbay: true,
+    exportable: verified && !demo,
+    openOnEbay: !demo,
     ...(verified ? {} : { connectHref: null }),
   };
   return {
@@ -127,6 +137,8 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
  */
 export async function action({ request }: Route.ActionArgs) {
   assertPreviewAction(request);
+  const readOnly = demoAction(request);
+  if (readOnly) return readOnly;
   const form = await request.formData();
   if (form.get("intent") !== unlockIntent) return simulateAction(request, form);
   const { state, scenario } = await currentScenario(request);

@@ -126,6 +126,13 @@ export const it = {
     simulated: "Anteprima: l’azione è simulata.",
     signOut: "Anteprima: l’uscita è simulata.",
   },
+  demo: {
+    name: "Demo",
+    label: "Demo con dati di esempio",
+    note: "Collega il tuo negozio eBay per vedere qui i tuoi ordini.",
+    start: "Inizia gratis",
+    readOnly: "Nella demo non si salva nulla: crea un account gratis per farlo con il tuo negozio.",
+  },
   orders: {
     title: "Ordini",
     count: (count: number) => `${grouped(count)} ${plural(count, "ordine", "ordini")}`,
@@ -1088,6 +1095,7 @@ export const it = {
     nav: {
       label: "Pagine del sito",
       features: "Funzionalità",
+      demo: "Demo",
       pricing: "Prezzi",
       security: "Sicurezza",
       faq: "FAQ",

@@ -3,7 +3,6 @@ import { redirect } from "react-router";
 
 import type { SearchResults } from "~/components/shell-search";
 
-import { previewOrdersPath } from "../app-links";
 import { buyerNameView } from "../contact";
 import { postOnly } from "../error-response";
 import { localizedPath } from "../i18n";
@@ -14,11 +13,12 @@ import {
   assertPreviewAction,
   assertPreviewAvailable,
   currentScenario,
+  previewRoot,
 } from "../preview/state.server";
 import type { Route } from "./+types/preview-search";
 
-export function loader() {
-  assertPreviewAvailable();
+export function loader({ request }: Route.LoaderArgs) {
+  assertPreviewAvailable(request);
   return postOnly();
 }
 
@@ -33,7 +33,7 @@ export async function action({ request }: Route.ActionArgs) {
     request.formData(),
   ]);
   const query = searchQuery(form.get("q"));
-  const path = localizedPath(language, previewOrdersPath);
+  const path = localizedPath(language, `${previewRoot(request)}/ordini`);
   const href = query
     ? await searchHref(env.BETTER_AUTH_SECRET, previewSearchScope, path, query)
     : path;

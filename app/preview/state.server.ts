@@ -5,7 +5,10 @@ import { withStoreNotice } from "../access-notice";
 import { assertSameOrigin } from "../account-area.server";
 import { appCopy, type AppCopy } from "../app-copy";
 import {
+  demoBase,
+  isDemoPath,
   isProduction,
+  previewBase,
   previewOrdersPath,
   previewSettingsPath,
   previewStoresPath,
@@ -47,8 +50,20 @@ export interface PreviewState {
   marketingAnswered?: boolean;
 }
 
-/** L'anteprima esiste solo negli ambienti non Production. */
-export function assertPreviewAvailable() {
+/**
+ * Scenario della demo pubblica, uguale per ogni visitatore: Pro attivo, tre negozi e gli ordini con
+ * i dati fiscali visibili.
+ */
+const demoState: PreviewState = { scenario: "premium", unlocked: [], saveFailed: false };
+
+/** Radice delle pagine della richiesta: demo pubblica o anteprima. */
+export function previewRoot(request: Request) {
+  return isDemoPath(new URL(request.url).pathname) ? demoBase : previewBase;
+}
+
+/** L'anteprima esiste solo negli ambienti non Production; la demo ovunque. */
+export function assertPreviewAvailable(request: Request) {
+  if (isDemoPath(new URL(request.url).pathname)) return;
   if (isProduction(env)) throw data(null, { status: 404 });
 }
 
@@ -57,8 +72,21 @@ export function assertPreviewAvailable() {
  * cambia lo scenario né lo stato simulato.
  */
 export function assertPreviewAction(request: Request) {
-  assertPreviewAvailable();
+  assertPreviewAvailable(request);
   assertSameOrigin(request);
+}
+
+/**
+ * Azione della demo, in sola consultazione: nessun effetto e nessun cookie, soltanto l'avviso che
+ * nella demo non si salva nulla. Null fuori dalla demo.
+ */
+export function demoAction(request: Request) {
+  const { pathname } = new URL(request.url);
+  if (!isDemoPath(pathname)) return null;
+  return data<ActionResult>(
+    { ok: false, notice: appCopy[languageFromPath(pathname)].demo.readOnly },
+    { status: 403 },
+  );
 }
 
 export async function readPreviewState(request: Request): Promise<PreviewState> {
@@ -92,11 +120,13 @@ export function writePreviewState(state: PreviewState) {
   return previewCookie.serialize(state, { secure: env.APP_ORIGIN.startsWith("https:") });
 }
 
-/** Scenario corrente nella lingua della richiesta. */
+/** Scenario corrente nella lingua della richiesta; nella demo sempre lo stesso, senza cookie. */
 export async function currentScenario(request: Request) {
-  assertPreviewAvailable();
-  const state = await readPreviewState(request);
-  const language = languageFromPath(new URL(request.url).pathname);
+  assertPreviewAvailable(request);
+  const { pathname } = new URL(request.url);
+  const demo = isDemoPath(pathname);
+  const state = demo ? demoState : await readPreviewState(request);
+  const language = languageFromPath(pathname);
   const scenario = loadScenario(state.scenario, language, new Set(state.unlocked), {
     trialStarted: state.trialStarted,
     resumed: state.resumed,
@@ -106,7 +136,7 @@ export async function currentScenario(request: Request) {
     if (order.fiscal.state === "error" && retried.has(order.id))
       order.fiscal = { state: "checking" };
   }
-  return { state, language, scenario };
+  return { state, language, scenario, demo };
 }
 
 /**
@@ -166,7 +196,7 @@ const securityNotices: Record<string, string | null> = {
  * categoria e la conferma dell'identità riesce sempre. Null per le altre azioni.
  */
 export function simulateSecurity(request: Request, form: FormData) {
-  assertPreviewAvailable();
+  assertPreviewAvailable(request);
   const intent = String(form.get("intent") ?? "");
   if (intent === "conferma-accesso") return data<ActionResult>({ ok: true });
   if (!Object.hasOwn(securityNotices, intent)) return null;

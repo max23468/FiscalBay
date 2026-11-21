@@ -129,6 +129,14 @@ export function withSource(href: string, source: string, origin: string): string
   const url = new URL(href, origin);
   if (url.origin !== new URL(origin).origin || outsideSite.test(canonicalPath(url.pathname)))
     return href;
+  return appendSource(href, source);
+}
+
+/**
+ * Indirizzo con la provenienza nella query: un valore già presente si sostituisce, il resto della
+ * query e il frammento restano come sono.
+ */
+export function appendSource(href: string, source: string): string {
   const hash = href.indexOf("#");
   const head = hash < 0 ? href : href.slice(0, hash);
   const fragment = hash < 0 ? "" : href.slice(hash);

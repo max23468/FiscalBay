@@ -37,12 +37,45 @@ export interface NavDestination {
   end?: boolean;
 }
 
-/** Destinazioni principali dell'app, nell'anteprima e nell'area reale. */
-export function shellDestinations(links: AppLinks, t: AppCopy): NavDestination[] {
+/**
+ * Destinazioni principali dell'app, nell'anteprima e nell'area reale; la demo non ha le
+ * Impostazioni.
+ */
+export function shellDestinations(
+  links: AppLinks,
+  t: AppCopy,
+  { settings = true }: { settings?: boolean } = {},
+): NavDestination[] {
   return [
     { href: appHref(links, "ordini"), label: t.shell.orders, Icon: ClipboardList },
     { href: appHref(links, "negozi"), label: t.shell.stores, Icon: Store },
-    { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
+    ...(settings
+      ? [{ href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings }]
+      : []),
+  ];
+}
+
+/** Menu dell'avatar della demo: l'altra lingua e il sito, senza voci dell'account. */
+export function demoMenu(
+  links: AppLinks,
+  t: AppCopy,
+  {
+    language,
+    site,
+  }: { language: { href: string; onSelect: (language: Language) => void }; site: string },
+): AccountMenuItem[][] {
+  const other: Language = links.language === "it" ? "en" : "it";
+  return [
+    [
+      {
+        href: language.href,
+        label: languageNames[other],
+        Icon: Languages,
+        lang: other,
+        onSelect: () => language.onSelect(other),
+      },
+      { href: site, label: t.shell.visitSite, Icon: Globe, reloadDocument: true },
+    ],
   ];
 }
 
@@ -61,10 +94,10 @@ function accountMenu(links: AppLinks, t: AppCopy, whatsNew = false): AccountMenu
   ];
 }
 
-/** Sezione dell'area: la parte dell'indirizzo dopo `app` o `anteprima`. */
+/** Sezione dell'area: la parte dell'indirizzo dopo `app`, `anteprima` o `demo`. */
 export function areaSection(pathname: string) {
   const parts = canonicalPath(pathname).split("/");
-  const at = parts.findIndex((part) => part === "app" || part === "anteprima");
+  const at = parts.findIndex((part) => part === "app" || part === "anteprima" || part === "demo");
   return at < 0 ? "" : (parts[at + 1] ?? "");
 }
 

@@ -4,6 +4,7 @@ import { BadgeCheck, ClipboardCopy, Plug, RefreshCcw } from "lucide-react";
 import { redirect } from "react-router";
 
 import { useCopy } from "~/components/copy-context";
+import { DemoCallout } from "~/components/demo-callout";
 import { FaqList } from "~/components/faq-list";
 import { IconTile } from "~/components/icon-tile";
 import { ProductShot, ShotRow, type ShotName } from "~/components/product-shot";
@@ -17,6 +18,7 @@ import { infoEmail } from "../app-copy";
 import {
   accessPath,
   comparisonGuidePath,
+  demoOrdersPath,
   faqPath,
   featuresPath,
   ordersPath,
@@ -99,6 +101,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         ? premiumBody
         : `${premiumBody} ${purchasesOpen ? premiumTrial : pages.pricing.closed}`,
       faq: faqItems(pages.faq.items.slice(0, 4), language),
+      demoInvite: pages.demo,
       shots: pages.shots,
       quota:
         baseQuota === null
@@ -160,7 +163,7 @@ const stepIcons = [
   { icon: ClipboardCopy, tone: "amber" },
 ] as const;
 
-/** Id della sezione dei tre passaggi, meta di «Come funziona». */
+/** Id della sezione dei tre passaggi. */
 const stepsId = "come-funziona";
 
 const textLink = "font-medium text-primary underline-offset-[0.25em] hover:underline";
@@ -204,14 +207,14 @@ export default function Site({ loaderData }: Route.ComponentProps) {
                 {primary.label}
               </a>
               <a
-                href={`#${stepsId}`}
+                href={localizedPath(language, demoOrdersPath)}
                 {...buttonLink({
                   variant: "outline",
                   size: "lg",
                   className: cn(outlineOnBrand, "h-11"),
                 })}
               >
-                {t.howItWorks}
+                {t.demo}
               </a>
               <StoreBadge onBrand />
             </div>
@@ -252,6 +255,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
             </li>
           ))}
         </ol>
+        <DemoCallout copy={t.demoInvite} href={localizedPath(language, demoOrdersPath)} />
       </section>
       <section aria-labelledby="dentro-fiscalbay" className="border-y bg-muted/40">
         <div className={cn(siteColumn, "grid gap-14 py-14 sm:gap-20 sm:py-20")}>

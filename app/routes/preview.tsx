@@ -11,9 +11,10 @@ import {
 import { AccountDeletionPage } from "~/components/account-deletion";
 import { AppShell } from "~/components/app-shell";
 import { useCopy, useLinks } from "~/components/copy-context";
+import { DemoBar, useDemoSource } from "~/components/demo-bar";
 import { useDeviceTimeZone } from "~/components/device-time-zone";
 import { UnavailablePage } from "~/components/not-found";
-import { shellDestinations, shellMenu } from "~/components/shell-links";
+import { demoMenu, shellDestinations, shellMenu } from "~/components/shell-links";
 import { siteColumn } from "~/components/site-column";
 import {
   Select,
@@ -24,24 +25,33 @@ import {
 } from "~/components/ui/select";
 
 import { appCopy } from "../app-copy";
-import { previewBase, previewOrdersPath, previewSettingsPath } from "../app-links";
+import { accessPath, demoBase, previewBase, previewSettingsPath } from "../app-links";
 import { canonicalPath, localizedPath } from "../i18n";
 import { revalidateUnlessSnapshot } from "../orders/order-list";
 import type { OrdersPageData } from "../orders/page-data";
 import { isScenarioId, scenarioOptions, scenarioVerified } from "../preview/scenarios.server";
-import { currentScenario, assertPreviewAction, writePreviewState } from "../preview/state.server";
+import {
+  assertPreviewAction,
+  currentScenario,
+  demoAction,
+  previewRoot,
+  writePreviewState,
+} from "../preview/state.server";
 import type { Route } from "./+types/preview";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const { state, language, scenario } = await currentScenario(request);
-  const { pathname } = new URL(request.url);
-  if (pathname.replace(/\/$/u, "") === localizedPath(language, previewBase)) {
-    throw redirect(localizedPath(language, previewOrdersPath));
+  const { state, language, scenario, demo } = await currentScenario(request);
+  const url = new URL(request.url);
+  const root = previewRoot(request);
+  // La radice apre gli Ordini; la query resta, con la provenienza di chi arriva nella demo.
+  if (url.pathname.replace(/\/$/u, "") === localizedPath(language, root)) {
+    throw redirect(`${localizedPath(language, `${root}/ordini`)}${url.search}`);
   }
   return {
     language,
+    demo,
     scenario: state.scenario,
-    options: scenarioOptions(language),
+    options: demo ? [] : scenarioOptions(language),
     account: scenario.account,
     notifications: scenario.notifications,
     now: scenario.now,
@@ -58,10 +68,11 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
 
 /**
  * Cambio di scenario e, come nell'area reale, scelta della lingua: qui cambia soltanto l'indirizzo,
- * perché l'anteprima non conserva preferenze.
+ * perché l'anteprima non conserva preferenze. La demo cambia soltanto lingua.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertPreviewAction(request);
+  const root = previewRoot(request);
   const form = await request.formData();
   const chosen = form.get("language");
   if (chosen === "it" || chosen === "en") {
@@ -69,18 +80,20 @@ export async function action({ request }: Route.ActionArgs) {
     const target = URL.parse(String(form.get("returnTo") ?? ""), request.url);
     const bare = target ? canonicalPath(target.pathname) : "";
     throw redirect(
-      target && bare.startsWith(`${previewBase}/`)
+      target && bare.startsWith(`${root}/`)
         ? `${localizedPath(chosen, bare)}${target.search}`
-        : localizedPath(chosen, previewSettingsPath),
+        : localizedPath(chosen, root === demoBase ? `${root}/ordini` : previewSettingsPath),
       303,
     );
   }
+  const readOnly = demoAction(request);
+  if (readOnly) return readOnly;
   const scenario = form.get("scenario");
   const target = String(form.get("redirectTo") ?? "");
   const language = target.startsWith("/en/") ? "en" : "it";
-  const safeTarget = target.startsWith(localizedPath(language, `${previewBase}/`))
+  const safeTarget = target.startsWith(localizedPath(language, `${root}/`))
     ? target
-    : localizedPath(language, previewOrdersPath);
+    : localizedPath(language, `${root}/ordini`);
   if (!isScenarioId(scenario)) throw redirect(safeTarget);
   throw redirect(safeTarget, {
     headers: {
@@ -152,14 +165,63 @@ function ScenarioBar({
 }
 
 export default function Preview({ loaderData }: Route.ComponentProps) {
+  return loaderData.demo ? <Demo loaderData={loaderData} /> : <Scenarios loaderData={loaderData} />;
+}
+
+/** Su Ordini il campo di ricerca mostra la ricerca attiva, decifrata dal loader della pagina. */
+function useOrdersQuery() {
+  const orders = useMatches().find((match) => /^(preview|demo)-orders/u.test(match.id));
+  return orders ? ((orders.loaderData as OrdersPageData | undefined)?.search ?? "") : null;
+}
+
+/**
+ * Demo pubblica: la barra dei dati di esempio con `Inizia gratis`, Ordini e Negozi, e nel menu
+ * soltanto lingua e sito. Nessun cookie: il fuso è quello predefinito e l'uscita torna al sito.
+ */
+function Demo({ loaderData }: Pick<Route.ComponentProps, "loaderData">) {
+  const { language } = loaderData;
+  const t = appCopy[language];
+  const { links } = useLinks();
+  const submit = useSubmit();
+  const { pathname, search } = useLocation();
+  const query = useOrdersQuery();
+  const sourced = useDemoSource();
+  const site = sourced(localizedPath(language));
+  const root = localizedPath(language, demoBase);
+  return (
+    <AppShell
+      account={loaderData.account}
+      notifications={loaderData.notifications}
+      now={loaderData.now}
+      navigation={shellDestinations(links, t, { settings: false })}
+      menu={demoMenu(links, t, {
+        language: {
+          href: root,
+          onSelect: (chosen) =>
+            void submit(
+              { language: chosen, returnTo: sourced(`${pathname}${search}`) },
+              { method: "post", action: root },
+            ),
+        },
+        site,
+      })}
+      search={{ action: localizedPath(language, `${demoBase}/ricerca`), query }}
+      onSignOut={() => window.location.assign(site)}
+      before={<DemoBar signUp={sourced(`${localizedPath(language, accessPath)}?registrati`)} />}
+    >
+      <Outlet />
+    </AppShell>
+  );
+}
+
+function Scenarios({ loaderData }: Pick<Route.ComponentProps, "loaderData">) {
   const { language, verified } = loaderData;
   const t = appCopy[language];
   const { links } = useLinks();
   const submit = useSubmit();
   const { pathname, search } = useLocation();
+  const query = useOrdersQuery();
   useDeviceTimeZone();
-  // Su Ordini il campo mostra la ricerca attiva, decifrata dal loader della pagina.
-  const orders = useMatches().find((match) => match.id.startsWith("preview-orders"));
   // Come dopo il link di conferma reale: nessuna schermata dell'area, soltanto l'esito.
   if (loaderData.deleting)
     return (
@@ -196,14 +258,7 @@ export default function Preview({ loaderData }: Route.ComponentProps) {
         },
       })}
       search={
-        verified
-          ? {
-              action: localizedPath(language, `${previewBase}/ricerca`),
-              query: orders
-                ? ((orders.loaderData as OrdersPageData | undefined)?.search ?? "")
-                : null,
-            }
-          : undefined
+        verified ? { action: localizedPath(language, `${previewBase}/ricerca`), query } : undefined
       }
       onSignOut={(notify) => notify(t.preview.signOut)}
       before={<ScenarioBar scenario={loaderData.scenario} options={loaderData.options} />}
