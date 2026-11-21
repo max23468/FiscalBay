@@ -479,9 +479,14 @@ for (const scenario of scenarios) {
           url.pathname === new URL(home, baseURL!).pathname
           && [...url.searchParams.keys()].every((key) => key === "vista" || key === sourceParam);
         if (!modal && (await homeLink.isVisible()) && new URL(before).pathname !== home) {
-          // Un clic arrivato dopo la ricarica ma prima dell'idratazione si perde: si ripete.
+          // Un'attivazione arrivata dopo la ricarica ma prima dell'idratazione si perde: si ripete.
+          // Il logo si attiva da tastiera: il puntatore sopra il link avvierebbe il precaricamento
+          // delle regole di speculazione, che Chromium esegue fuori dall'instradamento della prova e
+          // quindi senza l'override di versione; prima dell'attivazione in Production la home
+          // arriverebbe dalla versione attiva, con risorse che quella caricata non ha.
           await expect(async () => {
-            await homeLink.click();
+            await homeLink.focus();
+            await page.keyboard.press("Enter");
             await expect(page).toHaveURL(atHome, { timeout: 2_000 });
           }).toPass();
           await networkIdle(page);
