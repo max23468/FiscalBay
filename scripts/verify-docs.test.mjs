@@ -85,6 +85,16 @@ describe("integrità dei documenti", () => {
         `Provenienza: ${milestone}.\n`,
       );
       assert.equal(check("# Roadmap\n").status, 0);
+      // Il changelog con i frammenti si legge come dalla pagina Novità, anche fuori dalle Novità.
+      const release = "## [2.0.1] - 2026-11-10\n\n### Altre modifiche\n\n- Interna.\n";
+      writeFileSync(path.join(directory, "CHANGELOG.md"), `# Changelog\n\n${release}`);
+      assert.equal(check("# Roadmap\n").status, 0);
+      mkdirSync(path.join(directory, "changes"));
+      writeFileSync(path.join(directory, "changes/prova.md"), "# Prova\n");
+      writeFileSync(path.join(directory, "CHANGELOG.md"), `# Changelog\n\n${release}\n${release}`);
+      const repeated = check("# Roadmap\n");
+      assert.equal(repeated.status, 1);
+      assert.ok(repeated.errors.some((error) => error.code === "CHANGELOG"));
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
