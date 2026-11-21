@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import { useRouteLoaderData } from "react-router";
 
+import { AnalyticsBeacon } from "~/components/analytics-beacon";
 import { useCopy } from "~/components/copy-context";
 import { LanguageSwitch } from "~/components/language-switch";
 import { useScriptNonce } from "~/components/script-nonce";
@@ -22,7 +23,6 @@ import {
 } from "../app-links";
 import { localizedPath } from "../i18n";
 import { speculationRules } from "../speculation-rules";
-import { webAnalyticsBeacon, webAnalyticsScript } from "../web-analytics";
 
 const navItems = [
   { path: featuresPath, key: "features" },
@@ -136,10 +136,7 @@ export function SiteLayout({
   signedIn: boolean;
   children: React.ReactNode;
 }) {
-  const root = useRouteLoaderData<{ webAnalyticsToken: string | null; speculation: boolean }>(
-    "root",
-  );
-  const token = root?.webAnalyticsToken;
+  const root = useRouteLoaderData<{ speculation: boolean }>("root");
   const nonce = useScriptNonce();
   return (
     <div className="flex min-h-dvh flex-col">
@@ -159,17 +156,7 @@ export function SiteLayout({
           dangerouslySetInnerHTML={{ __html: speculationRules(signedIn) }}
         />
       ) : null}
-      {/* Il beacon conta la visita senza contendere la banda alle risorse della pagina. */}
-      {token ? (
-        <script
-          defer
-          src={webAnalyticsScript}
-          data-cf-beacon={webAnalyticsBeacon(token)}
-          fetchPriority="low"
-          nonce={nonce}
-          suppressHydrationWarning
-        />
-      ) : null}
+      <AnalyticsBeacon />
     </div>
   );
 }

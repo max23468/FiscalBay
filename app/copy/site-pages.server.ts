@@ -21,6 +21,7 @@ const it = {
     hero: "FiscalBay: trova e gestisci il Codice Fiscale dei tuoi ordini eBay.",
     body: "Colleghi il tuo negozio eBay e FiscalBay riporta il Codice Fiscale dell’acquirente, quando disponibile su eBay, pronto da copiare ed esportare. Anche la Partita IVA, se c’è.",
     howItWorks: "Come funziona",
+    demo: "Guarda la demo",
     trust: [
       "API ufficiali eBay",
       "Pagamenti sicuri gestiti da Stripe",
@@ -402,6 +403,7 @@ const en: SitePagesCopy = {
     hero: "FiscalBay: find and manage the tax code (Codice Fiscale) of your eBay orders.",
     body: "Connect your eBay store and FiscalBay shows the buyer’s tax code (Codice Fiscale), when eBay provides it, ready to copy and export. The VAT number (Partita IVA) too, when there is one.",
     howItWorks: "How it works",
+    demo: "See the demo",
     trust: ["Official eBay APIs", "Secure payments handled by Stripe", "No card to get started"],
     steps: [
       { title: "Connect eBay", body: "Sign in to eBay and allow FiscalBay to read your orders." },

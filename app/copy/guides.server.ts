@@ -92,8 +92,9 @@ export const guides: Record<
     index: { title: string; metaTitle: string; description: string; lead: string };
     solutionTitle: string;
     sourcesTitle: string;
+    /** Riquadro dopo «Come ti aiuta FiscalBay»: schermata degli Ordini, prova e inviti. */
+    demo: { title: string; body: string; link: string; alt: string };
     start: string;
-    signIn: string;
     back: string;
     updated: (date: string) => string;
     articles: Record<GuidePath, Guide>;
@@ -109,8 +110,13 @@ export const guides: Record<
     },
     solutionTitle: "Come ti aiuta FiscalBay",
     sourcesTitle: "Fonti",
+    demo: {
+      title: "Il Codice Fiscale accanto a ogni ordine",
+      body: "Apri la demo con ordini di esempio, senza registrarti. Il piano Free è gratuito e la prova Pro di 14 giorni non chiede una carta.",
+      link: "Guarda la demo",
+      alt: "Gli Ordini di FiscalBay nella demo, con il Codice Fiscale di ogni acquirente",
+    },
     start: "Inizia gratis",
-    signIn: "Accedi",
     back: "Tutte le guide",
     updated: (date) => `Aggiornata il ${date}`,
     articles: {
@@ -622,8 +628,13 @@ export const guides: Record<
     },
     solutionTitle: "How FiscalBay helps",
     sourcesTitle: "Sources",
+    demo: {
+      title: "The tax code next to every order",
+      body: "Open the demo with sample orders, no sign-up needed. The Free plan costs nothing and the 14-day Pro trial needs no card.",
+      link: "See the demo",
+      alt: "FiscalBay Orders in the demo, with each buyer’s tax code",
+    },
     start: "Start for free",
-    signIn: "Sign in",
     back: "All guides",
     updated: (date) => `Updated ${date}`,
     articles: {

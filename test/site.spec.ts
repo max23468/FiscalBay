@@ -69,6 +69,15 @@ describe("provenienza dei visitatori", () => {
     expect(
       await arrival("/accesso?registrati&via=google%3A%2Fprezzi", "http://localhost:5173/"),
     ).toBe("google:/prezzi");
+    // Dalla Guida alla demo la provenienza resta quella del primo arrivo; chi apre per prima la
+    // demo ha la demo come prima pagina.
+    expect(
+      await arrival(
+        "/demo/ordini?via=google%3A%2Fguide%2Fpartita-iva-acquirente-ebay",
+        "http://localhost:5173/guide/partita-iva-acquirente-ebay",
+      ),
+    ).toBe("google:/guide/partita-iva-acquirente-ebay");
+    expect(await arrival("/en/demo/orders", from("www.bing.com"))).toBe("bing:/en/demo/orders");
   });
 
   it("non cambia canonical, dati strutturati né sitemap e non scrive cookie", async () => {
@@ -246,6 +255,9 @@ describe("radice pubblica e area riservata", () => {
       "/accesso",
       "/admin",
       "/anteprima",
+      // La demo ha soltanto dati di esempio: raggiungibile ma `noindex`.
+      "/demo/ordini",
+      "/en/demo/stores",
     ]) {
       expect(indexable("https://fiscalbay.it", path)).toBe(false);
     }
@@ -289,6 +301,9 @@ describe("radice pubblica e area riservata", () => {
       "/sw.js",
       "/prezzi",
       "/en/security",
+      // I crawler leggono il `noindex` della demo invece di indicizzarne l'indirizzo.
+      "/demo/ordini",
+      "/en/demo/orders",
     ])
       expect(disallowed(path), path).toBe(false);
     for (const path of [
@@ -770,6 +785,7 @@ describe("pagine del sito pubblico", () => {
             site.home.premiumTrial,
             site.pricing.description,
             site.pricing.trialTitle,
+            guides[language].demo.body,
           ],
         ],
         [

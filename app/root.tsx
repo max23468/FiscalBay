@@ -18,7 +18,7 @@ import {
 
 import type { Route } from "./+types/root";
 import { appCopy, copyModules, loadCopy, pageTitle } from "./app-copy";
-import { appBase, manifestPath, previewBase } from "./app-links";
+import { appBase, demoBase, isDemoPath, manifestPath, previewBase } from "./app-links";
 import { arrivalSource } from "./arrival-source.server";
 import { LinksProvider } from "./components/copy-context";
 import { UnavailablePage } from "./components/not-found";
@@ -140,6 +140,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
   const page = canonicalPath(pathname);
   const preview = new RegExp(`^${previewBase}(/|$)`, "u").test(page);
+  const base = preview ? previewBase : isDemoPath(page) ? demoBase : appBase;
   const revalidator = useRevalidator();
   useEffect(() => {
     if (!/^\/(app(?:\/|$)|accesso$)/u.test(page)) return;
@@ -159,7 +160,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
     };
   }, [page, revalidator]);
   return (
-    <LinksProvider value={{ language: loaderData.language, base: preview ? previewBase : appBase }}>
+    <LinksProvider value={{ language: loaderData.language, base }}>
       <Outlet />
     </LinksProvider>
   );

@@ -902,3 +902,105 @@ it("cambia lingua dell'anteprima conservando pagina e filtri", async () => {
   // Fuori dall'anteprima si torna alle sue Impostazioni.
   expect((await change("/app/ordini", "en")).headers.get("location")).toBe("/en/preview/settings");
 });
+
+describe("demo pubblica", () => {
+  /** Prova con l'origine di Production, dove l'anteprima risponde 404. */
+  const inProduction = async (run: () => Promise<void>) => {
+    const previous = env.APP_ORIGIN;
+    Object.assign(env, { APP_ORIGIN: "https://fiscalbay.it" });
+    try {
+      await run();
+    } finally {
+      Object.assign(env, { APP_ORIGIN: previous });
+    }
+  };
+  /** I moduli partono dal dominio di Production. */
+  const origin = "https://fiscalbay.it";
+  /** Un cookie dell'anteprima, che la demo ignora. */
+  const previewCookie = async () =>
+    (await writePreviewState({ scenario: "ordinario", unlocked: [], saveFailed: false })).split(
+      ";",
+    )[0]!;
+
+  it("esiste anche in Production, sempre con lo stesso scenario e senza Impostazioni né eBay", async () => {
+    await inProduction(async () => {
+      const cookie = await previewCookie();
+      expect(await routeData(previewRoot, "/demo/ordini", { cookie })).toMatchObject({
+        demo: true,
+        scenario: "premium",
+        options: [],
+      });
+      const orders = await routeData(previewOrders, "/demo/ordini", { cookie });
+      expect(orders).toMatchObject({
+        account: { plan: "premium" },
+        settings: false,
+        exportable: false,
+        openOnEbay: false,
+      });
+      expect(await routeData(previewStores, "/en/demo/stores")).toMatchObject({
+        page: { notificationSettings: false },
+      });
+    });
+  });
+
+  it("non salva nulla: ogni azione risponde con l'avviso, senza cookie", async () => {
+    await inProduction(async () => {
+      for (const [action, path, fields] of [
+        [previewOrdersAction, "/demo/ordini", { intent: "unlock", orderId: "ord-03" }],
+        [previewStoresAction, "/en/demo/stores", { intent: "pause" }],
+        [previewRootAction, "/demo", { scenario: "ordinario", redirectTo: "/demo/ordini" }],
+      ] as const) {
+        const response = await routeResponse(action as never, path, {
+          cookie: await previewCookie(),
+          fields,
+          origin,
+        });
+        expect(response.status, path).toBe(403);
+        expect(response.headers.get("set-cookie"), path).toBeNull();
+        const language = path.startsWith("/en/") ? "en" : "it";
+        expect(await response.json(), path).toEqual({
+          ok: false,
+          notice: appCopy[language].demo.readOnly,
+        });
+      }
+      // Un modulo di un altro sito si ferma prima, come nell'anteprima.
+      const foreign = await callRoute(previewStoresAction, "/demo/negozi", {
+        fields: { intent: "pause" },
+        origin: "https://estraneo.invalid",
+      }).catch((thrown: unknown) => thrown);
+      expect((foreign as Response).status).toBe(403);
+    });
+  });
+
+  it("cambia lingua e cerca restando nella demo, con la provenienza fuori dai link dell'elenco", async () => {
+    await inProduction(async () => {
+      const via = "via=google%3A%2Fguide%2Fpartita-iva-acquirente-ebay";
+      // La radice apre gli Ordini con la stessa query, provenienza compresa.
+      expect((await routeResponse(previewRoot, `/demo?${via}`)).headers.get("location")).toBe(
+        `/demo/ordini?${via}`,
+      );
+      const change = await routeResponse(previewRootAction, "/demo", {
+        fields: { language: "en", returnTo: `/demo/ordini?negozio=neg-vintage&${via}` },
+        origin,
+      });
+      expect(change.headers.get("location")).toBe(`/en/demo/orders?negozio=neg-vintage&${via}`);
+      const outside = await routeResponse(previewRootAction, "/en/demo", {
+        fields: { language: "it", returnTo: "/app/ordini" },
+        origin,
+      });
+      expect(outside.headers.get("location")).toBe("/demo/ordini");
+      const found = (await (
+        await routeResponse(previewSearch, "/demo/ricerca", {
+          headers: { accept: "application/json" },
+          fields: { q: "rossi" },
+          origin,
+        })
+      ).json()) as SearchResults;
+      expect(found.href).toMatch(/^\/demo\/ordini\?ricerca=[\w-]+$/u);
+      expect(found.items.every((item) => item.href.startsWith("/demo/ordini/ord-"))).toBe(true);
+      const listed = await routeData(previewOrders, `/demo/ordini?${via}`);
+      expect(listed).toMatchObject({ total: 14 });
+      expect(JSON.stringify(listed)).not.toContain("via=");
+    });
+  });
+});

@@ -15,11 +15,18 @@ import {
   TableRow,
 } from "~/components/ui/table";
 
-import { accessPath, featuresPath, guidePaths, guidesPath, type GuidePath } from "../app-links";
+import {
+  accessPath,
+  demoOrdersPath,
+  featuresPath,
+  guidePaths,
+  guidesPath,
+  type GuidePath,
+} from "../app-links";
 import { guides, type ComparisonCell, type Guide as GuideCopy } from "../copy/guides.server";
 import { sitePages } from "../copy/site-pages.server";
 import { formatDate } from "../format";
-import { canonicalPath, localizedPath } from "../i18n";
+import { canonicalPath, localizedPath, type Language } from "../i18n";
 import { ogImage, siteMeta } from "../site-meta";
 import { publicPage, publicPageHeaders } from "../site.server";
 import type { Route } from "./+types/guide";
@@ -45,8 +52,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       alt: sitePages[language].shots[article.solution.shot],
       updatedLabel: t.updated(formatDate(article.updated, language, "date")),
       solutionTitle: t.solutionTitle,
+      demo: { ...t.demo, href: localizedPath(language, demoOrdersPath) },
       start: t.start,
-      signIn: t.signIn,
+      startHref: `${localizedPath(language, accessPath)}?registrati`,
       back: t.back,
       guidesTitle: t.index.title,
       guidesHref: localizedPath(language, guidesPath),
@@ -277,8 +285,53 @@ function ComparisonCards({
 }
 
 /**
+ * Riquadro dopo «Come ti aiuta FiscalBay»: gli Ordini su dati di esempio, la prova senza carta,
+ * `Inizia gratis` e la demo. Anche la schermata apre la demo, senza una seconda fermata da tastiera
+ * né un secondo nome per i lettori di schermo.
+ */
+function DemoInvite({
+  language,
+  demo,
+  start,
+}: {
+  language: Language;
+  demo: { title: string; body: string; link: string; alt: string; href: string };
+  start: { label: string; href: string };
+}) {
+  return (
+    <section
+      aria-labelledby="demo-titolo"
+      className="grid items-center gap-6 rounded-2xl border border-primary/30 bg-primary/5 p-5 sm:p-8 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+    >
+      <div className="grid content-start gap-4">
+        <h2 id="demo-titolo" className="text-xl font-semibold text-balance sm:text-2xl">
+          {demo.title}
+        </h2>
+        <p className="leading-relaxed text-pretty">{demo.body}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <a href={start.href} {...buttonLink({ size: "lg" })}>
+            {start.label}
+          </a>
+          <a href={demo.href} {...buttonLink({ variant: "outline", size: "lg" })}>
+            {demo.link}
+          </a>
+        </div>
+      </div>
+      <a
+        href={demo.href}
+        tabIndex={-1}
+        aria-hidden="true"
+        className="block max-md:mx-auto max-md:max-w-xs"
+      >
+        <ProductShot name="ordini" language={language} alt={demo.alt} />
+      </a>
+    </section>
+  );
+}
+
+/**
  * Articolo delle Guide (§23): sezioni, riquadro con la soluzione di FiscalBay e la sua schermata,
- * menu di tutte le guide a lato da 1024 px e dopo l'articolo sotto.
+ * riquadro della demo, menu di tutte le guide a lato da 1024 px e dopo l'articolo sotto.
  */
 export default function Guide({ loaderData }: Route.ComponentProps) {
   const { language, signedIn, path, copy: t } = loaderData;
@@ -362,23 +415,14 @@ export default function Guide({ loaderData }: Route.ComponentProps) {
                 <ArrowRight aria-hidden className="size-4 shrink-0" />
               </a>
             ) : null}
-            {signedIn ? null : (
-              <div className="flex flex-wrap items-center gap-3">
-                <a
-                  href={`${localizedPath(language, accessPath)}?registrati`}
-                  {...buttonLink({ size: "lg" })}
-                >
-                  {t.start}
-                </a>
-                <a
-                  href={localizedPath(language, accessPath)}
-                  {...buttonLink({ variant: "outline", size: "lg" })}
-                >
-                  {t.signIn}
-                </a>
-              </div>
-            )}
           </section>
+          {signedIn ? null : (
+            <DemoInvite
+              language={language}
+              demo={t.demo}
+              start={{ label: t.start, href: t.startHref }}
+            />
+          )}
           {t.sources ? (
             <section className="grid gap-2 border-t pt-6">
               <h2 className="text-sm font-semibold">{t.sourcesTitle}</h2>

@@ -17,6 +17,7 @@ import { infoEmail } from "../app-copy";
 import {
   accessPath,
   comparisonGuidePath,
+  demoOrdersPath,
   faqPath,
   featuresPath,
   ordersPath,
@@ -160,7 +161,7 @@ const stepIcons = [
   { icon: ClipboardCopy, tone: "amber" },
 ] as const;
 
-/** Id della sezione dei tre passaggi, meta di «Come funziona». */
+/** Id della sezione dei tre passaggi. */
 const stepsId = "come-funziona";
 
 const textLink = "font-medium text-primary underline-offset-[0.25em] hover:underline";
@@ -204,14 +205,14 @@ export default function Site({ loaderData }: Route.ComponentProps) {
                 {primary.label}
               </a>
               <a
-                href={`#${stepsId}`}
+                href={localizedPath(language, demoOrdersPath)}
                 {...buttonLink({
                   variant: "outline",
                   size: "lg",
                   className: cn(outlineOnBrand, "h-11"),
                 })}
               >
-                {t.howItWorks}
+                {t.demo}
               </a>
               <StoreBadge onBrand />
             </div>

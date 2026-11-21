@@ -68,7 +68,26 @@ export default [
   route("api/v1/notifications", "routes/notifications.ts"),
   ...preview("it"),
   ...preview("en"),
+  ...demo("it"),
+  ...demo("en"),
 ] satisfies RouteConfig;
+
+/**
+ * Demo pubblica, anche in Production: Ordini e Negozi dell'anteprima con uno scenario fisso, senza
+ * Impostazioni. Le route riconoscono la demo dall'indirizzo.
+ */
+function demo(language: Language) {
+  const suffix = language === "en" ? "-en" : "";
+  const path = (part: string) => localizedPath(language, `/demo${part}`).slice(1);
+  const child = (part: string) => path(`/${part}`).slice(path("").length + 1);
+  return [
+    route(path("/ricerca"), "routes/preview-search.ts", { id: `demo-search${suffix}` }),
+    route(path(""), "routes/preview.tsx", { id: `demo${suffix}` }, [
+      route(child("ordini/:ordine?"), "routes/preview-orders.tsx", { id: `demo-orders${suffix}` }),
+      route(child("negozi/:negozio?"), "routes/preview-stores.tsx", { id: `demo-stores${suffix}` }),
+    ]),
+  ];
+}
 
 /** Anteprima con scenari sintetici delle schermate dell'app, assente in Production. */
 function preview(language: Language) {

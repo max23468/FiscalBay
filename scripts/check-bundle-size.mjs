@@ -18,14 +18,14 @@ import { gzipSync } from "node:zlib";
 import { buildOutput } from "./lib/build-output.mjs";
 
 /**
- * Soglie in KiB gzip: sito, documenti legali ed errori; area riservata, accesso e anteprima.
- * Lasciano una ventina di KiB sopra la pagina più pesante: fermano un aumento accidentale, non la
- * crescita ordinaria dei testi (D182).
+ * Soglie in KiB gzip: sito, documenti legali ed errori; area riservata, accesso, anteprima e demo,
+ * che usa le schermate dell'anteprima. Lasciano una ventina di KiB sopra la pagina più pesante:
+ * fermano un aumento accidentale, non la crescita ordinaria dei testi (D182).
  */
 export const budgetKiB = { public: 170, app: 302 };
 
 // In inglese anteprima e accesso hanno i segmenti tradotti, come gli indirizzi dell'app.
-const appPath = /^(?:en\/)?(?:app|admin|anteprima|preview|accesso|sign-in)(?:\/|$)/u;
+const appPath = /^(?:en\/)?(?:app|admin|anteprima|preview|demo|accesso|sign-in)(?:\/|$)/u;
 
 const jsFiles = (directory) =>
   readdirSync(directory, { recursive: true, withFileTypes: true })

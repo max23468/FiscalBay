@@ -115,6 +115,13 @@ export const en: AppCopy = {
     simulated: "Preview: this action is simulated.",
     signOut: "Preview: signing out is simulated.",
   },
+  demo: {
+    name: "Demo",
+    label: "Demo with sample data",
+    note: "Connect your eBay store to see your own orders here.",
+    start: "Start for free",
+    readOnly: "Nothing is saved in the demo: create a free account to do this with your store.",
+  },
   orders: {
     title: "Orders",
     count: (count) => `${grouped(count)} ${plural(count, "order", "orders")}`,

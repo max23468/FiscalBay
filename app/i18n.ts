@@ -71,6 +71,7 @@ const segments: Record<string, Segment> = {
   auth: { en: "auth", next: { error: leaf("error") } },
   app: { en: "app", next: areaPages },
   anteprima: { en: "preview", next: areaPages },
+  demo: { en: "demo", next: areaPages },
 };
 
 /** Traduce i segmenti di un percorso; `toEnglish` falso riporta i nomi inglesi a quelli italiani. */

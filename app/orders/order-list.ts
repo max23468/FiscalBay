@@ -1,5 +1,6 @@
 import type { ShouldRevalidateFunctionArgs } from "react-router";
 
+import { isDemoPath } from "../app-links";
 import { listFilterParams, snapshotParam } from "./order-criteria";
 
 /** Ordini mostrati per ogni «Carica altri», nell'area reale e nell'anteprima. */
@@ -75,8 +76,12 @@ export function revalidateUnlessSnapshot({
  */
 export const rememberedStoreCookie = "fiscalbay-negozio";
 
-/** Ricorda o dimentica nel browser il negozio scelto fra i filtri. */
+/**
+ * Ricorda o dimentica nel browser il negozio scelto fra i filtri. La demo non scrive cookie: i suoi
+ * negozi di esempio non sostituiscono quello ricordato dall'area reale.
+ */
 export function rememberStore(storeId: string | null) {
+  if (isDemoPath(location.pathname)) return;
   const secure = location.protocol === "https:" ? "; secure" : "";
   document.cookie = storeId
     ? `${rememberedStoreCookie}=${encodeURIComponent(storeId)}; path=/; max-age=31536000; samesite=lax${secure}`
