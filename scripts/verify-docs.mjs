@@ -12,6 +12,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { parseChangelog, withChanges } from "../app/changelog.ts";
+
 let options;
 try {
   options = parseArgs({
@@ -223,6 +225,22 @@ function main() {
       if (words > COMPLETED_TASK_WORDS)
         error("TASK_LENGTH", `${title[1]}: ${words} parole, al massimo ${COMPLETED_TASK_WORDS}`);
     }
+  }
+  // Il changelog con i frammenti, letto come dalla pagina Novità: un errore di forma fuori dalle
+  // Novità, per esempio una versione ripetuta, resta al livello documentale del classificatore e
+  // senza questo controllo arriverebbe fino alla suite completa del candidato.
+  const changelogFile = path.join(root, "CHANGELOG.md");
+  if (fs.existsSync(changelogFile)) {
+    const changes = path.join(root, "changes");
+    const fragments = fs.existsSync(changes)
+      ? fs
+          .readdirSync(changes)
+          .filter((name) => name.endsWith(".md"))
+          .toSorted()
+          .map((name) => fs.readFileSync(path.join(changes, name), "utf8"))
+      : [];
+    const text = withChanges(fs.readFileSync(changelogFile, "utf8"), fragments);
+    for (const problem of parseChangelog(text).problems) error("CHANGELOG", problem);
   }
   for (const [file, text] of documents) {
     const code = relative(file) !== DECISION_REGISTER && text.match(MILESTONE_CODE);

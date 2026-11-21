@@ -109,6 +109,21 @@ const preloadCopyModules = (): Plugin => {
   };
 };
 
+/**
+ * La preview locale delle prove tiene aperte le connessioni inattive più a lungo dei browser. Con i
+ * 5 secondi predefiniti di Node il server chiude una connessione mentre WebKit la riusa per una
+ * richiesta nuova, che fallisce con «Connection terminated unexpectedly».
+ */
+const keepConnectionsOpen = (): Plugin => ({
+  name: "keep-connections-open",
+  configurePreviewServer({ httpServer }) {
+    // La preview delle prove è HTTP/1.1 senza TLS: il server HTTP/2 non ha questi limiti.
+    if (!("keepAliveTimeout" in httpServer)) return;
+    httpServer.keepAliveTimeout = 125_000;
+    httpServer.headersTimeout = 126_000;
+  },
+});
+
 // La preview serve soltanto la Build Output, anche da un'altra cartella: niente plugin di build.
 export default defineConfig(({ isPreview }) => ({
   plugins: [
@@ -118,7 +133,7 @@ export default defineConfig(({ isPreview }) => ({
       persistState: { path: path.resolve(import.meta.dirname, ".cloudflare/state") },
     }),
     ...(isPreview
-      ? []
+      ? [keepConnectionsOpen()]
       : [
           tailwindcss(),
           reactRouter(),

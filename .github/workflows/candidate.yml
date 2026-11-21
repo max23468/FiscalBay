@@ -50,6 +50,7 @@ jobs:
         with:
           ref: ${{ inputs.expected_sha || github.sha }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/setup
         with:

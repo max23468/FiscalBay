@@ -566,8 +566,11 @@ describe("metriche tecniche su Analytics Engine", () => {
 
   it("conta una volta sola il tempo delle misure in parallelo", async () => {
     const { points, dataset } = recorder();
+    // Orologio simulato: con i timer reali, sotto carico, ogni attesa si allunga e la somma
+    // dipende dalla macchina invece che dal conteggio.
+    vi.useFakeTimers({ toFake: ["setTimeout", "performance"] });
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-    const response = await withPhaseTimings(
+    const pending = withPhaseTimings(
       new Request("https://test.fiscalbay.it/app/ordini"),
       async () => {
         await Promise.all([
@@ -580,13 +583,15 @@ describe("metriche tecniche su Analytics Engine", () => {
       },
       { dataset },
     );
+    await vi.advanceTimersByTimeAsync(60);
+    const response = await pending;
+    vi.useRealTimers();
     const [invocation, d1] = points;
     const [count, total, longest] = d1!.doubles!;
     expect(count).toBe(4);
-    expect(total).toBeGreaterThanOrEqual(longest!);
-    // Sommate una per una le quattro misure valgono almeno 3 × 40 + 20 ms; contate una volta sola
-    // ne restano circa 60. La soglia sulla somma regge ai ritardi dei timer sotto carico.
-    expect(total).toBeLessThan(3 * 40 + 20);
+    expect(longest).toBe(40);
+    // Sommate una per una le quattro misure varrebbero 3 × 40 + 20 ms: contate una volta sola, 60.
+    expect(total).toBe(60);
     expect(total).toBeLessThanOrEqual(invocation!.doubles![1]! + 1);
     const timing = Number(/d1;dur=([\d.]+)/u.exec(response.headers.get("server-timing")!)![1]);
     expect(Math.abs(timing - total!)).toBeLessThanOrEqual(1);
