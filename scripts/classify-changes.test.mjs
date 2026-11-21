@@ -27,8 +27,9 @@ import {
   fileImpact,
   fileLevel,
   levelScripts,
-  ciGateScript,
+  ciParts,
   moduleAreas,
+  scriptClosure,
   plan,
   sharedModules,
   testVariablesOnly,
@@ -44,16 +45,27 @@ const testValue = config.replace(
 );
 
 describe("livello del gate dai file modificati", () => {
-  it("conserva i controlli del gate senza ricompilare la build test già prodotta", () => {
-    assert.equal(ciGateScript("full", true), "verify:gate");
-    assert.equal(ciGateScript("build", true), "verify:unit");
-    for (const level of Object.keys(levelScripts))
-      assert.equal(ciGateScript(level), levelScripts[level]);
+  it("divide il gate in parti parallele che coprono lo script del livello", () => {
     const scripts = JSON.parse(readFileSync("package.json", "utf8")).scripts;
-    assert.equal(
-      scripts[ciGateScript("full", true)],
-      "pnpm verify:unit && pnpm doctor:react && pnpm build:live",
-    );
+    // Documenti e build test girano in `Verify`; gli shard e l'unione sostituiscono la copertura.
+    const elsewhere = scriptClosure(scripts, ["verify:documents", "build", "test:coverage"]);
+    for (const [level, { checks, tests }] of Object.entries(ciParts)) {
+      const level_ = scriptClosure(scripts, [levelScripts[level]]);
+      const parts = scriptClosure(scripts, [
+        ...checks,
+        ...(tests ? ["test:shard", "test:merge"] : []),
+      ]);
+      // Gli script che compongono altri script non eseguono nulla di proprio.
+      const composite = (name) => /^(?:pnpm [\w:.-]+(?: && |$))+$/u.test(scripts[name]);
+      for (const name of level_)
+        if (!elsewhere.has(name) && !composite(name))
+          assert.ok(parts.has(name), `${level}: ${name}`);
+      for (const name of parts)
+        if (!["test:shard", "test:merge"].includes(name))
+          assert.ok(level_.has(name), `${level} non esegue ${name}`);
+      assert.equal(level_.has("test:coverage"), tests, level);
+      for (const check of checks) assert.ok(check in scripts, check);
+    }
   });
   it("ferma le migration già presenti modificate o eliminate, non quelle nuove", () => {
     const base = {
@@ -148,9 +160,10 @@ describe("livello del gate dai file modificati", () => {
       build: "verify:build",
       full: "verify",
     });
-    assert.match(scripts[levelScripts.tooling], /pnpm verify:documents\b/u);
+    const tooling = scriptClosure(scripts, [levelScripts.tooling]);
+    assert.ok(tooling.has("verify:documents"));
     // Il catalogo delle pagine è Node puro: lo prova chi modifica il suo script.
-    assert.match(scripts[levelScripts.tooling], /&& pnpm verify:pages &&/u);
+    assert.ok(tooling.has("verify:pages"));
     assert.match(scripts[levelScripts.unit], /pnpm verify:tooling\b/u);
     for (const level of ["build", "full"]) {
       assert.match(scripts[levelScripts[level]], /^pnpm verify:unit\b/u, level);

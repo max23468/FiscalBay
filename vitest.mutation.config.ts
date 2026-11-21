@@ -38,6 +38,9 @@ export default defineConfig({
     ...base.test,
     include: files,
     fileParallelism: false,
-    sequence: { ...base.test?.sequence, sequencer: SelectionOrder },
+    // Stryker attiva i mutanti fra un'esecuzione e l'altra: ogni file resta in un isolate proprio,
+    // nell'ordine scelto qui e non in quello casuale della suite.
+    isolate: true,
+    sequence: { ...base.test?.sequence, shuffle: false, sequencer: SelectionOrder },
   },
 });

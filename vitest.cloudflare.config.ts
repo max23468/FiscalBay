@@ -41,6 +41,10 @@ export default defineConfig({
   // Il test dei token legge `app.css` come testo: Vitest altrimenti lo svuota.
   test: {
     name: "cloudflare",
+    // Un solo Worker di prova per processo: `test/reset-after-file.ts` riporta ogni file allo stato
+    // di un isolate nuovo, e l'ordine casuale dei file (`vitest.config.ts`) fa emergere ciò che
+    // resta indietro.
+    isolate: false,
     include: ["test/**/*.spec.ts"],
     // Le prove che importano decine di ordini impiegano meno di un secondo in locale, ma con la
     // copertura e più processi sul runner di GitHub superano i 5 secondi predefiniti. Il limite
@@ -48,6 +52,7 @@ export default defineConfig({
     testTimeout: 15_000,
     hookTimeout: 20_000,
     setupFiles: [
+      "./test/reset-after-file.ts",
       "./test/apply-migrations.ts",
       "./test/fixtures/turnstile-fixtures.ts",
       "./test/fixtures/whats-new-fixtures.ts",

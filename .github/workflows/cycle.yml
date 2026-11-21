@@ -71,6 +71,7 @@ jobs:
         with:
           ref: develop
           fetch-depth: 0
+          filter: blob:none
           token: ${{ secrets.PUBLISH_TOKEN }}
       - uses: ./.github/actions/setup
         with:
@@ -117,6 +118,7 @@ jobs:
         with:
           ref: develop
           fetch-depth: 0
+          filter: blob:none
           token: ${{ secrets.PUBLISH_TOKEN }}
       - uses: ./.github/actions/setup
         with:
@@ -144,6 +146,7 @@ jobs:
         with:
           ref: develop
           fetch-depth: 0
+          filter: blob:none
           token: ${{ secrets.PUBLISH_TOKEN }}
       - uses: ./.github/actions/setup
         with:

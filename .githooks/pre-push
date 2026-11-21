@@ -1,0 +1,3 @@
+#!/bin/sh
+# Formato, lint e tipi dei file spinti: scripts/pre-push.mjs.
+exec node scripts/pre-push.mjs "$@"

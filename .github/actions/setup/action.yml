@@ -21,11 +21,36 @@ runs:
     - if: inputs.install == 'true' || runner.os == 'Linux'
       uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
+    # La cartella `node_modules` intera, non soltanto lo store: con la chiave esatta l'installazione
+    # non parte. La chiave cambia con lockfile, manifest, patch e configurazione di pnpm, e con
+    # l'immagine (runner o container di Playwright), perché i binari nativi seguono il sistema.
+    # Le PR leggono le cache salvate da `develop`; una PR che cambia le dipendenze salva la propria
+    # al primo job che la manca, e gli altri job e le run seguenti della PR la ritrovano.
+    - id: modules
+      if: inputs.install == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS || 'container' }}-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches/**') }}
+
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version-file: package.json
-        cache: ${{ inputs.install == 'true' && 'pnpm' || '' }}
+        # Senza `node_modules` in cache l'installazione parte almeno dallo store di pnpm.
+        cache: ${{ inputs.install == 'true' && steps.modules.outputs.cache-hit != 'true' && 'pnpm' || '' }}
 
-    - if: inputs.install == 'true'
+    - if: inputs.install == 'true' && steps.modules.outputs.cache-hit != 'true'
       shell: bash
       run: pnpm install --frozen-lockfile
+
+    # Con le dipendenze dalla cache `postinstall` non è partito: i tipi di route e Worker si
+    # rigenerano dal checkout, in meno di un secondo.
+    - if: inputs.install == 'true' && steps.modules.outputs.cache-hit == 'true'
+      shell: bash
+      run: pnpm typegen
+
+    - if: inputs.install == 'true' && steps.modules.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: node_modules
+        key: ${{ steps.modules.outputs.cache-primary-key }}
