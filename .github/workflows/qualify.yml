@@ -192,8 +192,6 @@ jobs:
         env:
           E2E_PREBUILT: "1"
           E2E_MATRIX: full
-          # Come in ogni altra fase, una prova che riesce alla ripetizione resta segnalata.
-          E2E_RETRIES: "1"
           E2E_RUN_ID: source-${{ matrix.shard }}
           VITE_RELEASE_DAY: ${{ inputs.day }}
           SHARD: ${{ matrix.shard }}/${{ matrix.total }}
@@ -228,7 +226,6 @@ jobs:
         env:
           E2E_PREBUILT: "1"
           E2E_MATRIX: single
-          E2E_RETRIES: "1"
           E2E_RUN_ID: production-1
           E2E_PRODUCTION: "1"
           VITE_RELEASE_DAY: ${{ inputs.day }}

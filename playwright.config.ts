@@ -18,10 +18,9 @@ export default defineConfig({
       ? 4
       : Math.max(1, Math.min(4, Math.floor(totalmem() / (6 * 1024 ** 3)))),
   fullyParallel: true,
-  // Sul dominio remoto una sola ripetizione separa l'instabilità della rete da un difetto:
-  // una prova che fallisce due volte fa ancora tornare indietro il deploy. La CI delle PR
-  // chiede la stessa ripetizione con `E2E_RETRIES`; il report segnala le prove instabili.
-  retries: process.env.E2E_BASE_URL ? 1 : Number(process.env.E2E_RETRIES ?? 0),
+  // Nessuna ripetizione, nemmeno sul dominio remoto: una prova che riesce soltanto al secondo
+  // tentativo ha un difetto da correggere, non da nascondere.
+  retries: 0,
   globalSetup: "./e2e/setup.ts",
   reporter: [["list"], ["./e2e/report.ts"]],
   forbidOnly: !!process.env.CI,

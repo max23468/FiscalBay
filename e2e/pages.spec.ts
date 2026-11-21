@@ -507,17 +507,20 @@ for (const scenario of scenarios) {
           // resta fuori dall'indirizzo.
           const searchFor = async (query: string) => {
             const search = page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u });
+            const opener = page.getByRole("button", { name: /^(Cerca ordini|Search orders)$/u });
+            const sheet = await opener.isVisible();
             // Sugli schermi stretti il campo si apre dal pulsante della barra: un tocco arrivato
             // prima dell'idratazione non apre il foglio, quindi si ripete finché il campo è pronto.
             await expect(async () => {
-              if (!(await search.isVisible()))
-                await page
-                  .getByRole("button", { name: /^(Cerca ordini|Search orders)$/u })
-                  .click({ timeout: 2_000 });
+              if (!(await search.isVisible())) await opener.click({ timeout: 2_000 });
               await expect(search).toBeEditable({ timeout: 2_000 });
             }).toPass({ timeout: 20_000 });
             await search.fill(query);
             await search.press("Enter");
+            // Il foglio si chiude quando arriva la risposta della ricerca e resta visibile durante
+            // l'animazione di uscita: la ricerca seguente riparte soltanto a foglio chiuso, o il
+            // campo trovato ancora visibile sparirebbe sotto `fill`.
+            if (sheet) await expect(search).toBeHidden({ timeout: 15_000 });
           };
           await searchFor(testAccount.taxCodes.unlocked);
           // L'indirizzo cambia dopo due richieste in sequenza, la ricerca e i dati dell'elenco:

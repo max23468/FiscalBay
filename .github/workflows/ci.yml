@@ -432,12 +432,10 @@ jobs:
           name: ${{ needs.verify.outputs.artifact }}
           path: .cloudflare/output/
 
-      # Una prova che riesce alla ripetizione resta nel report con un avviso; due fallimenti
-      # bloccano ancora il gate.
+      # Senza ripetizioni: il primo fallimento blocca il gate.
       - name: Check browser interactions before deploy
         env:
           E2E_PREBUILT: "1"
-          E2E_RETRIES: "1"
           E2E_MATRIX: ${{ needs.verify.outputs.matrix }}
           # Dopo un'unione con la base, le sole aree toccate sia dai cambi sia dalla PR.
           BROWSER_GREP: ${{ needs.verify.outputs.browser-grep || needs.verify.outputs.grep }}
