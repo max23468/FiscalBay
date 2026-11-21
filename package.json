@@ -15,7 +15,7 @@
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
     "postinstall": "pnpm typegen",
-    "prepare": "git config core.hooksPath .githooks",
+    "prepare": "git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0; git config core.hooksPath .githooks",
     "release:cycle": "node scripts/release/release-cycle.mjs",
     "site:og": "node scripts/og-images.mjs",
     "site:screenshots": "node scripts/site-screenshots.mjs",
