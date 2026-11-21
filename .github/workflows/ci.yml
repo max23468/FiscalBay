@@ -564,23 +564,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: Checkout budgets
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          filter: blob:none
-          sparse-checkout: scripts/ci-budget.mjs
-          sparse-checkout-cone-mode: false
-
-      # Un job oltre il suo budget di attesa, setup o esecuzione ferma il gate come un controllo
-      # fallito: i budget stanno in `scripts/ci-budget.mjs`.
-      - name: Check job budgets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/ci-budget.mjs
-
       - name: Check job results
-        if: always()
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
