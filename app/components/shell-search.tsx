@@ -149,6 +149,33 @@ function SearchPanel({ found, onSelect }: { found: SearchResults | null; onSelec
 }
 
 /**
+ * Testo del campo: su Ordini la ricerca attiva, anche dopo Indietro o ricarica. Mentre si scrive il
+ * testo resta: la pagina Ordini può arrivare con il campo già aperto, perché l'indirizzo cambia
+ * prima che la nuova pagina sia disegnata.
+ */
+function useSearchText(active: string | null) {
+  const [query, setQuery] = useState(active ?? "");
+  const [synced, setSynced] = useState(active);
+  const [editing, setEditing] = useState(false);
+  if (active !== synced) {
+    setSynced(active);
+    if (active !== null && !editing) setQuery(active);
+  }
+  return { query, setQuery, editing, setEditing };
+}
+
+/** Suggerimenti aperti: una nuova pagina chiude quelli rimasti, salvo che si stia scrivendo. */
+function useSuggestionsOpen(pathname: string, editing: boolean) {
+  const [open, setOpen] = useState(false);
+  const [shownPath, setShownPath] = useState(pathname);
+  if (shownPath !== pathname) {
+    setShownPath(pathname);
+    if (!editing) setOpen(false);
+  }
+  return [open, setOpen] as const;
+}
+
+/**
  * Ricerca ordini della top bar: suggerimenti dallo stesso motore della pagina Ordini e «Vedi tutti»
  * per aprire l'elenco filtrato. La query resta nel corpo delle richieste; l'elenco riceve dal
  * server l'indirizzo con la ricerca cifrata.
@@ -168,14 +195,8 @@ export function GlobalSearch({
   const { t } = useCopy();
   const navigate = useNavigate();
   const location = useLocation();
-  // Su Ordini il campo mostra la ricerca attiva, anche dopo Indietro o ricarica.
-  const [query, setQuery] = useState(search.query ?? "");
-  const [syncedQuery, setSyncedQuery] = useState(search.query);
-  if (search.query !== syncedQuery) {
-    setSyncedQuery(search.query);
-    if (search.query !== null) setQuery(search.query);
-  }
-  const [open, setOpen] = useState(false);
+  const { query, setQuery, editing, setEditing } = useSearchText(search.query);
+  const [open, setOpen] = useSuggestionsOpen(location.pathname, editing);
   // Dagli Ordini la ricerca conserva i filtri attivi dell'elenco.
   const onOrders = location.pathname.startsWith(localizedPath(links.language, ordersPath));
   const filters = onOrders ? listFilters(new URLSearchParams(location.search)).toString() : "";
@@ -189,14 +210,6 @@ export function GlobalSearch({
       ? answer
       : null;
   const found = current && !("failed" in current) ? current : null;
-
-  // Una nuova pagina chiude i suggerimenti rimasti aperti.
-  const lastPath = useRef(location.pathname);
-  useEffect(() => {
-    if (lastPath.current === location.pathname) return;
-    lastPath.current = location.pathname;
-    setOpen(false);
-  }, [location.pathname]);
 
   const close = () => {
     setOpen(false);
@@ -265,10 +278,12 @@ export function GlobalSearch({
             suggest(event.target.value);
           }}
           onFocus={() => {
+            setEditing(true);
             setOpen(true);
             // Un testo già presente (ricerca attiva, Indietro) riceve i suoi suggerimenti.
             if (!current) suggest(query);
           }}
+          onBlur={() => setEditing(false)}
           className="h-9 w-full min-w-0 rounded-lg border border-input bg-card pr-3 pl-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 max-sm:text-base pointer-coarse:h-11"
         />
       </form>

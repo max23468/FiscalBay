@@ -267,8 +267,10 @@ function useSectionEntry() {
   if (entry.key !== key) setEntry({ key, fade: true });
   const focus = useCallback(
     (main: HTMLElement | null) => {
-      // Un elemento con il focus già dentro la nuova sezione, per esempio un pannello, resta.
-      if (main && entry.fade && !main.contains(document.activeElement))
+      // Un elemento con il focus già dentro la nuova sezione, per esempio un pannello, resta; così
+      // un pannello aperto sopra la pagina, come la ricerca su smartphone mentre si scrive.
+      const active = document.activeElement;
+      if (main && entry.fade && !main.contains(active) && !active?.closest('[role="dialog"]'))
         main.focus({ preventScroll: true });
     },
     [entry],
