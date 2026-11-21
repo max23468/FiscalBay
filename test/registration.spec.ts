@@ -954,6 +954,13 @@ describe("provenienza dell'iscrizione", () => {
     );
     expect(await sourceOf(email)).toEqual({ channel: "google", first_page: "/prezzi" });
 
+    // Le etichette degli annunci passano il vincolo della tabella.
+    for (const channel of ["google_ads", "meta_ads"]) {
+      const advertised = `provenienza-${channel}@example.invalid`;
+      await register(`/accesso?registrati&${via(`${channel}:/en`)}`, advertised);
+      expect(await sourceOf(advertised)).toEqual({ channel, first_page: "/en" });
+    }
+
     const silent = "provenienza-assente@example.invalid";
     await register("/accesso", silent);
     expect(await sourceOf(silent)).toEqual({ channel: "unknown", first_page: null });
