@@ -24,7 +24,8 @@ runs:
     # La cartella `node_modules` intera, non soltanto lo store: con la chiave esatta l'installazione
     # non parte. La chiave cambia con lockfile, manifest, patch e configurazione di pnpm, e con
     # l'immagine (runner o container di Playwright), perché i binari nativi seguono il sistema.
-    # Le PR leggono le cache salvate da `develop`, l'unico branch che le scrive.
+    # Le PR leggono le cache salvate da `develop`; una PR che cambia le dipendenze salva la propria
+    # al primo job che la manca, e gli altri job e le run seguenti della PR la ritrovano.
     - id: modules
       if: inputs.install == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -48,7 +49,7 @@ runs:
       shell: bash
       run: pnpm typegen
 
-    - if: inputs.install == 'true' && steps.modules.outputs.cache-hit != 'true' && github.ref == 'refs/heads/develop'
+    - if: inputs.install == 'true' && steps.modules.outputs.cache-hit != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: node_modules

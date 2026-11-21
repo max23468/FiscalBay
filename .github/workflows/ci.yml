@@ -308,10 +308,28 @@ jobs:
       - name: Set up Node and dependencies
         uses: ./.github/actions/setup
 
+      # `tsc -b` riparte dai file incrementali dell'ultimo `develop`: rilegge soltanto ciò che è
+      # cambiato e confronta ogni file con il suo hash, quindi un file vecchio non lascia passare
+      # un errore.
+      - name: Restore TypeScript build info
+        if: matrix.script == 'typecheck'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: "*.tsbuildinfo"
+          key: tsbuildinfo-${{ github.sha }}
+          restore-keys: tsbuildinfo-
+
       - name: Run check
         env:
           SCRIPT: ${{ matrix.script }}
         run: pnpm "${SCRIPT}"
+
+      - name: Save TypeScript build info
+        if: matrix.script == 'typecheck' && github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: "*.tsbuildinfo"
+          key: tsbuildinfo-${{ github.sha }}
 
   # Vitest in tre shard di durata simile, divisi con le durate misurate di `test/durations.json`:
   # ogni file in un solo shard, con la copertura nel report blob unito dal job `coverage`.
