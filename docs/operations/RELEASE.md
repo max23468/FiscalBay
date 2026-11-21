@@ -10,7 +10,7 @@ Il classificatore sceglie uno di cinque livelli, le prove browser e il deploy te
 
 | Livello | File | Verifica | Browser, build e deploy |
 |---|---|---|---|
-| Documenti | Markdown, compresi roadmap e documenti di prodotto, engineering e operations; archivio documentale, soltanto il giorno di una versione nel changelog | `pnpm verify:documents`: copy, link, ancore, tabelle e decisioni | Nessuno |
+| Documenti | Markdown, compresi roadmap e documenti di prodotto, engineering e operations; archivio documentale, soltanto il giorno di una versione nel changelog | `pnpm verify:documents`: copy, link, ancore, tabelle, decisioni e forma del changelog con i frammenti, letta come dalla pagina Novità | Nessuno |
 | Strumenti | Istruzioni degli agenti (`AGENTS.md`, `CLAUDE.md`), script operativi e loro test, workflow e Action, `.gitignore`, configurazioni di formato, lint, Knip, mutation e benchmark; un `package.json` che cambia soltanto script non eseguiti da build, deploy o installazione prende il livello più leggero che li esegue | `pnpm verify:tooling`: anche tipi generati, repository, catalogo pagine, test degli script, formato, lint e Knip; Actionlint per i workflow | Nessuno implicito; qualifica remota della procedura quando necessaria nel mandato |
 | Test applicativi | `test/`, configurazioni Vitest | `pnpm verify:unit`: anche typecheck e copertura | Nessuno |
 | Build | Prove browser (`e2e/`, `playwright.config.ts`, runner e anteprima locale), controllo del bundle, soli valori `bindings.text(...)` delle `vars` del Worker test | `pnpm verify:build`: anche build test | Le prove browser eseguono i browser senza deploy; i valori del test distribuiscono con il collaudo remoto, senza browser della PR; il bundle nessuno dei due |
