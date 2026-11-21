@@ -30,9 +30,12 @@ describe("budget dei job della CI", () => {
         step("Run tests", 20, 55),
         // Un passo di download dopo il lavoro resta esecuzione.
         step("Restore something", 55, 58),
+        // La chiusura del runner non conta.
+        step("Post Checkout", 58, 59),
+        step("Complete job", 59, 60),
       ]),
     );
-    assert.deepEqual(measured, { wait: 2, setup: 18, run: 40 });
+    assert.deepEqual(measured, { wait: 2, setup: 18, run: 38 });
   });
 
   it("salta i passi non eseguiti senza chiudere il setup", () => {

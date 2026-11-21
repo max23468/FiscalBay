@@ -28,30 +28,41 @@ export const budgets = [
   { job: /^Vitest \d+\/\d+$/u, wait: 10, setup: 30, run: 60 },
   { job: /^Vitest coverage$/u, wait: 10, setup: 30, run: 30 },
   { job: /^Verify$/u, wait: 10, setup: 30, run: 120 },
-  // Il container di Playwright richiede da solo circa 25 secondi di download sui runner ospitati.
-  { job: /^Browser \d+\/\d+$/u, wait: 10, setup: 45, run: 420 },
+  // Il container di Playwright richiede da solo da 20 a 36 secondi sui runner ospitati (misura
+  // della prima run, 2026-11-21): il setup dei browser scende a 30 secondi soltanto con la cache
+  // delle immagini di runner propri.
+  { job: /^Browser \d+\/\d+$/u, wait: 10, setup: 60, run: 420 },
   // Le parti della mutation superano i job contemporanei dell'account: la loro attesa non ha
   // ancora un limite, la durata resta quella del `timeout-minutes`.
   { job: /^Mutation /u, wait: null, setup: 30, run: null },
   { job: /^(?:Avvia qualifica|Deploy test)$/u, wait: 10, setup: 30, run: null },
 ];
 
+/** Chiusura del runner dopo il lavoro: non conta nell'esecuzione. */
+const teardownStep = /^(?:Post |Stop containers$|Complete job$)/u;
+
 /** Attesa, setup ed esecuzione in secondi di un job dell'API di GitHub. */
 export function split(job) {
   const at = (value) => Date.parse(value);
   const created = at(job.created_at);
   const started = at(job.started_at);
-  const completed = at(job.completed_at);
   let setupEnd = started;
+  let runEnd = at(job.completed_at);
+  let preparing = true;
   for (const step of job.steps ?? []) {
     if (!step.started_at || !step.completed_at || step.conclusion === "skipped") continue;
-    if (!setupStep.test(step.name)) break;
-    setupEnd = Math.max(setupEnd, at(step.completed_at));
+    if (teardownStep.test(step.name)) {
+      runEnd = Math.min(runEnd, at(step.started_at));
+      break;
+    }
+    if (preparing && setupStep.test(step.name))
+      setupEnd = Math.max(setupEnd, at(step.completed_at));
+    else preparing = false;
   }
   return {
     wait: Math.max(0, (started - created) / 1000),
     setup: (setupEnd - started) / 1000,
-    run: (completed - setupEnd) / 1000,
+    run: Math.max(0, (runEnd - setupEnd) / 1000),
   };
 }
 

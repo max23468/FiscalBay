@@ -331,10 +331,12 @@ jobs:
           path: "*.tsbuildinfo"
           key: tsbuildinfo-${{ github.sha }}
 
-  # Vitest in tre shard di durata simile, divisi con le durate misurate di `test/durations.json`:
-  # ogni file in un solo shard, con la copertura nel report blob unito dal job `coverage`.
+  # Vitest in cinque shard di durata simile, divisi con le durate misurate in CI di
+  # `test/durations.json`: ogni file in un solo shard, con la copertura nel report blob unito dal
+  # job `coverage`. Ogni shard paga circa 30 secondi fissi di trasformazione dei moduli con la
+  # copertura sui 4 vCPU del runner: con tre shard il più lento arrivava a 95 secondi.
   tests:
-    name: Vitest ${{ matrix.shard }}/3
+    name: Vitest ${{ matrix.shard }}/5
     needs: verify
     if: needs.verify.outputs.reused != 'true' && needs.verify.outputs.tests == 'true'
     runs-on: ubuntu-26.04
@@ -345,7 +347,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5]
 
     steps:
       - name: Checkout
@@ -360,7 +362,7 @@ jobs:
 
       - name: Run tests
         env:
-          SHARD: ${{ matrix.shard }}/3
+          SHARD: ${{ matrix.shard }}/5
         run: pnpm test:shard "${SHARD}"
 
       - name: Preserve shard report
@@ -372,7 +374,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # Unisce i tre shard: l'esito delle prove e la copertura, con il controllo dei sorgenti attesi.
+  # Unisce gli shard: l'esito delle prove e la copertura, con il controllo dei sorgenti attesi.
   coverage:
     name: Vitest coverage
     needs: [verify, tests]
