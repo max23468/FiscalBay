@@ -52,11 +52,22 @@ export const levelScripts = {
 };
 const levels = Object.keys(levelScripts);
 
-export function ciGateScript(level, built = false) {
-  if (built && level === "full") return "verify:gate";
-  if (built && level === "build") return "verify:unit";
-  return levelScripts[level];
-}
+/**
+ * Il gate della CI per livello, in job paralleli: le parti statiche, ciascuna con uno script di
+ * package.json, e gli shard Vitest con la copertura unita dopo (`tests`). I documenti girano già in
+ * `Verify` e la build test è l'artefatto di `Verify`. Le parti coprono lo script del livello, salvo
+ * la build test: lo verifica il test del classificatore.
+ */
+export const ciParts = {
+  docs: { checks: [], tests: false },
+  tooling: { checks: ["check:tooling", "check:lint"], tests: false },
+  unit: { checks: ["check:tooling", "check:lint", "typecheck"], tests: true },
+  build: { checks: ["check:tooling", "check:lint", "typecheck"], tests: true },
+  full: {
+    checks: ["check:tooling", "check:lint", "typecheck", "doctor:react", "build:live"],
+    tests: true,
+  },
+};
 
 /**
  * Gate locale di `pnpm verify:changed`: controlli statici del livello, poi i test collegati al
@@ -124,7 +135,7 @@ const tooling = [
   // Git e gli strumenti di formato e lint lo leggono; build e Worker no.
   /^\.gitignore$/u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|indexnow|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|browser-evidence|release\/(?:release(?:-notes|-cycle)?|records)|lib\/(?:provider|worker|critical-modules))\.mjs$/u,
+  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|test-durations|ci-budget|pre-push|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|indexnow|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|browser-evidence|release\/(?:release(?:-notes|-cycle)?|records)|lib\/(?:provider|worker|critical-modules))\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|capacity|mutation)\.config\.ts)$/u,
 ];
@@ -205,7 +216,7 @@ export function dependencyChange(before, after) {
 }
 
 /** Script raggiunti da quelli indicati attraverso `pnpm <script>` o `pnpm run <script>`. */
-function scriptClosure(scripts, roots) {
+export function scriptClosure(scripts, roots) {
   const found = new Set();
   const visit = (name) => {
     if (found.has(name) || !(name in scripts)) return;
@@ -823,7 +834,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   if (args["github-output"] && process.env.GITHUB_OUTPUT)
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\nqualify=${result.qualify}\ndistributes=${committed && distributes(option("base"), option("head"))}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmatrix=${result.matrix}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\nmutation-pr=${JSON.stringify({ target: prMutation })}\n`,
+      `gate=${result.gate}\nchecks=${JSON.stringify(ciParts[result.gate].checks)}\ntests=${ciParts[result.gate].tests}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\nqualify=${result.qualify}\ndistributes=${committed && distributes(option("base"), option("head"))}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmatrix=${result.matrix}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\nmutation-pr=${JSON.stringify({ target: prMutation })}\n`,
     );
   if (process.env.GITHUB_STEP_SUMMARY && !args.run)
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Piano dei controlli\n\n${summary}\n`);
@@ -849,8 +860,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       `${JSON.stringify({ tree, seconds: Math.round((Date.now() - started) / 1000), ...extra })}\n`,
     );
   if (args.run) {
-    if (committed)
-      run("pnpm", [ciGateScript(result.gate, process.env.VERIFIED_TEST_BUILD === "true")]);
+    if (committed) run("pnpm", [levelScripts[result.gate]]);
     else {
       const impacts = files.map((file) => fileImpact(file, changes[file]));
       // Lo stesso controllo della versione di `Verify`, prima del gate: un frammento con Novità su

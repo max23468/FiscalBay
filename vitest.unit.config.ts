@@ -6,5 +6,10 @@ export default defineConfig({
   resolve: {
     alias: { "cloudflare:workers": new URL("./test/worker-context.ts", import.meta.url).pathname },
   },
-  test: { name: "unit", include: ["test/**/*.unit.ts"] },
+  test: {
+    name: "unit",
+    include: ["test/**/*.unit.ts"],
+    isolate: false,
+    setupFiles: ["./test/reset-node-file.ts"],
+  },
 });

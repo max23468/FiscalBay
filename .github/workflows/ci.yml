@@ -66,16 +66,20 @@ jobs:
       browser-reused: ${{ steps.browser-plan.outputs.browser-reused }}
       browser-grep: ${{ steps.browser-plan.outputs.browser-grep }}
       mutation-pr: ${{ steps.modules.outputs.matrix || '{"include":[]}' }}
+      checks: ${{ steps.detect.outputs.checks }}
+      tests: ${{ steps.detect.outputs.tests }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: ${{ steps.reuse.outputs.artifact || format('build-{0}', steps.tree.outputs.tree) }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
       playwright: ${{ steps.tree.outputs.playwright }}
 
     steps:
+      # Storia completa senza contenuti: Git scarica soltanto i file che legge.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Check dispatched commit
         if: inputs.expected_sha != ''
@@ -133,12 +137,13 @@ jobs:
           REPOSITORY_ID: ${{ github.repository_id }}
         run: node scripts/find-build.mjs
 
-      # I controlli dei documenti non richiedono le dipendenze.
+      # Le dipendenze servono soltanto alla build e alla pianificazione dei browser: il gate gira
+      # nei job paralleli e i controlli dei documenti non le richiedono.
       - name: Set up Node and dependencies
         if: ${{ !steps.reuse.outputs.run-id }}
         uses: ./.github/actions/setup
         with:
-          install: ${{ steps.detect.outputs.gate != 'docs' }}
+          install: ${{ steps.detect.outputs.build == 'true' }}
 
       # Le migration non additive si approvano nella PR, non dopo il merge sul deploy test.
       # Il corpo si rilegge dall'API: una nuova esecuzione vede la riga aggiunta dopo l'apertura.
@@ -203,29 +208,12 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: node scripts/release/release.mjs version-step --base "${BASE_SHA}"
 
-      # Con la build il gate gira nel job `quality`, accanto ai browser: i controlli documentali,
-      # pochi secondi, si anticipano qui perché un errore, per esempio una decisione con lo stesso
-      # numero di un'altra PR, fermi la run prima di browser e mutation.
-      - name: Check documents before browsers
-        if: steps.reuse.outputs.run-id == '' && steps.detect.outputs.build == 'true'
+      # Il livello documentale intero, pochi secondi: un errore, per esempio una decisione con lo
+      # stesso numero di un'altra PR, ferma la run prima di browser e mutation. Le altre parti del
+      # gate girano nei job paralleli `checks` e `tests`.
+      - name: Check documents
+        if: steps.reuse.outputs.run-id == ''
         run: pnpm verify:documents
-
-      # Senza build il gate resta qui; con la build gira nel job `quality`.
-      - name: Run selected CI gate
-        if: steps.reuse.outputs.run-id == '' && steps.detect.outputs.build != 'true'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
-          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.sha || github.event.after }}
-        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run
-
-      - name: Preserve coverage report
-        if: always() && steps.reuse.outputs.run-id == '' && steps.detect.outputs.build != 'true' && steps.detect.outputs.gate != 'docs'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: quality-${{ github.run_id }}-${{ github.run_attempt }}
-          path: reports/coverage/
-          if-no-files-found: ignore
-          retention-days: 7
 
       # La stessa build test che chiude la sequenza del gate; l'artefatto diventa distribuibile
       # soltanto con `Node 26` verde, che richiede anche il gate.
@@ -292,33 +280,108 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Gate scelto dal classificatore quando serve la build, in parallelo alle prove browser.
-  quality:
-    name: Gate
+  # Le parti statiche del gate scelto dal classificatore (`ciParts` di `classify-changes.mjs`), una
+  # per job e in parallelo con test, build e browser: strumenti, formato e lint, tipi, React Doctor
+  # e build live, ciascuna con il suo script di package.json.
+  checks:
+    name: Check ${{ matrix.script }}
     needs: verify
-    if: needs.verify.outputs.reused != 'true' && needs.verify.outputs.build == 'true'
+    if: needs.verify.outputs.reused != 'true' && needs.verify.outputs.checks != '[]'
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     concurrency:
-      group: quality-${{ github.event.pull_request.number || github.ref }}
+      group: checks-${{ github.event.pull_request.number || github.ref }}-${{ matrix.script }}
       cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        script: ${{ fromJSON(needs.verify.outputs.checks) }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
+          filter: blob:none
 
       - name: Set up Node and dependencies
         uses: ./.github/actions/setup
 
-      - name: Run selected CI gate
+      - name: Run check
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || needs.verify.outputs.base }}
-          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.sha || github.event.after }}
-          VERIFIED_TEST_BUILD: "true"
-        # I browser restano nei rispettivi job; il gate locale usa la stessa sequenza.
-        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run
+          SCRIPT: ${{ matrix.script }}
+        run: pnpm "${SCRIPT}"
+
+  # Vitest in tre shard di durata simile, divisi con le durate misurate di `test/durations.json`:
+  # ogni file in un solo shard, con la copertura nel report blob unito dal job `coverage`.
+  tests:
+    name: Vitest ${{ matrix.shard }}/3
+    needs: verify
+    if: needs.verify.outputs.reused != 'true' && needs.verify.outputs.tests == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    concurrency:
+      group: tests-${{ github.event.pull_request.number || github.ref }}-${{ matrix.shard }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Set up Node and dependencies
+        uses: ./.github/actions/setup
+
+      - name: Run tests
+        env:
+          SHARD: ${{ matrix.shard }}/3
+        run: pnpm test:shard "${SHARD}"
+
+      - name: Preserve shard report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vitest-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: .vitest/blob/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  # Unisce i tre shard: l'esito delle prove e la copertura, con il controllo dei sorgenti attesi.
+  coverage:
+    name: Vitest coverage
+    needs: [verify, tests]
+    if: needs.tests.result == 'success'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Set up Node and dependencies
+        uses: ./.github/actions/setup
+
+      - name: Download shard reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: vitest-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: .vitest/blob/
+          merge-multiple: true
+
+      - name: Merge reports and coverage
+        run: pnpm test:merge
 
       - name: Preserve coverage report
         if: always()
@@ -346,9 +409,10 @@ jobs:
       cancel-in-progress: true
     strategy:
       fail-fast: false
-      # Venti job contemporanei per l'account: con un tetto per run la coda resta corta e i job
-      # brevi di merge, deploy e pubblicazione trovano un posto in pochi minuti.
-      max-parallel: 4
+      # Tutti gli shard insieme: con quattro alla volta il secondo gruppo aspettava fino a otto
+      # minuti (p95) il primo. Venti job contemporanei per l'account: browser e mutation insieme ne
+      # lasciano liberi due per merge, deploy e pubblicazione.
+      max-parallel: 8
       matrix: ${{ fromJSON(needs.verify.outputs.browser-matrix) }}
 
     steps:
@@ -356,6 +420,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
 
       - name: Set up Node and dependencies
         uses: ./.github/actions/setup
@@ -403,8 +469,9 @@ jobs:
       cancel-in-progress: true
     strategy:
       fail-fast: false
-      # Venti job contemporanei per l'account: il resto alla qualifica del candidato e alle altre PR.
-      max-parallel: 4
+      # Con quattro alla volta le parti aspettavano 26 minuti a p50 e oltre due ore a p95 dopo
+      # `Verify`. Dieci, più gli otto browser, restano sotto i venti job contemporanei dell'account.
+      max-parallel: 10
       matrix: ${{ fromJSON(needs.verify.outputs.mutation-pr) }}
     env:
       MUTATION_TARGET: ${{ matrix.target }}
@@ -416,6 +483,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
 
       - name: Set up Node and dependencies
         uses: ./.github/actions/setup
@@ -470,13 +539,29 @@ jobs:
   # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
   gate:
     name: Node 26
-    needs: [verify, quality, browser, mutation-pr]
+    needs: [verify, checks, tests, coverage, browser, mutation-pr]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
 
     steps:
+      - name: Checkout budgets
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: scripts/ci-budget.mjs
+          sparse-checkout-cone-mode: false
+
+      # Un job oltre il suo budget di attesa, setup o esecuzione ferma il gate come un controllo
+      # fallito: i budget stanno in `scripts/ci-budget.mjs`.
+      - name: Check job budgets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-budget.mjs
+
       - name: Check job results
+        if: always()
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
@@ -528,6 +613,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+          filter: blob:none
 
       # L'applicazione non viene ricompilata; `cf` distribuisce la build verificata.
       - name: Set up Node and dependencies

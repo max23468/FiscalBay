@@ -16,6 +16,9 @@ node_modules/
 
 !.dev.vars.example
 
+# Report blob degli shard Vitest, uniti dal job `coverage`
+/.vitest/
+
 # Mutation test
 /.stryker-tmp/
 /reports/

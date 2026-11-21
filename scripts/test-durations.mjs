@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+/**
+ * Durata misurata di ogni file Vitest, dal report JSON di `vitest run --reporter=json`. Il
+ * sequencer di `vitest.config.ts` la legge da `test/durations.json` per dividere gli shard della CI
+ * in parti di durata simile; un file assente vale come la mediana dei presenti.
+ *
+ * Uso: node scripts/test-durations.mjs <report.json> [destinazione]
+ */
+import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+export function durations(report, root) {
+  const entries = report.testResults.map((file) => [
+    path.relative(root, file.name).split(path.sep).join("/"),
+    Math.round((file.endTime - file.startTime) / 100) / 10,
+  ]);
+  return Object.fromEntries(entries.toSorted(([a], [b]) => (a < b ? -1 : 1)));
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  const [source, target = "test/durations.json"] = process.argv.slice(2);
+  if (!source) throw new Error("Indicare il report JSON di Vitest.");
+  const result = durations(JSON.parse(readFileSync(source, "utf8")), process.cwd());
+  writeFileSync(target, `${JSON.stringify(result, null, 2)}\n`);
+  console.log(`${Object.keys(result).length} file in ${target}.`);
+}
