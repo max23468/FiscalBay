@@ -32,6 +32,9 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 
 - **App installabile.** Manifest nelle due lingue con icone maskable e schermate, barra del titolo del colore della barra in alto nei due temi, service worker che non conserva pagine né dati e mostra una pagina «Sei offline» quando manca la rete, CSP con service worker e manifest soltanto dall’origine.
 - **Pubblicazione nello Store.** Runbook con account, pacchetto PWABuilder, testi della scheda nelle due lingue, classificazione IARC e note per la certificazione; schermate PNG della scheda e icona da 300 px generate dallo script delle schermate del sito con i dati dell’anteprima.
+- **Demo pubblica.** `/demo`, in inglese `/en/demo`, mostra Ordini e Negozi di FiscalBay con dati di esempio, senza registrarsi: ricerca, filtri e dettaglio funzionano, le azioni dicono che nella demo non si salva nulla e la barra «Demo con dati di esempio» porta a «Inizia gratis» con la provenienza della visita.
+- **Demo nel sito.** «Demo» è nella barra del sito dopo Funzionalità, con il testo a 13 px sotto i 400 px perché le sei voci stiano in una riga; la home ha «Guarda la demo» al posto di «Come funziona» e un invito sotto i passaggi, Funzionalità e FAQ lo stesso invito, e ogni Guida, dopo «Come ti aiuta FiscalBay», un riquadro con la schermata degli Ordini, la prova Pro di 14 giorni senza carta, «Inizia gratis» e «Guarda la demo». Ogni invito dice che non serve registrarsi, lasciare l’email o collegare eBay.
+- **Provenienza dagli annunci.** La provenienza degli iscritti riconosce le etichette `via=google_ads` e `via=meta_ads` nei link degli annunci a pagamento, che valgono più del Referer di Google o di Meta: la console mostra «Annunci Google» e «Annunci Meta» con iscritti, attivazioni e paganti. La tabella della provenienza si ricrea con il nuovo vincolo sulle categorie.
 
 ## [2.0.10] - 2026-11-16
 
