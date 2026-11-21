@@ -180,7 +180,7 @@ Pacchetto della web app con PWABuilder e invio nel Microsoft Store secondo il [r
 
 **Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§23](product/EXPERIENCE.md#s23) · [§35](engineering/TESTING.md#s35)
 
-Ordini e Negozi con dati di esempio su `/demo` e `/en/demo`, anche in Production, in sola consultazione e senza registrazione; in home «Guarda la demo» e in ogni Guida un riquadro con la schermata degli Ordini, la prova senza carta, `Inizia gratis` e la demo, con la provenienza degli iscritti conservata fino alla registrazione ([D343](decisions/DECISION_REGISTER.md)). Visite e iscrizioni passate dalla demo si leggono in Production dopo la pubblicazione.
+Ordini e Negozi con dati di esempio su `/demo` e `/en/demo`, anche in Production, in sola consultazione e senza registrazione; «Demo» nella barra del sito, inviti in home, Funzionalità e FAQ e in ogni Guida un riquadro con la schermata degli Ordini, la prova senza carta, `Inizia gratis` e la demo, con la provenienza degli iscritti conservata fino alla registrazione ([D343](decisions/DECISION_REGISTER.md)). Visite e iscrizioni passate dalla demo si leggono in Production dopo la pubblicazione.
 
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni

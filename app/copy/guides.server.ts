@@ -112,7 +112,7 @@ export const guides: Record<
     sourcesTitle: "Fonti",
     demo: {
       title: "Il Codice Fiscale accanto a ogni ordine",
-      body: "Apri la demo con ordini di esempio, senza registrarti. Il piano Free è gratuito e la prova Pro di 14 giorni non chiede una carta.",
+      body: "Apri la demo con ordini di esempio: non serve registrarsi, lasciare l’email o collegare eBay. Il piano Free è gratuito e la prova Pro di 14 giorni non chiede una carta.",
       link: "Guarda la demo",
       alt: "Gli Ordini di FiscalBay nella demo, con il Codice Fiscale di ogni acquirente",
     },
@@ -630,7 +630,7 @@ export const guides: Record<
     sourcesTitle: "Sources",
     demo: {
       title: "The tax code next to every order",
-      body: "Open the demo with sample orders, no sign-up needed. The Free plan costs nothing and the 14-day Pro trial needs no card.",
+      body: "Open the demo with sample orders: no sign-up, no email and no eBay connection needed. The Free plan costs nothing and the 14-day Pro trial needs no card.",
       link: "See the demo",
       alt: "FiscalBay Orders in the demo, with each buyer’s tax code",
     },

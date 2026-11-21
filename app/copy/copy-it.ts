@@ -1095,6 +1095,7 @@ export const it = {
     nav: {
       label: "Pagine del sito",
       features: "Funzionalità",
+      demo: "Demo",
       pricing: "Prezzi",
       security: "Sicurezza",
       faq: "FAQ",

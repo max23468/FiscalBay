@@ -1064,6 +1064,7 @@ export const en: AppCopy = {
     nav: {
       label: "Site pages",
       features: "Features",
+      demo: "Demo",
       pricing: "Pricing",
       security: "Security",
       faq: "FAQ",

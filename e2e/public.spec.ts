@@ -90,6 +90,7 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   await page.setViewportSize({ width: 360, height: 780 });
   await expect(pages.getByRole("link")).toHaveText([
     "Features",
+    "Demo",
     "Pricing",
     "Security",
     "FAQ",
@@ -107,6 +108,8 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   await expect(bar.getByRole("link", { name: "Sign in" })).toBeVisible();
   await expect(bar.getByRole("link", { name: "Italiano" })).toBeHidden();
   await expect(page.getByRole("contentinfo").getByRole("link", { name: "Italiano" })).toBeVisible();
+  // Anche a 320 px le sei pagine stanno nella seconda riga.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 360, height: 780 });
   await pages.getByRole("link", { name: "FAQ" }).click();
   await expect(page).toHaveURL(/\/en\/faq$/u);
