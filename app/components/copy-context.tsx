@@ -14,7 +14,10 @@ export function useCopy() {
   return { t: appCopy[language], language };
 }
 
-/** Collegamenti dell'app; nell'anteprima le azioni sono simulate dalle sue route. */
+/**
+ * Collegamenti dell'app; nell'anteprima le azioni sono simulate dalle sue route, nella demo non
+ * hanno effetto.
+ */
 export function useLinks() {
   const links = use(LinksContext);
   return { links, preview: links.base !== appBase };

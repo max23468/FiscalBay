@@ -7,18 +7,27 @@ import type { StoresPageData } from "~/components/stores/state";
 
 import { accessNotice } from "../access-notice";
 import { appCopy, pageTitle } from "../app-copy";
+import { isDemoPath } from "../app-links";
 import { languageFromPath } from "../i18n";
-import { assertPreviewAction, verifiedPageScenario, simulateAction } from "../preview/state.server";
+import {
+  assertPreviewAction,
+  demoAction,
+  simulateAction,
+  verifiedPageScenario,
+} from "../preview/state.server";
 import type { AccountView } from "../view-models";
 import type { Route } from "./+types/preview-stores";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  return [{ title: pageTitle(t.stores.title) }, { name: "robots", content: "noindex, nofollow" }];
+  const title = isDemoPath(location.pathname)
+    ? `${t.stores.title} | ${t.demo.name}`
+    : t.stores.title;
+  return [{ title: pageTitle(title) }, { name: "robots", content: "noindex, nofollow" }];
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { scenario, language } = await verifiedPageScenario(request);
+  const { scenario, language, demo } = await verifiedPageScenario(request);
   const detail = params.negozio
     ? (scenario.stores.find((store) => store.id === params.negozio) ?? null)
     : null;
@@ -30,7 +39,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     now: scenario.now,
     ebayDown: scenario.ebayDown ? ["production"] : [],
     ebayMaintenance: scenario.ebayMaintenance,
-    notificationSettings: true,
+    // La demo non ha le Impostazioni delle notifiche.
+    notificationSettings: !demo,
     // Come nell'area reale: un abbonamento che addebiterà ancora, anche con il pagamento in
     // attivazione o dopo un periodo rimborsato, non si disdice scollegando.
     subscriptionRenews: renewsAfterUnlink(scenario.account),
@@ -46,10 +56,13 @@ function renewsAfterUnlink({ premium, payment }: Pick<AccountView, "premium" | "
   return payment?.state === "refunded" && !!payment.renewsAt;
 }
 
-/** Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata. */
+/**
+ * Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata; nella demo
+ * l'avviso che non si salva nulla.
+ */
 export async function action({ request }: Route.ActionArgs) {
   assertPreviewAction(request);
-  return simulateAction(request, await request.formData());
+  return demoAction(request) ?? simulateAction(request, await request.formData());
 }
 
 export default function PreviewStores({ loaderData }: Route.ComponentProps) {

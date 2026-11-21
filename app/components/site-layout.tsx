@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import { useRouteLoaderData } from "react-router";
 
+import { AnalyticsBeacon } from "~/components/analytics-beacon";
 import { useCopy } from "~/components/copy-context";
 import { LanguageSwitch } from "~/components/language-switch";
 import { useScriptNonce } from "~/components/script-nonce";
@@ -13,6 +14,7 @@ import { buttonLink } from "~/components/ui/button-variants";
 
 import {
   accessPath,
+  demoOrdersPath,
   faqPath,
   featuresPath,
   guidesPath,
@@ -22,10 +24,10 @@ import {
 } from "../app-links";
 import { localizedPath } from "../i18n";
 import { speculationRules } from "../speculation-rules";
-import { webAnalyticsBeacon, webAnalyticsScript } from "../web-analytics";
 
 const navItems = [
   { path: featuresPath, key: "features" },
+  { path: demoOrdersPath, key: "demo" },
   { path: pricingPath, key: "pricing" },
   { path: siteSecurityPath, key: "security" },
   { path: faqPath, key: "faq" },
@@ -33,12 +35,13 @@ const navItems = [
 ] as const;
 
 /**
- * Barra superiore delle pagine pubbliche (D202): logo, pagine, lingua, `Accedi` e `Inizia gratis`,
- * oppure `Apri l'app` con una sessione. Sotto i 64rem (1024 px con il testo predefinito) le pagine
- * passano in una seconda riga sempre visibile, senza menu da aprire: sotto i 40rem distribuite con
- * spazi uguali anche ai lati, poi allineate al logo con spazi fissi, e la lingua mostra il solo
- * codice. Le soglie sono in rem: con un testo più grande la barra passa prima alla forma compatta.
- * `path` è la pagina corrente senza prefisso di lingua, per lingua e voce attiva.
+ * Barra superiore delle pagine pubbliche (D202): logo, pagine con la demo, lingua, `Accedi` e
+ * `Inizia gratis`, oppure `Apri l'app` con una sessione. Sotto i 64rem (1024 px con il testo
+ * predefinito) le pagine passano in una seconda riga sempre visibile, senza menu da aprire: sotto i
+ * 40rem distribuite con spazi uguali anche ai lati, poi allineate al logo con spazi fissi, e la
+ * lingua mostra il solo codice. Le soglie sono in rem: con un testo più grande la barra passa prima
+ * alla forma compatta. `path` è la pagina corrente senza prefisso di lingua, per lingua e voce
+ * attiva.
  */
 function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
   const { t, language } = useCopy();
@@ -95,9 +98,14 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
         </div>
       </div>
       <nav aria-label={t.site.nav.label} className="border-t lg:hidden">
+        {/* Sotto i 25rem le sei pagine stanno in una riga con testo di 13 px e spazi minimi,
+            sotto i 22,5rem anche con margini laterali più stretti. */}
         <NavLinks
           path={path}
-          className={cn(siteColumn, "justify-evenly gap-2 text-sm sm:justify-start sm:gap-10")}
+          className={cn(
+            siteColumn,
+            "justify-evenly gap-2 text-sm max-[25rem]:gap-1 max-[25rem]:text-[0.8125rem] max-[22.5rem]:w-[calc(100%-1.5rem)] sm:justify-start sm:gap-10",
+          )}
         />
       </nav>
     </header>
@@ -136,10 +144,7 @@ export function SiteLayout({
   signedIn: boolean;
   children: React.ReactNode;
 }) {
-  const root = useRouteLoaderData<{ webAnalyticsToken: string | null; speculation: boolean }>(
-    "root",
-  );
-  const token = root?.webAnalyticsToken;
+  const root = useRouteLoaderData<{ speculation: boolean }>("root");
   const nonce = useScriptNonce();
   return (
     <div className="flex min-h-dvh flex-col">
@@ -159,17 +164,7 @@ export function SiteLayout({
           dangerouslySetInnerHTML={{ __html: speculationRules(signedIn) }}
         />
       ) : null}
-      {/* Il beacon conta la visita senza contendere la banda alle risorse della pagina. */}
-      {token ? (
-        <script
-          defer
-          src={webAnalyticsScript}
-          data-cf-beacon={webAnalyticsBeacon(token)}
-          fetchPriority="low"
-          nonce={nonce}
-          suppressHydrationWarning
-        />
-      ) : null}
+      <AnalyticsBeacon />
     </div>
   );
 }

@@ -185,6 +185,9 @@ describe("propagazione nei link interni", () => {
     expect(withSource(`${origin}/sicurezza`, value, origin)).toBe(
       `${origin}/sicurezza?via=${encoded}`,
     );
+    // La demo la riceve dal sito e la porta fino a `Inizia gratis`.
+    expect(withSource("/demo/ordini", value, origin)).toBe(`/demo/ordini?via=${encoded}`);
+    expect(withSource("/en/demo/orders", value, origin)).toBe(`/en/demo/orders?via=${encoded}`);
   });
 
   it("lascia invariati area, console, anteprima, API, file e altri siti", () => {

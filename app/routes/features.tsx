@@ -1,13 +1,14 @@
 import { cn } from "cn";
 import { LockKeyhole, RefreshCcw, Sparkles } from "lucide-react";
 
+import { DemoCallout } from "~/components/demo-callout";
 import { IconTile } from "~/components/icon-tile";
 import { ShotRow, type ShotName } from "~/components/product-shot";
 import { siteColumn } from "~/components/site-column";
 import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { Badge } from "~/components/ui/badge";
 
-import { featuresPath, siteSecurityPath } from "../app-links";
+import { demoOrdersPath, featuresPath, siteSecurityPath } from "../app-links";
 import { sitePages } from "../copy/site-pages.server";
 import { localizedPath } from "../i18n";
 import { siteMeta } from "../site-meta";
@@ -21,7 +22,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     language,
     origin,
     signedIn: Boolean(session),
-    copy: { ...pages.features, shots: pages.shots },
+    copy: { ...pages.features, shots: pages.shots, demo: pages.demo },
   };
 }
 
@@ -75,6 +76,7 @@ export default function Features({ loaderData }: Route.ComponentProps) {
             }
           />
         ))}
+        <DemoCallout copy={t.demo} href={localizedPath(language, demoOrdersPath)} heading="h2" />
         <ul className="grid gap-6 border-t pt-12 md:grid-cols-2 md:gap-10">
           {t.items.map((item, index) => (
             <li key={item.title} className="flex gap-4">

@@ -60,6 +60,9 @@ test("beacon delle statistiche soltanto sulle pagine pubbliche, ammesso dalla CS
     await page.goto(path);
     await expect(beacon).toHaveCount(0);
   }
+  // La demo è una pagina pubblica: conta le visite come il sito.
+  await page.goto("/demo/ordini");
+  await expect(beacon).toHaveCount(1);
 });
 
 test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", async ({ page }) => {
@@ -87,6 +90,7 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   await page.setViewportSize({ width: 360, height: 780 });
   await expect(pages.getByRole("link")).toHaveText([
     "Features",
+    "Demo",
     "Pricing",
     "Security",
     "FAQ",
@@ -104,21 +108,59 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   await expect(bar.getByRole("link", { name: "Sign in" })).toBeVisible();
   await expect(bar.getByRole("link", { name: "Italiano" })).toBeHidden();
   await expect(page.getByRole("contentinfo").getByRole("link", { name: "Italiano" })).toBeVisible();
+  // Anche a 320 px le sei pagine stanno nella seconda riga.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 360, height: 780 });
   await pages.getByRole("link", { name: "FAQ" }).click();
   await expect(page).toHaveURL(/\/en\/faq$/u);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Frequently asked questions");
 
   await page.goto("/");
-  await page.getByRole("link", { name: "Come funziona" }).click();
-  await expect(page).toHaveURL(/\/#come-funziona$/u);
-  await expect(page.getByRole("heading", { name: "Come funziona" })).toBeInViewport();
+  await page.getByRole("link", { name: "Guarda la demo" }).click();
+  await expect(page).toHaveURL(/\/demo\/ordini$/u);
+  await expect(page.getByRole("heading", { name: "Ordini", level: 1 })).toBeVisible();
+});
+
+test("dalla Guida la demo mostra gli Ordini di esempio e porta la provenienza all'iscrizione", async ({
+  page,
+  browserErrors,
+}) => {
+  const guide = "/guide/partita-iva-acquirente-ebay";
+  // Arrivo da un link pubblicato con l'etichetta: la prima pagina è la Guida.
+  const signUp = `/accesso?registrati&via=${encodeURIComponent(`github:${guide}`)}`;
+  await page.goto(`${guide}?via=github`);
+  const invite = page.getByRole("region", { name: "Il Codice Fiscale accanto a ogni ordine" });
+  await expect(invite.getByRole("link", { name: "Inizia gratis" })).toHaveAttribute("href", signUp);
+  await invite.getByRole("link", { name: "Guarda la demo" }).click();
+  // La provenienza esce dalla barra dell'indirizzo e resta a `Inizia gratis`.
+  await expect(page).toHaveURL(/\/demo\/ordini$/u);
+  await expect(page).toHaveTitle("Ordini | Demo | FiscalBay");
+  await expect(page.getByText("Demo con dati di esempio")).toBeVisible();
+  await expect(page.getByText("RSSMRA80A41H501Y").first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Copia Codice Fiscale: ordine 27-10293-84756" }),
+  ).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: "Navigazione principale" }).first();
+  await expect(navigation.getByRole("link")).toHaveText(["Ordini", "Negozi eBay"]);
+  await navigation.getByRole("link", { name: "Negozi eBay" }).click();
+  await expect(page).toHaveURL(/\/demo\/negozi$/u);
+  await expect(page.getByRole("link", { name: "Inizia gratis" })).toHaveAttribute("href", signUp);
+  expect(browserErrors).toEqual([]);
 });
 
 test("il documento di ogni pagina resta entro il peso previsto", async ({ request }) => {
   const budgets = [
     { limit: 100, pages: ["/", "/prezzi", "/funzionalita", "/faq"] },
-    { limit: 180, pages: ["/anteprima/ordini", "/anteprima/negozi", "/anteprima/impostazioni"] },
+    {
+      limit: 180,
+      pages: [
+        "/anteprima/ordini",
+        "/anteprima/negozi",
+        "/anteprima/impostazioni",
+        "/demo/ordini",
+        "/demo/negozi",
+      ],
+    },
   ];
   for (const { limit, pages } of budgets)
     for (const path of pages) {

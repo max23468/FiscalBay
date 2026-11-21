@@ -300,6 +300,24 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     ),
     // Riceve soltanto ricerche: una lettura risponde senza contenuto.
     preview("/ricerca", "orders", { endpoint: true, status: 405 }),
+    // Demo pubblica, anche in Production: Ordini e Negozi dell'anteprima con uno scenario fisso.
+    make("/demo", "orders", { redirect: pagePath(prefix, "/demo/ordini") }),
+    ...["", "/ord-02", "/non-esiste"].map((suffix) =>
+      make(`/demo/ordini${suffix}`, "orders", {
+        pattern: `${pagePath(prefix, "/demo/ordini/:ordine")}?`,
+        status: suffix === "/non-esiste" ? 404 : 200,
+        remote: !prefix && !suffix,
+        dialog: suffix === "/ord-02",
+      }),
+    ),
+    ...["", "/neg-vintage", "/non-esiste"].map((suffix) =>
+      make(`/demo/negozi${suffix}`, "stores", {
+        pattern: `${pagePath(prefix, "/demo/negozi/:negozio")}?`,
+        status: suffix === "/non-esiste" ? 404 : 200,
+        dialog: suffix === "/neg-vintage",
+      }),
+    ),
+    make("/demo/ricerca", "orders", { endpoint: true, status: 405 }),
     // Download di un file esportato: senza sessione porta all'accesso, un file inesistente,
     // scaduto o revocato torna alla sezione Esportazione.
     ...(["anonymous", "member"] as const).map((role) =>

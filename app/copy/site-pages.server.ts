@@ -7,6 +7,8 @@ import type { Language } from "../i18n";
  */
 const exportGuidePath = "/guide/esportare-ordini-ebay-excel-csv" satisfies GuidePath;
 const comparisonGuidePath = "/guide/confronto-console-venditori-ebay-ready-pro" satisfies GuidePath;
+/** Ordini della demo pubblica, aperti dalla FAQ. */
+const demoPath = "/demo/ordini";
 
 /**
  * Testi delle pagine del sito pubblico. Restano sul server: i loader li consegnano già risolti alla
@@ -21,6 +23,7 @@ const it = {
     hero: "FiscalBay: trova e gestisci il Codice Fiscale dei tuoi ordini eBay.",
     body: "Colleghi il tuo negozio eBay e FiscalBay riporta il Codice Fiscale dell’acquirente, quando disponibile su eBay, pronto da copiare ed esportare. Anche la Partita IVA, se c’è.",
     howItWorks: "Come funziona",
+    demo: "Guarda la demo",
     trust: [
       "API ufficiali eBay",
       "Pagamenti sicuri gestiti da Stripe",
@@ -314,6 +317,11 @@ const it = {
         a: "Un servizio web che legge i tuoi ordini eBay e ti mostra il Codice Fiscale dell’acquirente, quando disponibile su eBay, pronto da copiare ed esportare.",
       },
       {
+        q: "Posso vedere FiscalBay prima di registrarmi?",
+        a: "Sì: la demo apre l’app con ordini e negozi di esempio. Non serve registrarsi, lasciare l’email o collegare eBay.",
+        guide: { label: "Apri la demo", path: demoPath },
+      },
+      {
         q: "eBay riporta sempre il Codice Fiscale?",
         a: "No. FiscalBay mostra il dato soltanto quando l’acquirente lo ha indicato ed eBay lo rende disponibile. Ordini senza dato non consumano sblocchi.",
       },
@@ -390,6 +398,12 @@ const it = {
       privacy: "Informativa privacy di FiscalBay.",
     },
   },
+  /** Invito alla demo in home e in Funzionalità. */
+  demo: {
+    title: "Guarda FiscalBay con ordini di esempio",
+    body: "La demo apre l’app con ordini e negozi di esempio: non serve registrarsi, lasciare l’email o collegare eBay.",
+    link: "Apri la demo",
+  },
 };
 
 type SitePagesCopy = typeof it;
@@ -402,6 +416,7 @@ const en: SitePagesCopy = {
     hero: "FiscalBay: find and manage the tax code (Codice Fiscale) of your eBay orders.",
     body: "Connect your eBay store and FiscalBay shows the buyer’s tax code (Codice Fiscale), when eBay provides it, ready to copy and export. The VAT number (Partita IVA) too, when there is one.",
     howItWorks: "How it works",
+    demo: "See the demo",
     trust: ["Official eBay APIs", "Secure payments handled by Stripe", "No card to get started"],
     steps: [
       { title: "Connect eBay", body: "Sign in to eBay and allow FiscalBay to read your orders." },
@@ -669,6 +684,11 @@ const en: SitePagesCopy = {
         a: "A web service that reads your eBay orders and shows you the buyer’s tax code (Codice Fiscale), when eBay provides it, ready to copy and export.",
       },
       {
+        q: "Can I see FiscalBay before signing up?",
+        a: "Yes: the demo opens the app with sample orders and stores. No sign-up, no email and no eBay connection needed.",
+        guide: { label: "Open the demo", path: demoPath },
+      },
+      {
         q: "Does eBay always provide the tax code?",
         a: "No. FiscalBay shows it only when the buyer entered it and eBay makes it available. Orders without it do not use up unlocks.",
       },
@@ -740,6 +760,11 @@ const en: SitePagesCopy = {
   },
   legal: {
     description: { termini: "FiscalBay terms of service.", privacy: "FiscalBay privacy policy." },
+  },
+  demo: {
+    title: "See FiscalBay with sample orders",
+    body: "The demo opens the app with sample orders and stores: no sign-up, no email and no eBay connection needed.",
+    link: "Open the demo",
   },
 };
 
