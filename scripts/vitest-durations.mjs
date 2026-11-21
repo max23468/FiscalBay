@@ -4,7 +4,7 @@
  * sequencer di `vitest.config.ts` la legge da `test/durations.json` per dividere gli shard della CI
  * in parti di durata simile; un file assente vale come la mediana dei presenti.
  *
- * Uso: node scripts/test-durations.mjs <report.json> [destinazione]
+ * Uso: node scripts/vitest-durations.mjs <report.json> [destinazione]
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";

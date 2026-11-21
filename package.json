@@ -21,7 +21,7 @@
     "site:screenshots": "node scripts/site-screenshots.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage && node scripts/coverage-report.mjs",
-    "test:durations": "vitest run --reporter=json --outputFile=reports/vitest.json && node scripts/test-durations.mjs reports/vitest.json",
+    "test:durations": "vitest run --reporter=json --outputFile=reports/vitest.json && node scripts/vitest-durations.mjs reports/vitest.json",
     "test:merge": "vitest --merge-reports --coverage && node scripts/coverage-report.mjs",
     "test:related": "vitest related --run --passWithNoTests",
     "test:shard": "vitest run --coverage --reporter=blob --reporter=default --shard",
