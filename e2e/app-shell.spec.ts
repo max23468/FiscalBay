@@ -721,6 +721,37 @@ test("su smartphone Esc chiude prima i suggerimenti e Indietro chiude la ricerca
   await expect(page.getByRole("region", { name: "Elenco ordini" })).toBeVisible();
 });
 
+test("il testo scritto nella ricerca resta quando la pagina Ordini arriva dopo", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 740 });
+  await open(page, "/anteprima/negozi");
+  // I dati degli Ordini arrivano soltanto dopo che il testo è scritto, come sotto carico: il
+  // foglio della ricerca è già aperto quando la pagina cambia.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/anteprima/ordini.data*", async (route) => {
+    await held;
+    await route.continue();
+  });
+  const nav = page.getByRole("navigation", { name: "Navigazione principale" });
+  await clickHydrated(nav.getByRole("link", { name: "Ordini" }));
+  await clickHydrated(page.getByRole("button", { name: "Cerca ordini" }));
+  const sheet = page.getByRole("dialog", { name: "Cerca ordini" });
+  const search = sheet.getByRole("searchbox", { name: "Cerca ordini" });
+  try {
+    await search.fill("Conti");
+    await expect(sheet.getByRole("link", { name: /Conti/ })).toBeVisible();
+  } finally {
+    release();
+  }
+  await expect(page.locator("main h1")).toHaveText("Ordini");
+  await expect(search).toHaveValue("Conti");
+  await expect(sheet.getByRole("link", { name: /Conti/ })).toBeVisible();
+});
+
 for (const area of areas) {
   test(`la ricerca mobile conserva la conferma delle bozze, ${area.name}`, async ({
     page,
