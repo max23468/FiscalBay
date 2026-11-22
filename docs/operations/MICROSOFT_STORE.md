@@ -6,7 +6,7 @@ FiscalBay è nel Microsoft Store come la stessa web app impacchettata con PWABui
 ## Account e identità del prodotto
 
 1. **Account sviluppatore.** Si apre gratis da storedeveloper.microsoft.com con un account Microsoft personale, con la verifica d'identità con documento e selfie. Il tipo non si converte dopo: da individuale ad aziendale serve un account nuovo. L'aziendale richiede una persona giuridica registrata, verificata con il DUNS o con documenti societari, e un'email con il dominio dell'azienda.
-2. **Tipo di account.** La policy 10.14 vuole l'account aziendale per chi agisce nell'ambito della propria attività commerciale o professionale e quando un consumatore leggerebbe l'editore come un'azienda; la 10.8.3 lo vuole se la funzione principale richiede dati finanziari, tra cui le informazioni sul codice fiscale. FiscalBay è un servizio a pagamento e mostra il Codice Fiscale degli acquirenti: con un account individuale la certificazione può respingerlo. Il 2026-11-19 l'owner ha scelto di inviare con l'account individuale già aperto; un rifiuto per questi motivi riapre la scelta ([questione aperta](../ROADMAP.md#questioni-aperte)).
+2. **Tipo di account.** La policy 10.14 vuole l'account aziendale per chi agisce nell'ambito della propria attività commerciale o professionale e quando un consumatore leggerebbe l'editore come un'azienda; la 10.8.3 lo vuole se la funzione principale richiede dati finanziari, tra cui le informazioni sul codice fiscale. FiscalBay è un servizio a pagamento e mostra il Codice Fiscale degli acquirenti: con un account individuale la certificazione può respingerlo. Il 2026-11-19 l'owner ha scelto di inviare con l'account individuale già aperto, e il 2026-11-22 la certificazione lo ha approvato senza rilievi sul tipo di account; un rifiuto futuro per questi motivi riapre la scelta.
 3. **Nome.** In Partner Center, App e giochi › Nuovo prodotto › App MSIX o PWA, si prenota «FiscalBay». Un nome prenotato decade se il prodotto non viene inviato entro tre mesi. Il nome del pacchetto deve essere uno dei nomi prenotati e coincidere con `name` del manifest (`app/web-manifest.server.ts`).
 4. **Identità.** Gestione prodotto › Identità del prodotto dà Package ID, Publisher ID e Publisher display name, che PWABuilder chiede per firmare il pacchetto. Si conservano nell'inventario privato (`~/.config/fiscalbay/merchant-test.json`, voce `microsoftStore`) e non nel repository. Lo Store ID è pubblico, perché compare nell'indirizzo della scheda: lo usano il badge e la voce `Installa l'app` su Windows (`app/installed-app.ts`).
 
@@ -14,8 +14,10 @@ FiscalBay è nel Microsoft Store come la stessa web app impacchettata con PWABui
 ## Pacchetto
 
 1. Su pwabuilder.com si inserisce `https://fiscalbay.it/`, poi Package For Stores › Windows. Il manifest arriva dal sito; servono `display: standalone`, le icone da 512 px e il service worker, già presenti.
-2. Nelle opzioni si incollano Package ID, Publisher ID e Publisher display name, si lascia «FiscalBay» come nome e si sceglie la versione: `1.0.0` al primo invio, poi una versione maggiore a ogni pacchetto nuovo.
-3. Lo ZIP scaricato contiene `.msixbundle` e `.classic.appxbundle`: si caricano entrambi nell'invio. Lo ZIP resta fuori dal repository.
+2. Nelle opzioni si incollano Package ID, Publisher ID e Publisher display name, si lascia «FiscalBay» come nome e si indicano le lingue `it-it` ed `en-us`. Le versioni sono due e quella del pacchetto classico deve restare minore: al primo invio `1.0.1` per il moderno e `1.0.0` per il classico, poi versioni maggiori a ogni pacchetto nuovo.
+3. Lo ZIP scaricato contiene `.msixbundle`, `.classic.appxbundle` e i file per installare l'app a mano su un PC: nell'invio si caricano soltanto i primi due. Lo ZIP resta fuori dal repository.
+
+Il pacchetto passa dal servizio di PWABuilder, l'unico che dispone dello strumento di Edge per il pacchetto moderno: se PWABuilder è fermo, si aspetta che riparta.
 
 Un pacchetto nuovo, con un nuovo invio, serve soltanto quando cambia il manifest: nome, icone, scorciatoie, `display`, ambito, gestori di file, protocolli o condivisione. Pagine, script, stili e service worker arrivano con i deploy ordinari, perché l'app installata carica il sito.
 
@@ -28,13 +30,13 @@ Un pacchetto nuovo, con un nuovo invio, serve soltanto quando cambia il manifest
 | Proprietà | Categoria «Lavoro», sottocategoria «Contabilità e finanza». Il prodotto usa informazioni personali: privacy `https://fiscalbay.it/privacy`; sito `https://fiscalbay.it/`, supporto `https://fiscalbay.it/supporto` |
 | Dichiarazioni del prodotto | Spuntare «Questo prodotto consente agli utenti di effettuare acquisti, ma non usa il sistema di e-commerce di Microsoft Store» (policy 10.8.2 e 10.8.6: gli abbonamenti Pro passano da Stripe). Lasciare spuntati i due predefiniti su unità alternative e backup; togliere registrazione e trasmissione, riservate ai giochi. Accessibilità, penna e intelligenza artificiale generativa restano vuote |
 | Classificazione | [Questionario IARC](#iarc) |
-| Pacchetti | `.msixbundle` e `.classic.appxbundle` dello stesso ZIP |
+| Pacchetti | `.msixbundle` e `.classic.appxbundle` dello stesso ZIP, con la sola famiglia Windows 10/11 Desktop: Mixed Reality, proposta dal pacchetto moderno, è tolta (scelta dell'owner del 2026-11-21). L'avviso su `runFullTrust` è normale: la capacità viene dai modelli di PWABuilder |
 | Schede dello Store | Italiano (Italia) e inglese (Stati Uniti), con i [testi](#scheda) e le [immagini](#immagini). Prima del pacchetto si aggiungono come lingue aggiuntive; il pacchetto porta poi le sue |
-| Opzioni dell'invio | Pubblicazione soltanto con «Pubblica ora», così l'app esce quando il sito è pronto per il badge. [Note per la certificazione](#certificazione) |
+| Opzioni dell'invio | Pubblicazione automatica appena l'invio supera la certificazione (scelta dell'owner del 2026-11-21). Motivazione per `runFullTrust`, in inglese e al massimo 500 caratteri: la capacità viene dai modelli standard di PWABuilder, serve a Edge per ospitare e avviare l'app installata, e il pacchetto non contiene codice nativo né accede a file, registro o impostazioni di sistema. [Note per la certificazione](#certificazione) |
 
-La bozza dell'invio 1 è compilata dal 2026-11-20 in tutto tranne il pacchetto, la conferma della classificazione e le credenziali dell'account dimostrativo.
+Nelle schede dello Store le sole modifiche alle parole chiave non attivano il salvataggio: si tocca anche un altro campo prima di `Salva`, e si rilegge la scheda dopo aver ricaricato la pagina.
 
-La certificazione dura in genere uno o due giorni lavorativi. Dopo l'approvazione si rilegge la scheda nello Store e si prova l'installazione su Windows con accesso, collegamento dei provider e badge dell'icona ([2.0-15](../ROADMAP.md#2-0-15)).
+La certificazione richiede da poche ore a tre giorni lavorativi. L'invio 1 è stato respinto il 2026-11-22 per due termini di ricerca con nomi di prodotti di altri editori, Excel e ProBay, e approvato lo stesso giorno dopo averli sostituiti. FiscalBay è nello Store dal 2026-11-22, all'indirizzo `https://apps.microsoft.com/detail/9NJTL8FD7DMH`.
 
 <a id="immagini"></a>
 ## Immagini
@@ -60,10 +62,10 @@ Testo semplice, senza HTML né indirizzi nella descrizione. Il tono è commercia
 
 Limiti dello Store: descrizione fino a 10.000 caratteri, breve sotto i 270 perché tutte le viste la mostrino intera, fino a 20 caratteristiche da 200.
 
-**Descrizione breve** (229 caratteri)
+**Descrizione breve** (237 caratteri), che apre con il titolo della home
 
 ```text
-Il Codice Fiscale e la Partita IVA che i tuoi acquirenti lasciano su eBay, pronti da copiare o esportare per la fattura. FiscalBay legge gli ordini da solo, anche da più negozi. Parti gratis e prova Pro per 14 giorni senza carta.
+Recupera il Codice Fiscale dagli ordini eBay. FiscalBay legge gli ordini da solo, anche da più negozi, e ti dà Codice Fiscale e Partita IVA pronti da copiare o esportare per la fattura. Parti gratis e prova Pro per 14 giorni senza carta.
 ```
 
 **Descrizione**
@@ -118,14 +120,14 @@ In italiano e in inglese, con tema chiaro e scuro
 Gratis per iniziare, Pro in prova per 14 giorni senza carta
 ```
 
-**Termini di ricerca**: al massimo 7 voci da 40 caratteri e 21 parole in tutto, senza prezzi (policy 10.1.3). Come per le [guide](../product/EXPERIENCE.md#s23) sono le frasi che i venditori cercano: `codice fiscale ebay`, `codice fiscale acquirente`, `partita iva ebay`, `fattura elettronica ebay`, `ordini ebay excel`, `alternativa probay`, `venditori ebay`. La policy esclude anche i nomi di prodotti di altri editori: eBay e ProBay ci sono per scelta dell'owner del 2026-11-20, e si tolgono se la certificazione li contesta.
+**Termini di ricerca**: al massimo 7 voci da 40 caratteri e 21 parole in tutto, senza prezzi (policy 10.1.3). Come per le [guide](../product/EXPERIENCE.md#s23) sono le frasi che i venditori cercano: `codice fiscale ebay`, `codice fiscale acquirente`, `partita iva ebay`, `fattura elettronica ebay`, `venditori ebay`, `fatture ebay`, `codice fiscale clienti`. La policy esclude anche i nomi di prodotti di altri editori: la certificazione ha respinto Excel e ProBay e ha accettato eBay, che resta per scelta dell'owner.
 
 ### English
 
-**Short description** (227 caratteri)
+**Short description** (244 caratteri), che apre con il titolo inglese della home
 
 ```text
-The tax code (Codice Fiscale) and VAT number your eBay buyers leave, ready to copy or export for your invoices. FiscalBay reads your orders on its own, across all your stores. Start free and try Pro for 14 days, no card needed.
+Get eBay buyers’ tax code (Codice Fiscale). FiscalBay reads your orders on its own, across all your stores, and gives you the tax code and VAT number ready to copy or export for your invoices. Start free and try Pro for 14 days, no card needed.
 ```
 
 **Description**
@@ -180,7 +182,7 @@ In Italian and English, light and dark theme
 Free to start, 14-day Pro trial with no card
 ```
 
-**Search terms**, con la stessa scelta: `ebay tax code`, `codice fiscale ebay`, `ebay vat number`, `ebay invoice italy`, `ebay orders excel`, `probay alternative`, `ebay sellers italy`.
+**Search terms**, la traduzione degli stessi: `ebay tax code`, `buyer tax code`, `ebay vat number`, `ebay electronic invoice`, `ebay sellers`, `ebay invoices`, `customer tax code`.
 
 <a id="iarc"></a>
 ## Classificazione IARC
@@ -230,4 +232,4 @@ Privacy policy: https://fiscalbay.it/en/privacy. Support: https://fiscalbay.it/e
 <a id="badge"></a>
 ## Badge e installazione da Windows
 
-Su Windows il sito propone lo Store invece dell'installazione del browser: il badge ufficiale «Scarica da Microsoft Store» sta nella riga dei pulsanti della home, che hanno la sua altezza, e nel footer, fra testo e collegamenti o sotto l'email su smartphone, nel tema della pagina, mentre la voce `Installa l'app` del menu dell'avatar apre la scheda. Il badge compare dopo l'idratazione e non dentro l'app installata. Le immagini sono quelle di Microsoft salvate in `public/store/`, senza lo script di get.microsoft.com e senza cambiare la CSP. Badge e voce puntano a `https://apps.microsoft.com/detail/<Store ID>`, che risponde 410 finché l'app non è pubblicata: si pubblicano dopo l'approvazione.
+Su Windows il sito propone lo Store invece dell'installazione del browser: il badge ufficiale «Scarica da Microsoft Store» sta nella riga dei pulsanti della home, che hanno la sua altezza, e nel footer, fra testo e collegamenti o sotto l'email su smartphone, nel tema della pagina, mentre la voce `Installa l'app` del menu dell'avatar apre la scheda. Il badge compare dopo l'idratazione e non dentro l'app installata. Le immagini sono quelle di Microsoft salvate in `public/store/`, senza lo script di get.microsoft.com e senza cambiare la CSP. Badge e voce puntano a `https://apps.microsoft.com/detail/<Store ID>` nella lingua della pagina.
