@@ -617,8 +617,23 @@ function formOutcome(
 
 /** Accesso, registrazione e completamento: marchio a sinistra, form a destra. */
 export default function SignIn({ loaderData, actionData }: Route.ComponentProps) {
+  const { key } = useLocation();
+  return <AccessPage key={key} loaderData={loaderData} actionData={actionData} />;
+}
+
+function AccessPage({
+  loaderData,
+  actionData,
+}: Pick<Route.ComponentProps, "loaderData" | "actionData">) {
+  // Al ritorno dalla posta React Router rilegge la sessione e scarta l'esito del POST.
+  // Conservalo nella pagina corrente, finché un altro invio o una navigazione lo sostituisce.
+  const [lastAction, setLastAction] = useState(actionData);
+  if (actionData && actionData !== lastAction) setLastAction(actionData);
   const { language } = loaderData;
-  const { notice, remembered, confirming, codeError } = formOutcome(loaderData, actionData);
+  const { notice, remembered, confirming, codeError } = formOutcome(
+    loaderData,
+    actionData ?? lastAction,
+  );
   const t = appCopy[language].access;
   // L'uscita e la sessione scaduta arrivano qui: l'icona dell'app installata non conta più nulla.
   const signedOut = !loaderData.authenticated;

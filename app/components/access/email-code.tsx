@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { ExternalLink, MailCheck } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { useCopy } from "~/components/copy-context";
 import { useHydrated } from "~/components/hydrated";
@@ -41,6 +41,10 @@ const sizes = {
   compact: { cell: "h-10 w-9 rounded-md text-base", group: "gap-1" },
 };
 
+function digits(value: string) {
+  return value.replace(/\D/gu, "").slice(0, codeLength);
+}
+
 /**
  * Sei caselle sopra un solo campo trasparente, che resta il vero controllo: tastiera, incolla e
  * compilazione automatica del codice funzionano come in un campo normale. Prima dell'idratazione il
@@ -64,6 +68,17 @@ function CodeCells({
   const input = useRef<HTMLInputElement>(null);
   const [code, setCode] = useState("");
   const [focused, setFocused] = useState(false);
+  const attach = useCallback(
+    (field: HTMLInputElement | null) => {
+      input.current = field;
+      if (!hydrated || !field) return;
+      // Il controllo è lo stesso del documento iniziale: recupera le cifre già inserite.
+      field.value = digits(field.value);
+      setCode(field.value);
+      setFocused(field === document.activeElement);
+    },
+    [hydrated],
+  );
   useEffect(() => {
     if (hydrated && autoFocus) input.current?.focus();
   }, [hydrated, autoFocus]);
@@ -71,7 +86,7 @@ function CodeCells({
   /** Tiene le sole cifre, anche da un codice incollato con spazi, e invia il modulo a sei cifre. */
   function change(event: React.FormEvent<HTMLInputElement>) {
     const field = event.currentTarget;
-    field.value = field.value.replace(/\D/gu, "").slice(0, codeLength);
+    field.value = digits(field.value);
     setCode(field.value);
     if (field.value.length === codeLength) field.form?.requestSubmit();
   }
@@ -85,14 +100,6 @@ function CodeCells({
     autoComplete: "one-time-code",
     required: true,
   } as const;
-  if (!hydrated)
-    return (
-      <div className="flex gap-2">
-        <Input {...field} className="font-code tracking-[0.3em]" />
-        <Button type="submit">{t.emailCodeSubmit}</Button>
-      </div>
-    );
-
   const cell = (slot: string) => {
     const index = codeSlots.indexOf(slot);
     const digit = code[index];
@@ -113,23 +120,33 @@ function CodeCells({
     );
   };
   return (
-    <div className={cn("relative", disabled && "opacity-60")}>
-      <div aria-hidden="true" className={cn("flex items-center", sizes[size].group)}>
-        {codeSlots.slice(0, 3).map(cell)}
-        <span className="h-0.5 w-2 shrink-0 rounded-full bg-border" />
-        {codeSlots.slice(3).map(cell)}
+    <div className={hydrated ? "grid gap-2" : "flex gap-2"}>
+      <div className={cn("relative min-w-0", !hydrated && "flex-1", disabled && "opacity-60")}>
+        {hydrated ? (
+          <div aria-hidden="true" className={cn("flex items-center", sizes[size].group)}>
+            {codeSlots.slice(0, 3).map(cell)}
+            <span className="h-0.5 w-2 shrink-0 rounded-full bg-border" />
+            {codeSlots.slice(3).map(cell)}
+          </div>
+        ) : null}
+        <Input
+          {...field}
+          ref={attach}
+          readOnly={disabled}
+          onInput={change}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          // Safari propone il codice soltanto se il controllo ha opacità diversa da zero.
+          className={
+            hydrated
+              ? "absolute inset-0 size-full cursor-text rounded-none border-0 bg-transparent p-0 text-base text-transparent caret-transparent shadow-none selection:bg-transparent focus-visible:ring-0 aria-invalid:ring-0 sm:text-base dark:bg-transparent pointer-coarse:h-full"
+              : "font-code tracking-[0.3em]"
+          }
+        />
       </div>
-      <input
-        {...field}
-        ref={input}
-        readOnly={disabled}
-        onInput={change}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        // Trasparente nel testo, non nell'opacità: Safari non propone il codice ricevuto in un
-        // campo a opacità zero.
-        className="absolute inset-0 size-full cursor-text border-0 bg-transparent text-base text-transparent caret-transparent outline-none selection:bg-transparent"
-      />
+      {!hydrated || (code.length === codeLength && !disabled) ? (
+        <Button type="submit">{t.emailCodeSubmit}</Button>
+      ) : null}
     </div>
   );
 }

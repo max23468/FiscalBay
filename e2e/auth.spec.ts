@@ -971,6 +971,66 @@ test("l'esito dell'accesso esce dall'indirizzo e non torna alla ricarica", async
   await expect(page.getByText(text, { exact: true })).toHaveCount(0);
 });
 
+test("restano le cifre digitate prima dell'idratazione e al ritorno dalla posta", async ({
+  page,
+}) => {
+  localOnly();
+  await page.goto("/accesso");
+  let releaseClient!: () => void;
+  const client = new Promise<void>((resolve) => {
+    releaseClient = resolve;
+  });
+  await page.route("**/assets/entry.client-*.js", async (route) => {
+    await client;
+    await route.continue();
+  });
+  await page.evaluate(() => {
+    const form = document.createElement("form");
+    form.method = "post";
+    for (const [name, value] of Object.entries({
+      intent: "conferma-codice",
+      email: "ritorno-dalla-posta@example.invalid",
+      codice: "123456",
+    })) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.append(input);
+    }
+    document.body.append(form);
+    form.requestSubmit();
+  });
+  const code = page.getByRole("textbox", { name: "Codice di conferma" });
+  try {
+    await expect(page.getByRole("button", { name: "Conferma", exact: true })).toBeVisible();
+    await code.pressSequentially("123");
+  } finally {
+    releaseClient();
+  }
+  await expect(page.getByRole("button", { name: "Conferma", exact: true })).toHaveCount(0);
+  await expect(code).toBeFocused();
+  await expect(code).toHaveValue("123");
+
+  const refreshed = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" && new URL(response.url()).pathname === "/accesso.data",
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await refreshed;
+  await networkIdle(page);
+  await expect(code).toHaveValue("123");
+  await expect(code).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByRole("heading", { name: "Controlla la posta" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Modifica", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Crea account" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(code).toHaveCount(0);
+});
+
 test("con i colori forzati focus e scheda attiva restano visibili, senza cornici a riposo", async ({
   page,
 }) => {
