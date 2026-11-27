@@ -47,7 +47,7 @@ const loadStripe = () => import("stripe").then((module) => module.default);
  * Versione dell'API fissata in ogni client: un aggiornamento dello SDK non cambia da solo la forma
  * degli oggetti letti, e il controllo dei tipi chiede di rivederla insieme allo SDK.
  */
-export const stripeApiVersion = "2026-10-28.endive";
+export const stripeApiVersion = "2026-11-18.endive";
 
 // Chi apre un acquisto o il portale attende al più un tentativo breve e un nuovo tentativo:
 // il timeout predefinito dello SDK, 80 secondi, supera quello della richiesta.
