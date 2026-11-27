@@ -22,7 +22,3 @@ trustPolicy: no-downgrade
 # arriva da Babel tramite `@react-router/dev`.
 trustPolicyExclude:
   - semver@6.3.1
-patchedDependencies:
-  # cf include ancora i framework dei pacchetti figli nel rilevamento della radice.
-  # Rimuovere quando il rilevamento limita i risultati al progetto corrente.
-  cf@1.0.0-rc.1: patches/cf@1.0.0-rc.1.patch

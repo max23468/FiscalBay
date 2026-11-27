@@ -12,7 +12,7 @@ Si lavora con Claude Code: sul Mac nel checkout locale, eventualmente in worktre
 
 ### Eseguire il candidato locale
 
-Usare Node 26.13.1 e pnpm 12.21.0 indicati in `mise.toml` e `package.json`. L’installazione e i gate locali non creano risorse remote:
+Usare Node e pnpm nelle versioni fissate in `mise.toml` e `package.json`. L’installazione e i gate locali non creano risorse remote:
 
 ```sh
 pnpm install --frozen-lockfile

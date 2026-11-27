@@ -32,7 +32,7 @@ import {
   webhookInfo,
 } from "../app/integrations/telegram.server";
 import { receiveWebhook } from "../app/webhooks.server";
-import { emailSender, verifiedSession } from "./fixtures/account-fixtures";
+import { emailSender, mailEnv, verifiedSession } from "./fixtures/account-fixtures";
 import {
   insertCredentials,
   insertEntitlement,
@@ -879,7 +879,7 @@ describe("avvisi degli incidenti", () => {
     );
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const mail = emailSender();
-    const mailed = { ...environment, AUTH_EMAIL: { send: mail } as SendEmail };
+    const mailed = mailEnv(mail, environment);
     const waits: number[] = [];
     let at = later(1);
     for (let attempt = 0; attempt < 8; attempt++) {
@@ -919,7 +919,7 @@ describe("avvisi degli incidenti", () => {
     );
     vi.spyOn(console, "error").mockImplementation(() => {});
     const mail = emailSender();
-    const mailed = { ...environment, AUTH_EMAIL: { send: mail } as SendEmail };
+    const mailed = mailEnv(mail, environment);
     const failTimes = async (from: number) => {
       for (let attempt = 0; attempt < 3; attempt++) {
         const [row] = (await incident()) as [{ retry_at: string | null }];

@@ -60,7 +60,7 @@ export async function profileOf(userId: string) {
 
 /** Invio email sostitutivo con la risposta di Cloudflare Email Service. */
 export function emailSender() {
-  return vi.fn<SendEmail["send"]>(async () => ({ messageId: "synthetic" }));
+  return vi.fn<SendEmail["send"]>().mockResolvedValue({ messageId: "synthetic" });
 }
 
 /** Collegamento del pulsante di un'email di servizio, dal testo semplice. */
@@ -70,7 +70,8 @@ export function emailLink(text: string): string {
 
 /** Ambiente di prova con l'invio email sostitutivo e le variabili indicate. */
 export function mailEnv(send = emailSender(), overrides: Partial<Env> = {}): Env {
-  return { ...env, ...overrides, AUTH_EMAIL: { send } as SendEmail };
+  // Vitest espone solo l'ultimo overload, ma il mock restituisce la stessa risposta per entrambi.
+  return { ...env, ...overrides, AUTH_EMAIL: { send: send as typeof send & SendEmail["send"] } };
 }
 
 /** Sessione con password per gli account controllati dai test Auth. */
