@@ -38,6 +38,9 @@ export default defineConfig({
     ...base.test,
     include: files,
     fileParallelism: false,
+    // Il pool Cloudflare invia la cache dei moduli in un solo messaggio WebSocket, che può
+    // superare il limite di workerd durante la mutation (cloudflare/workers-sdk#16349).
+    ...(units === 0 ? { fsModuleCache: false } : {}),
     // Stryker attiva i mutanti fra un'esecuzione e l'altra: ogni file resta in un isolate proprio,
     // nell'ordine scelto qui e non in quello casuale della suite.
     isolate: true,
