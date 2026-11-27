@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { BrowserContext, Response } from "@playwright/test";
 
 import { sourceParam } from "../app/signup-source";
+import { webAnalyticsScript } from "../app/web-analytics";
 import { expect, networkIdle, test, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { abortedDataRequest, pageCases, knownPagePath, expectedPageError } from "./page-cases";
@@ -262,6 +263,12 @@ for (const scenario of scenarios) {
           .evaluateAll((scripts) => scripts.map((script) => (script as HTMLScriptElement).nonce));
         expect(nonces.length).toBeGreaterThan(0);
         expect(new Set(nonces)).toEqual(new Set([nonce]));
+        // Lo script con versione nel percorso è quello che Cloudflare inserisce da sé quando il
+        // sito Web Analytics della zona raccoglie: finirebbe anche in accesso e area.
+        expect(
+          await page.locator(`script[src^="${webAnalyticsScript}/"]`).count(),
+          "Beacon inserito da Cloudflare: spegnere la raccolta del sito Web Analytics della zona",
+        ).toBe(0);
         checked("CSP e nonce degli script");
         await expect(page).toHaveTitle(/ \| FiscalBay$/);
         await expect(page.locator("main")).toBeVisible();
